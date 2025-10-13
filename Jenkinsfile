@@ -32,6 +32,7 @@ pipeline {
 
     stage('Docker Build & Compose') {
       steps {
+        sh 'docker compose down --remove-orphans || true'
         sh 'docker compose build'
         sh 'docker compose up -d mariadb redis zookeeper kafka'
         sh 'sleep 20'
