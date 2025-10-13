@@ -25,8 +25,8 @@ pipeline {
     stage('Build Spring Boot Services') {
       steps {
         dir(BACKEND_DIR) {
-          sh 'gradle -p ingest-service clean build'
-          sh 'gradle -p consumer-worker clean build'
+          sh 'gradle :ingest-service:clean :ingest-service:build'
+          sh 'gradle :consumer-worker:clean :consumer-worker:build'
         }
       }
     }
