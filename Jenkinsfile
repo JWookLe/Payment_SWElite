@@ -41,10 +41,12 @@ pipeline {
 
     stage('Smoke Test') {
       steps {
-        sh "sleep 25"
-        sh "curl -X POST -H 'Content-Type: application/json' \\
-          -d '{\\"merchantId\\":\\"JENKINS\\",\\"amount\\":1000,\\"currency\\":\\"KRW\\",\\"idempotencyKey\\":\\"jenkins-1\\"}' \\
-          http://localhost:8080/payments/authorize"
+        sh '''
+          sleep 25
+          curl -X POST -H 'Content-Type: application/json' \
+            -d '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"jenkins-1"}' \
+            http://localhost:8080/payments/authorize
+        '''
       }
     }
   }
