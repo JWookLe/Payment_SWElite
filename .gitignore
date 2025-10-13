@@ -28,3 +28,7 @@ dist/
 # macOS
 .DS_Store
 
+# Backend build outputs
+backend/consumer-worker/bin/
+backend/ingest-service/bin/
+

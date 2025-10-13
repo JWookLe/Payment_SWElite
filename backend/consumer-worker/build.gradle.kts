@@ -1,7 +1,7 @@
 plugins {
     id("org.springframework.boot")
     id("io.spring.dependency-management")
-    id("java")
+    java
 }
 
 dependencies {
@@ -11,6 +11,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 
     runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
+
+    implementation("org.springframework.boot:spring-boot-starter-json")
+    implementation("com.fasterxml.jackson.core:jackson-databind")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")

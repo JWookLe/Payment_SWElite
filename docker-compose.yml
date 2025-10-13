@@ -1,11 +1,9 @@
-version: '3.9'
-
 services:
   mariadb:
     image: mariadb:11.4
     container_name: pay-mariadb
     environment:
-      MARIADB_ROOT_PASSWORD: rootpass
+      MARIADB_ROOT_PASSWORD: 4535
       MARIADB_DATABASE: paydb
       MARIADB_USER: payuser
       MARIADB_PASSWORD: paypass
@@ -14,7 +12,7 @@ services:
     volumes:
       - mariadb-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p4535 --silent || exit 1"]
       interval: 10s
       retries: 10
       timeout: 5s
@@ -26,22 +24,25 @@ services:
       - "6379:6379"
 
   zookeeper:
-    image: bitnami/zookeeper:3.9
+    image: zookeeper:3.9
     container_name: pay-zookeeper
     environment:
-      ALLOW_ANONYMOUS_LOGIN: 'yes'
+      ZOO_ALLOW_ANONYMOUS_LOGIN: "true"
     ports:
       - "2181:2181"
 
   kafka:
-    image: bitnami/kafka:3.8
+    image: confluentinc/cp-kafka:7.6.1
     container_name: pay-kafka
     environment:
-      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: 'true'
-      ALLOW_PLAINTEXT_LISTENER: 'yes'
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     depends_on:
       - zookeeper
     ports:
@@ -92,9 +93,11 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE: http://localhost:8080
     image: mock-frontend:local
     environment:
-      VITE_API_BASE: http://ingest-service:8080
+      VITE_API_BASE: http://localhost:8080
     depends_on:
       - ingest-service
     ports:

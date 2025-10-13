@@ -7,7 +7,7 @@ spring:
     password: ${PAYMENT_DB_PASSWORD:paypass}
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MariaDBDialect
