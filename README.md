@@ -1,6 +1,6 @@
 # Payment_SWElite
 
-1주차 목표는 React 목업 상점에서 결제 API를 호출하고, Kafka를 통해 Consumer Worker까지 연결한 뒤 MariaDB에 데이터를 적재하는 **End-to-End** 경로를 완성하는 것이다. 로컬 환경에서 Docker Compose와 Jenkins를 활용해 자동화 배포까지 시험할 수 있도록 구성했다.
+1주차 목표는 React 목업 상점에서 결제 API를 호출하고, Kafka를 통해 Consumer Worker까지 연결한 뒤 MariaDB에 데이터를 적재하는 **End-to-End** 경로를 완성하는 것이다. 로컬 환경에서 Docker Compose와 Jenkins를 활용해 자동화 배포까지 시험할 수 있도록 구성했다. 모든 코드는 `main` 브랜치 기준으로 유지하며 별도의 작업 브랜치를 사용하지 않아도 된다.
 
 ## 시스템 구성 요소
 
