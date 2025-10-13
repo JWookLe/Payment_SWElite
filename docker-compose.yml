@@ -1,0 +1,116 @@
+version: '3.9'
+
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: pay-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass
+      MARIADB_DATABASE: paydb
+      MARIADB_USER: payuser
+      MARIADB_PASSWORD: paypass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 10
+      timeout: 5s
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: pay-redis
+    ports:
+      - "6379:6379"
+
+  zookeeper:
+    image: bitnami/zookeeper:3.9
+    container_name: pay-zookeeper
+    environment:
+      ALLOW_ANONYMOUS_LOGIN: 'yes'
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: bitnami/kafka:3.8
+    container_name: pay-kafka
+    environment:
+      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      ALLOW_PLAINTEXT_LISTENER: 'yes'
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+
+  ingest-service:
+    build:
+      context: .
+      dockerfile: backend/ingest-service/Dockerfile
+    image: ingest-service:local
+    environment:
+      PAYMENT_DB_HOST: mariadb
+      PAYMENT_DB_PORT: 3306
+      PAYMENT_DB_NAME: paydb
+      PAYMENT_DB_USER: payuser
+      PAYMENT_DB_PASSWORD: paypass
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_started
+    ports:
+      - "8080:8080"
+
+  consumer-worker:
+    build:
+      context: .
+      dockerfile: backend/consumer-worker/Dockerfile
+    image: consumer-worker:local
+    environment:
+      PAYMENT_DB_HOST: mariadb
+      PAYMENT_DB_PORT: 3306
+      PAYMENT_DB_NAME: paydb
+      PAYMENT_DB_USER: payuser
+      PAYMENT_DB_PASSWORD: paypass
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: mock-frontend:local
+    environment:
+      VITE_API_BASE: http://ingest-service:8080
+    depends_on:
+      - ingest-service
+    ports:
+      - "5173:80"
+
+  jenkins:
+    image: jenkins/jenkins:lts-jdk21
+    container_name: pay-jenkins
+    user: root
+    ports:
+      - "8088:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  mariadb-data:
+  jenkins-home:

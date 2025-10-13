@@ -1,0 +1,30 @@
+# Gradle
+.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Maven
+.mvn/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Node
+node_modules/
+**/node_modules/
+dist/
+
+# Logs
+*.log
+
+# Docker
+*.pid
+
+# macOS
+.DS_Store
+
