@@ -25,6 +25,9 @@ dist/
 # Docker
 *.pid
 
+# Jenkins data
+jenkins-data/
+
 # macOS
 .DS_Store
 
