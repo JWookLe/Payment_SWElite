@@ -17,4 +17,6 @@ RUN curl -fsSL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSIO
     && mv "/opt/gradle-${GRADLE_VERSION}" "${GRADLE_HOME}" \
     && rm /tmp/gradle.zip
 
+RUN jenkins-plugin-cli --plugins "workflow-aggregator git git-client"
+
 USER jenkins
