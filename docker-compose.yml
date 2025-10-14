@@ -104,7 +104,10 @@ services:
       - "5173:80"
 
   jenkins:
-    image: jenkins/jenkins:lts-jdk21
+    build:
+      context: .
+      dockerfile: jenkins/Dockerfile
+    image: pay-jenkins:local
     container_name: pay-jenkins
     user: root
     ports:
