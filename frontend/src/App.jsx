@@ -56,7 +56,7 @@ export default function App() {
   const [idempotencyKey, setIdempotencyKey] = useState(randomKey());
   const [manualPaymentId, setManualPaymentId] = useState('');
   const [lastPaymentId, setLastPaymentId] = useState(null);
-  const [refundReason, setRefundReason] = useState('customer cancel');
+  const [refundReason, setRefundReason] = useState('');
   const [sessionDetails, setSessionDetails] = useState(null);
 
   const selectedProduct = useMemo(
@@ -278,7 +278,7 @@ export default function App() {
     setIdempotencyKey(randomKey());
     setManualPaymentId('');
     setLastPaymentId(null);
-    setRefundReason('customer cancel');
+    setRefundReason('Enter your Refund reason');
     setSessionDetails(null);
     setReceipt(null);
     setStatus(null);

@@ -1,21 +1,29 @@
 package com.example.payment.service;
 
-import com.example.payment.domain.*;
-import com.example.payment.repository.*;
-import com.example.payment.web.dto.*;
+import com.example.payment.domain.LedgerEntry;
+import com.example.payment.domain.OutboxEvent;
+import com.example.payment.domain.Payment;
+import com.example.payment.domain.PaymentStatus;
+import com.example.payment.repository.LedgerEntryRepository;
+import com.example.payment.repository.OutboxEventRepository;
+import com.example.payment.repository.PaymentRepository;
+import com.example.payment.web.dto.AuthorizePaymentRequest;
+import com.example.payment.web.dto.CapturePaymentRequest;
+import com.example.payment.web.dto.LedgerEntryResponse;
+import com.example.payment.web.dto.PaymentResponse;
+import com.example.payment.web.dto.RefundPaymentRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Instant;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 
 @Service
 public class PaymentService {
@@ -26,33 +34,37 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
     private final OutboxEventRepository outboxEventRepository;
-    private final IdemResponseCacheRepository cacheRepository;
+    private final IdempotencyCacheService idempotencyCacheService;
+    private final RedisRateLimiter rateLimiter;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
 
     public PaymentService(PaymentRepository paymentRepository,
                           LedgerEntryRepository ledgerEntryRepository,
                           OutboxEventRepository outboxEventRepository,
-                          IdemResponseCacheRepository cacheRepository,
+                          IdempotencyCacheService idempotencyCacheService,
+                          RedisRateLimiter rateLimiter,
                           KafkaTemplate<String, String> kafkaTemplate,
                           ObjectMapper objectMapper) {
         this.paymentRepository = paymentRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
         this.outboxEventRepository = outboxEventRepository;
-        this.cacheRepository = cacheRepository;
+        this.idempotencyCacheService = idempotencyCacheService;
+        this.rateLimiter = rateLimiter;
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;
     }
 
     @Transactional
     public PaymentResult authorize(AuthorizePaymentRequest request) {
-        return cacheRepository.findById(new IdemResponseCacheId(request.merchantId(), request.idempotencyKey()))
-                .map(cache -> deserializeResponse(cache.getResponseBody(), true))
+        return idempotencyCacheService.findAuthorization(request.merchantId(), request.idempotencyKey())
                 .orElseGet(() -> createAuthorization(request));
     }
 
     @Transactional
     public PaymentResult capture(Long paymentId, CapturePaymentRequest request) {
+        rateLimiter.verifyCaptureAllowed(request.merchantId());
+
         Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant"));
 
@@ -84,6 +96,8 @@ public class PaymentService {
 
     @Transactional
     public PaymentResult refund(Long paymentId, RefundPaymentRequest request) {
+        rateLimiter.verifyRefundAllowed(request.merchantId());
+
         Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant"));
 
@@ -115,15 +129,17 @@ public class PaymentService {
     }
 
     private PaymentResult createAuthorization(AuthorizePaymentRequest request) {
-        try {
-            Payment existing = paymentRepository.findByMerchantIdAndIdempotencyKey(
-                    request.merchantId(), request.idempotencyKey()).orElse(null);
-            if (existing != null) {
-                PaymentResponse response = toResponse(existing, Collections.emptyList(),
-                        "Idempotency key already used");
-                return new PaymentResult(response, true);
-            }
+        Payment existing = paymentRepository.findByMerchantIdAndIdempotencyKey(
+                request.merchantId(), request.idempotencyKey()).orElse(null);
+        if (existing != null) {
+            PaymentResponse response = toResponse(existing, Collections.emptyList(),
+                    "Idempotency key already used");
+            return new PaymentResult(response, true);
+        }
 
+        rateLimiter.verifyAuthorizeAllowed(request.merchantId());
+
+        try {
             Payment payment = new Payment(request.merchantId(), request.amount(),
                     request.currency(), PaymentStatus.REQUESTED, request.idempotencyKey());
             paymentRepository.save(payment);
@@ -131,7 +147,7 @@ public class PaymentService {
             PaymentResponse response = toResponse(payment, Collections.emptyList(),
                     "Payment authorized successfully");
 
-            cacheResponse(request.merchantId(), request.idempotencyKey(), 200, response);
+            idempotencyCacheService.storeAuthorization(request.merchantId(), request.idempotencyKey(), 200, response);
 
             publishEvent(payment, "PAYMENT_AUTHORIZED", Map.of(
                     "paymentId", payment.getId(),
@@ -149,24 +165,6 @@ public class PaymentService {
             PaymentResponse response = toResponse(payment, Collections.emptyList(),
                     "Idempotency key already used");
             return new PaymentResult(response, true);
-        }
-    }
-
-    private PaymentResult deserializeResponse(String body, boolean duplicate) {
-        try {
-            PaymentResponse response = objectMapper.readValue(body, PaymentResponse.class);
-            return new PaymentResult(response, duplicate);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to deserialize cached response", e);
-        }
-    }
-
-    private void cacheResponse(String merchantId, String idempotencyKey, int status, PaymentResponse response) {
-        try {
-            String body = objectMapper.writeValueAsString(response);
-            cacheRepository.save(new IdemResponseCache(merchantId, idempotencyKey, status, body));
-        } catch (JsonProcessingException e) {
-            log.warn("Failed to serialize idempotent response", e);
         }
     }
 

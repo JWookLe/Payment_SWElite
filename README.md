@@ -82,9 +82,13 @@ Spring Kafka가 기동 시 자동으로 토픽을 생성한다. Consumer Worker�
 5. 간단한 `curl` 기반 Smoke Test
 6. 파이프라인 종료 후 Compose 정리
 
+## Redis 기반 보호 기능
+
+- 승인 API 멱등 응답을 Redis TTL 캐시에 동시 저장해 중복 요청 시 빠르게 반환합니다. 기본 TTL은 600초이며 `APP_IDEMPOTENCY_CACHE_TTL_SECONDS` 환경 변수로 조정할 수 있습니다.
+- 상점(`merchantId`) 단위 승인·정산·환불 API에 분당 20/40/20회 레이트 리밋이 적용됩니다. `APP_RATE_LIMIT_*` 환경 변수로 변경 가능하며 Redis 장애 시 제한 없이 처리합니다.
+
 ## 다음 단계 제안
 
-- Redis를 활용한 rate limit 및 멱등 캐시 고도화
 - Prometheus + Grafana 지표 수집/시각화
 - k6 부하/스트레스 테스트 시나리오 작성 및 Jenkins 리포트 자동화
 - Settlement/Reconciliation 서비스 테이블 추가 및 비동기 처리 확장

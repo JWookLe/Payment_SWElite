@@ -1,7 +1,8 @@
 package com.example.payment.web;
 
-import com.example.payment.service.PaymentResult;
 import com.example.payment.service.PaymentService;
+import com.example.payment.service.PaymentResult;
+import com.example.payment.service.RateLimitExceededException;
 import com.example.payment.web.dto.*;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -60,5 +61,11 @@ public class PaymentController {
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ErrorResponse("NOT_FOUND", ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimitExceeded(RateLimitExceededException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(new ErrorResponse(ex.getCode(), ex.getMessage(), null));
     }
 }
