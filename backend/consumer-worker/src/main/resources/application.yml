@@ -20,6 +20,9 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       auto-offset-reset: earliest
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 server:
   port: ${SERVER_PORT:8081}
@@ -29,3 +32,6 @@ management:
     web:
       exposure:
         include: health,info
+
+payment:
+  dlq-topic: ${PAYMENT_DLQ_TOPIC:payment.dlq}

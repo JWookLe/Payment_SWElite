@@ -18,6 +18,9 @@ public class KafkaTopicConfig {
     @Value("${payment.topics.refunded:payment.refunded}")
     private String refundedTopic;
 
+    @Value("${payment.topics.dlq:payment.dlq}")
+    private String dlqTopic;
+
     @Bean
     public NewTopic paymentAuthorizedTopic() {
         return TopicBuilder.name(authorizedTopic).partitions(1).replicas(1).build();
@@ -31,5 +34,10 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic paymentRefundedTopic() {
         return TopicBuilder.name(refundedTopic).partitions(1).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic paymentDeadLetterTopic() {
+        return TopicBuilder.name(dlqTopic).partitions(1).replicas(1).build();
     }
 }

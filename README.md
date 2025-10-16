@@ -10,7 +10,7 @@
   - [ ] Prometheus + Grafana 지표 수집 및 시각화 파이프라인 구성
   - [ ] k6 부하/스트레스 테스트 시나리오 작성 및 Jenkins 리포트 자동화
   - [ ] Settlement/Reconciliation 서비스 테이블 추가 및 비동기 처리 확장
-  - [ ] payment.dlq 토픽으로 재전송하는 Consumer 예외 처리 보강
+  - [x] payment.dlq 토픽으로 재전송하는 Consumer 예외 처리 보강
 
 ## 시스템 구성 요소
 
@@ -48,6 +48,7 @@
 - `payment.authorized`
 - `payment.captured`
 - `payment.refunded`
+- `payment.dlq` (Consumer 실패 시 재전송)
 
 ## Redis 기반 보호 기능
 
