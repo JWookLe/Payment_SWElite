@@ -45,7 +45,7 @@
 
 ## Redis 기반 보호 기능
 - 승인 API 응답을 Redis TTL 캐시에 저장하여 멱등성을 보장합니다. 기본 TTL은 600초 (`APP_IDEMPOTENCY_CACHE_TTL_SECONDS`로 조정 가능).
-- 가맹점(`merchantId`)별 승인·정산·환불 API에 분당 20/40/20 회 rate limit이 적용됩니다. `APP_RATE_LIMIT_*` 환경 변수로 조정 가능하며, Redis 장애 시 fail-open 전략 사용.
+- 가맹점(`merchantId`)별 승인·정산·환불 API에 분당 20/40/20 회 rate limit이 적용됩니다. `APP_RATE_LIMIT_*` 환경 변수로 조정 가능하며, Redis 장애 시 fail-open 전략을 사용합니다.
 - Docker Compose 환경에서는 부하 테스트 편의를 위해 승인/정산 1000, 환불 500으로 확장돼 있습니다. 필요 시 `APP_RATE_LIMIT_*` 값을 조정해 운영 환경에 맞춰 주세요.
 
 ## Observability (Prometheus & Grafana)
@@ -54,8 +54,10 @@
 - `Payment Service Overview` 대시보드에서 요청 속도, p95 지연시간, Kafka 소비량, 에러율 등을 확인할 수 있습니다.
 
 ## Load Testing (k6)
-- `loadtest/k6/payment-scenario.js`는 승인 → 정산 → (선택적) 환불까지 한 번에 검증합니다.
-- 기본 설정은 초당 200건까지 ramp-up 하며, `BASE_URL`, `MERCHANT_ID` 환경변수로 수정 가능합니다.
+- `loadtest/k6/payment-scenario.js`는 승인 → 정산 → (선택적) 환불 흐름을 검증하며, 환경 변수로 각 단계를 토글할 수 있습니다.
+- 기본 설정은 초당 200건까지 ramp-up 하며, `BASE_URL`, `MERCHANT_ID` 환경 변수로 수정 가능합니다.
+- 기본 실행은 승인(Authorize) API만 대상으로 하며, 정산/환불은 필요 시 `ENABLE_CAPTURE=true`, `ENABLE_REFUND=true` 환경 변수로 개별 활성화할 수 있습니다.
+- 승인과 후속 처리를 분리하면 승인 API를 빠르게 튜닝하고, 정산/환불은 비동기 처리나 배치 등 별도 전략으로 확장할 수 있습니다.
 - 로컬 실행 예시:
   ```bash
   MSYS_NO_PATHCONV=1 docker run --rm --network payment_swelite_default \
@@ -64,12 +66,12 @@
     -e MERCHANT_ID=LOCAL \
     grafana/k6:0.49.0 run /k6/payment-scenario.js --summary-export=/k6/summary.json
   ```
-- Jenkins 파이프라인에서도 동일 스크립트를 실행하고 요약 JSON을 아카이브합니다.
+- Jenkins 파이프라인에서는 승인 전용 시나리오로 k6를 실행하고 요약 JSON을 아카이브합니다.
 
 ## 로컬 실행 방법
 1. `docker compose up --build`
    - MariaDB, Redis, Kafka, ingest-service, consumer-worker, frontend, Prometheus, Grafana 기동
-2. 프런트엔드 진입: http://localhost:5173
+2. 프런트엔드 접속: http://localhost:5173
 3. API 확인 예시:
    ```bash
    curl -X POST http://localhost:8080/payments/authorize \
