@@ -9,6 +9,7 @@ ENV VITE_API_BASE=$VITE_API_BASE
 
 # 🔹 필요한 파일 복사
 COPY frontend/package.json frontend/vite.config.js frontend/index.html ./
+COPY frontend/public ./public
 COPY frontend/src ./src
 
 # 🔹 빌드
