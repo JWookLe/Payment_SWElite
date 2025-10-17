@@ -36,7 +36,7 @@ pipeline {
           docker compose down --remove-orphans || true
           docker compose up -d mariadb redis zookeeper kafka
           sleep 20
-          docker compose up -d ingest-service consumer-worker frontend
+          docker compose up -d ingest-service consumer-worker frontend prometheus grafana
         '''
       }
     }
@@ -51,6 +51,26 @@ pipeline {
         '''
       }
     }
+
+    stage('Load Test (k6)') {
+      steps {
+        sh '''
+          rm -f loadtest/k6/summary.json || true
+          docker run --rm \
+            --network payment_swelite_default \
+            -v "$PWD/loadtest/k6":/k6 \
+            -e BASE_URL=http://ingest-service:8080 \
+            -e MERCHANT_ID=JENKINS \
+            grafana/k6:0.49.0 run /k6/payment-scenario.js --summary-export=/k6/summary.json
+        '''
+        archiveArtifacts artifacts: 'loadtest/k6/summary.json', allowEmptyArchive: true
+      }
+    }
   }
 
+  post {
+    always {
+      sh 'docker compose down --remove-orphans || true'
+    }
+  }
 }
