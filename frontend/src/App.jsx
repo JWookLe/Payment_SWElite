@@ -246,6 +246,20 @@ const currencyFormatter = new Intl.NumberFormat('ko-KR', {
   currency: 'KRW'
 });
 
+const FALLBACK_IMAGE =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#dbeafe"/><stop offset="100%" stop-color="#a5b4fc"/></linearGradient></defs><rect width="800" height="600" rx="32" fill="url(#g)"/><g fill="#1e293b" font-family="Pretendard, Arial, sans-serif" text-anchor="middle"><text x="400" y="270" font-size="48" font-weight="700">Premium Product</text><text x="400" y="340" font-size="24" opacity="0.75">이미지를 불러오지 못했습니다</text></g></svg>`
+  );
+
+const handleImageFallback = (event) => {
+  if (event.target.dataset.fallbackApplied === 'true') {
+    return;
+  }
+  event.target.dataset.fallbackApplied = 'true';
+  event.target.src = FALLBACK_IMAGE;
+};
+
 function randomKey() {
   return `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -595,7 +609,7 @@ export default function App() {
           </ul>
         </div>
         <div className="hero-banner__visual">
-          <img src={selectedCategory.heroImage} alt={selectedCategory.name} />
+          <img src={selectedCategory.heroImage} alt={selectedCategory.name} onError={handleImageFallback} />
         </div>
       </section>
 
@@ -693,7 +707,7 @@ function ProductCard({ product, active, onSelect }) {
       }}
     >
       <div className="product-card__media">
-        <img src={product.image} alt={product.name} />
+        <img src={product.image} alt={product.name} onError={handleImageFallback} />
         <span className="product-card__promo">{product.promoLabel}</span>
       </div>
       <div className="product-card__body">
@@ -725,7 +739,7 @@ function ProductDetailPanel({ product, selectedColor, onColorChange, quantity, o
   return (
     <section className="detail-panel">
       <div className="detail-panel__visual">
-        <img src={product.image} alt={product.name} />
+        <img src={product.image} alt={product.name} onError={handleImageFallback} />
         <span className="detail-panel__shipping">{product.shipping}</span>
       </div>
       <div className="detail-panel__content">
