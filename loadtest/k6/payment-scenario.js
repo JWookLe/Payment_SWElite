@@ -14,14 +14,14 @@ export const options = {
   scenarios: {
     peak_load: {
       executor: 'ramping-arrival-rate',
-      startRate: 5,
+      startRate: 20,
       timeUnit: '1s',
-      preAllocatedVUs: 20,
-      maxVUs: 50,
+      preAllocatedVUs: 100,
+      maxVUs: 300,
       stages: [
-        { duration: '1m', target: 10 },
-        { duration: '2m', target: 20 },
-        { duration: '1m', target: 30 },
+        { duration: '1m', target: 100 },
+        { duration: '3m', target: 200 },
+        { duration: '1m', target: 200 },
         { duration: '1m', target: 0 }
       ]
     }
@@ -79,7 +79,13 @@ export default function () {
     let paymentId;
     try {
       const payload = authorizeResponse.json();
-      paymentId = payload?.paymentId ?? payload?.response?.paymentId;
+      if (payload) {
+        if (typeof payload.paymentId !== 'undefined') {
+          paymentId = payload.paymentId;
+        } else if (payload.response && typeof payload.response.paymentId !== 'undefined') {
+          paymentId = payload.response.paymentId;
+        }
+      }
     } catch (error) {
       errorRate.add(1);
       return;
