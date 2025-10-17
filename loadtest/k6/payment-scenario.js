@@ -1,54 +1,54 @@
-﻿import http from 'k6/http';
-import { check, group, sleep } from 'k6';
-import { Trend, Rate } from 'k6/metrics';
+import http from "k6/http";
+import { check, group, sleep } from "k6";
+import { Trend, Rate } from "k6/metrics";
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
-const MERCHANT_ID = __ENV.MERCHANT_ID || 'K6-MERCHANT';
-const ENABLE_CAPTURE = ((__ENV.ENABLE_CAPTURE || 'false').toLowerCase() === 'true');
-const ENABLE_REFUND = ((__ENV.ENABLE_REFUND || 'false').toLowerCase() === 'true');
+const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
+const MERCHANT_ID = __ENV.MERCHANT_ID || "K6-MERCHANT";
+const ENABLE_CAPTURE = ((__ENV.ENABLE_CAPTURE || "false").toLowerCase() === "true");
+const ENABLE_REFUND = ((__ENV.ENABLE_REFUND || "false").toLowerCase() === "true");
 
-const authorizeTrend = new Trend('payment_authorize_duration', true);
-const captureTrend = new Trend('payment_capture_duration', true);
-const refundTrend = new Trend('payment_refund_duration', true);
-const errorRate = new Rate('payment_errors');
+const authorizeTrend = new Trend("payment_authorize_duration", true);
+const captureTrend = new Trend("payment_capture_duration", true);
+const refundTrend = new Trend("payment_refund_duration", true);
+const errorRate = new Rate("payment_errors");
 
 const thresholds = {
-  http_req_failed: ['rate<0.05'],
-  http_req_duration: ['p(95)<1000'],
-  payment_errors: ['rate<0.02'],
-  payment_authorize_duration: ['p(95)<500'],
+  http_req_failed: ["rate<0.05"],
+  http_req_duration: ["p(95)<1000"],
+  payment_errors: ["rate<0.02"],
+  payment_authorize_duration: ["p(95)<500"],
 };
 
 if (ENABLE_CAPTURE) {
-  thresholds.payment_capture_duration = ['p(95)<600'];
+  thresholds.payment_capture_duration = ["p(95)<600"];
 }
 if (ENABLE_REFUND) {
-  thresholds.payment_refund_duration = ['p(95)<700'];
+  thresholds.payment_refund_duration = ["p(95)<700"];
 }
 
 export const options = {
   scenarios: {
     authorize_flow: {
-      executor: 'ramping-arrival-rate',
+      executor: "ramping-arrival-rate",
       startRate: 20,
-      timeUnit: '1s',
+      timeUnit: "1s",
       preAllocatedVUs: 400,
       maxVUs: 800,
       stages: [
-        { duration: '1m', target: 100 },
-        { duration: '3m', target: 200 },
-        { duration: '1m', target: 200 },
-        { duration: '1m', target: 0 },
+        { duration: "1m", target: 100 },
+        { duration: "3m", target: 200 },
+        { duration: "1m", target: 200 },
+        { duration: "1m", target: 0 },
       ],
     },
   },
   thresholds,
-  summaryTrendStats: ['avg', 'p(90)', 'p(95)', 'p(99)', 'max'],
+  summaryTrendStats: ["avg", "p(90)", "p(95)", "p(99)", "max"],
 };
 
 const headers = {
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 };
 
@@ -58,26 +58,26 @@ function buildAmount() {
 }
 
 function buildIdempotencyKey() {
-  return k6---;
+  return `k6-${__VU}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export default function () {
-  group('authorize-capture-refund', () => {
+  group("authorize-capture-refund", () => {
     const idempotencyKey = buildIdempotencyKey();
     const amount = buildAmount();
 
     const authorizePayload = JSON.stringify({
       merchantId: MERCHANT_ID,
       amount,
-      currency: 'KRW',
+      currency: "KRW",
       idempotencyKey,
     });
 
-    const authorizeResponse = http.post(${BASE_URL}/payments/authorize, authorizePayload, headers);
+    const authorizeResponse = http.post(`${BASE_URL}/payments/authorize`, authorizePayload, headers);
     authorizeTrend.add(authorizeResponse.timings.duration);
 
     const authorizeOk = check(authorizeResponse, {
-      'authorize status ok': (res) => res.status === 200 || res.status === 409,
+      "authorize status ok": (res) => res.status === 200 || res.status === 409,
     });
 
     if (!authorizeOk) {
@@ -89,9 +89,9 @@ export default function () {
     try {
       const payload = authorizeResponse.json();
       if (payload) {
-        if (typeof payload.paymentId !== 'undefined') {
+        if (typeof payload.paymentId !== "undefined") {
           paymentId = payload.paymentId;
-        } else if (payload.response && typeof payload.response.paymentId !== 'undefined') {
+        } else if (payload.response && typeof payload.response.paymentId !== "undefined") {
           paymentId = payload.response.paymentId;
         }
       }
@@ -117,11 +117,11 @@ export default function () {
         merchantId: MERCHANT_ID,
       });
 
-      const captureResponse = http.post(${BASE_URL}/payments/capture/, capturePayload, headers);
+      const captureResponse = http.post(`${BASE_URL}/payments/capture/${paymentId}`, capturePayload, headers);
       captureTrend.add(captureResponse.timings.duration);
 
       const captureOk = check(captureResponse, {
-        'capture status ok': (res) => res.status === 200 || res.status === 409,
+        "capture status ok": (res) => res.status === 200 || res.status === 409,
       });
 
       if (!captureOk) {
@@ -139,14 +139,14 @@ export default function () {
     if (ENABLE_REFUND) {
       const refundPayload = JSON.stringify({
         merchantId: MERCHANT_ID,
-        reason: 'k6 refund simulation',
+        reason: "k6 refund simulation",
       });
 
-      const refundResponse = http.post(${BASE_URL}/payments/refund/, refundPayload, headers);
+      const refundResponse = http.post(`${BASE_URL}/payments/refund/${paymentId}`, refundPayload, headers);
       refundTrend.add(refundResponse.timings.duration);
 
       const refundOk = check(refundResponse, {
-        'refund status ok': (res) => res.status === 200 || res.status === 409,
+        "refund status ok": (res) => res.status === 200 || res.status === 409,
       });
 
       if (!refundOk) {
