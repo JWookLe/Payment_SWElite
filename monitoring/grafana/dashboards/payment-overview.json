@@ -115,7 +115,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(kafka_consumer_records_consumed_total{application=\"consumer-worker\"}[5m]))",
+          "expr": "sum(rate(kafka_consumer_fetch_manager_records_consumed_total{application=\"consumer-worker\"}[5m]))",
           "legendFormat": "Records/sec"
         }
       ],

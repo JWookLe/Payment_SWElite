@@ -1,6 +1,8 @@
 spring:
   application:
     name: consumer-worker
+  main:
+    web-application-type: reactive
   datasource:
     url: jdbc:mariadb://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:3306}/${PAYMENT_DB_NAME:paydb}
     username: ${PAYMENT_DB_USER:payuser}
