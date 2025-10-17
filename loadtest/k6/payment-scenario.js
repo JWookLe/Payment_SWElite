@@ -10,14 +10,14 @@ const captureTrend = new Trend('payment_capture_duration', true);
 const refundTrend = new Trend('payment_refund_duration', true);
 const errorRate = new Rate('payment_errors');
 
-      preAllocatedVUs: 400,
-      maxVUs: 800,
+export const options = {
+  scenarios: {
     peak_load: {
       executor: 'ramping-arrival-rate',
       startRate: 20,
       timeUnit: '1s',
-      preAllocatedVUs: 100,
-      maxVUs: 300,
+      preAllocatedVUs: 400,
+      maxVUs: 800,
       stages: [
         { duration: '1m', target: 100 },
         { duration: '3m', target: 200 },

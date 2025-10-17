@@ -38,6 +38,8 @@ management:
     export:
       prometheus:
         enabled: true
+    tags:
+      application: ${spring.application.name}
 
 payment:
   dlq-topic: ${PAYMENT_DLQ_TOPIC:payment.dlq}
