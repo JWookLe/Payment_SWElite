@@ -1,41 +1,245 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? ''
 });
 
-const PRODUCTS = [
+const CATEGORIES = [
   {
-    id: 'iphone-16-pro',
-    name: '\uC544\uC774\uD3F0\u0020\u0031\u0036\u0020\u0050\u0072\u006F',
-    price: 1690000,
-    colors: [
-      '\uB0B4\uCD94\uB7F4\u0020\uD2F0\uD0C0\uB284',
-      '\uBE14\uB799\u0020\uD2F0\uD0C0\uB284',
-      '\uB370\uC800\uD2B8\u0020\uD2F0\uD0C0\uB284'
+    id: 'mobile',
+    name: '모바일·태블릿',
+    tagline: '새로운 플래그십을 가장 빠르게 받아보세요',
+    description: '프리미엄 스마트폰과 태블릿을 하루 만에 받아보고, 카드 추가 할인과 보상 프로그램까지 한 번에 누리세요.',
+    accent: '#2563eb',
+    heroImage: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=1600&q=80',
+    subheading: '오늘 주문하면 내일 도착하는 로켓배송 스마트 디바이스',
+    products: [
+      {
+        id: 'iphone-16-pro',
+        name: 'Apple iPhone 16 Pro 256GB',
+        brand: 'Apple',
+        price: 1690000,
+        originalPrice: 1790000,
+        rating: 4.9,
+        reviews: 1284,
+        badges: ['로켓배송', '무료 반품', '사전 예약'],
+        shortDescription: 'A18 Pro 칩셋과 120Hz ProMotion OLED 디스플레이, 티타늄 프레임으로 완성한 차세대 플래그십.',
+        highlights: [
+          'A18 Pro 칩과 6.1형 ProMotion OLED로 놀라운 게임·영상 퍼포먼스',
+          '48MP 트리플 카메라와 텔레포토 촬영, ProRes 로그 지원',
+          '새로운 티타늄 프레임과 더 가벼운 무게, 향상된 배터리 수명',
+          'AppleCare+와 보상 프로그램 선택 가능'
+        ],
+        shipping: '오늘 출발 · 내일(화) 도착 보장',
+        colorOptions: ['티탄 블루', '내추럴 티타늄', '데저트 티타늄'],
+        monthlyInstallment: '월 70,900원 (24개월, 무이자)',
+        promoLabel: '카드 즉시할인 7% + 사은품 증정',
+        image: 'https://images.unsplash.com/photo-1603899122634-0e3c04bb4346?auto=format&fit=crop&w=800&q=80'
+      },
+      {
+        id: 'galaxy-s25-ultra',
+        name: 'Samsung Galaxy S25 Ultra 512GB',
+        brand: 'Samsung',
+        price: 1590000,
+        originalPrice: 1690000,
+        rating: 4.8,
+        reviews: 893,
+        badges: ['로켓와우 전용가', '당일 설치', '사전 예약'],
+        shortDescription: '가장 밝은 QHD+ 디스플레이와 200MP 쿼드 카메라, AI 기반 갤럭시 경험의 정점.',
+        highlights: [
+          'Vision Booster로 더욱 선명한 6.9형 QHD+ 인피니티 디스플레이',
+          '200MP 메인 카메라와 AI 줌, Nightography로 완벽한 저조도 촬영',
+          'S펜 내장, Knox 보안과 AI 번역 기능으로 생산성 강화',
+          '삼성케어플러스 2년형 추가 가능'
+        ],
+        shipping: '서울 기준 오늘 야간 도착 · 전국 익일 배송',
+        colorOptions: ['팬텀 블랙', '미드나잇 블루', '크림 화이트'],
+        monthlyInstallment: '월 66,300원 (24개월, 무이자)',
+        promoLabel: '삼성 카드 청구할인 10만원',
+        image: 'https://images.unsplash.com/photo-1580915411954-282cb1c03389?auto=format&fit=crop&w=800&q=80'
+      },
+      {
+        id: 'ipad-pro-m4',
+        name: 'Apple iPad Pro 12.9" M4 Wi-Fi 256GB',
+        brand: 'Apple',
+        price: 1640000,
+        originalPrice: 1740000,
+        rating: 4.9,
+        reviews: 642,
+        badges: ['로켓배송', '신상품', '베스트'],
+        shortDescription: 'M4 칩과 울트라 레티나 XDR 디스플레이, Apple Pencil Pro와 완벽 호환.',
+        highlights: [
+          'M4 칩셋과 10코어 GPU로 그래픽 작업과 영상 편집을 빠르게 처리',
+          '울트라 레티나 XDR 디스플레이로 HDR 콘텐츠 감상 최적화',
+          'Apple Pencil Pro·매직 키보드 호환, 스튜디오 품질 오디오',
+          'Wi-Fi 6E 지원과 최대 10시간 배터리'
+        ],
+        shipping: '평일 오후 3시 이전 주문 시 당일 출고',
+        colorOptions: ['스페이스 블랙', '실버'],
+        monthlyInstallment: '월 68,300원 (24개월, 무이자)',
+        promoLabel: '교육 고객 전용가 · 정품 파우치 증정',
+        image: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=800&q=80'
+      }
     ]
   },
   {
-    id: 'galaxy-s25-ultra',
-    name: '\uAC24\uB7ED\uC2DC\u0020\u0053\u0032\u0035\u0020\u0055\u006C\u0074\u0072\u0061',
-    price: 1490000,
-    colors: [
-      '\uD32C\uD140\u0020\uBE14\uB799',
-      '\uBBFC\uD2B8\u0020\uBE14\uB8E8',
-      '\uADF8\uB808\uC774\u0020\uC0C8\uB3C4\uC6B0'
+    id: 'appliance',
+    name: '프리미엄 가전',
+    tagline: '공간을 완성하는 하이엔드 라이프스타일 가전',
+    description: '호텔 스위트룸처럼 연출되는 빌트인 가전부터 공기 청정, 청소까지 프리미엄 라인업을 모았습니다.',
+    accent: '#0ea5e9',
+    heroImage: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1600&q=80',
+    subheading: '전문 기사 설치부터 사후 케어까지 한 번에',
+    products: [
+      {
+        id: 'dyson-gen5detect',
+        name: 'Dyson Gen5 Detect 무선 청소기',
+        brand: 'Dyson',
+        price: 1290000,
+        originalPrice: 1390000,
+        rating: 4.7,
+        reviews: 522,
+        badges: ['당일 설치', '무이자 12개월', '리필 필터 증정'],
+        shortDescription: '레이저 슬림 플러피 헤드로 99.9% 먼지를 시각화하며 흡입력을 유지하는 다이슨의 최신형 모델.',
+        highlights: [
+          '135,000RPM Hyperdymium 모터로 280AW 강력한 흡입력',
+          '레이저 슬림 플러피 헤드가 미세먼지를 시각화',
+          '피에조 센서가 먼지 양을 측정하고 디스플레이로 확인',
+          '무게 중심 설계와 다양한 툴로 손쉬운 청소'
+        ],
+        shipping: '전국 설치 기사 방문 · 기본 설치 무료',
+        colorOptions: ['니켈/퍼플'],
+        monthlyInstallment: '월 53,700원 (24개월, 무이자)',
+        promoLabel: '다이슨 정품 청소 거치대 포함',
+        image: 'https://images.unsplash.com/photo-1616628182501-ab0211c73695?auto=format&fit=crop&w=800&q=80'
+      },
+      {
+        id: 'lg-object-collection',
+        name: 'LG 오브제컬렉션 워시타워 W20S',
+        brand: 'LG',
+        price: 2290000,
+        originalPrice: 2490000,
+        rating: 4.9,
+        reviews: 311,
+        badges: ['전문 기사 설치', '로켓와우 전용 혜택', '현대카드 7% 할인'],
+        shortDescription: '세탁부터 건조까지 하나로, 공간 맞춤 컬러로 완성하는 모던한 세탁 공간.',
+        highlights: [
+          'AI DD 모터가 6가지 세탁패턴을 자동 최적화',
+          '듀얼 인버터 히트펌프로 전기료 절감 건조',
+          'ThinQ 앱으로 원격 제어 및 진단',
+          '오브제컬렉션 전용 컬러로 인테리어 포인트'
+        ],
+        shipping: '희망일 배송 · 설치 전문 엔지니어 배정',
+        colorOptions: ['크림 화이트', '그레이 베이지', '딥 그린'],
+        monthlyInstallment: '월 95,400원 (24개월, 무이자)',
+        promoLabel: '설치비 무료 + 베이킹소다 세제 증정',
+        image: 'https://images.unsplash.com/photo-1591088376299-08987787b58e?auto=format&fit=crop&w=800&q=80'
+      },
+      {
+        id: 'balmung-air-purifier',
+        name: 'Balmuda 더 에어 공기청정기',
+        brand: 'Balmuda',
+        price: 749000,
+        originalPrice: 799000,
+        rating: 4.8,
+        reviews: 417,
+        badges: ['로켓배송', '리뷰 1천+ 기념 할인', '필터 포함'],
+        shortDescription: '360도 파워풀 흡입과 클린부스터 토출로 거실 공기를 빠르게 순환시키는 발뮤다 토탈 공기 케어.',
+        highlights: [
+          '360도 서라운드 흡입과 두 개의 토출구로 빠른 공기순환',
+          'H13 등급 플리츠 필터와 활성탄 탈취 필터 기본 제공',
+          '정숙 모드 19dB, 야간에도 조용한 운전',
+          '필터 교체 주기 알림과 직관적 조작부'
+        ],
+        shipping: '내일(화) 새벽 도착 · 무료 설치',
+        colorOptions: ['화이트', '차콜 블랙'],
+        monthlyInstallment: '월 31,200원 (24개월, 무이자)',
+        promoLabel: '필터 1회 무료 교체권 포함',
+        image: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=80'
+      }
     ]
   },
   {
-    id: 'xiaomi-pro',
-    name: '\uC0E4\uC624\uBBF8\u0020\u0031\u0034\u0054\u0020\u0050\u0072\u006F',
-    price: 890000,
-    colors: [
-      '\uBA54\uD14C\uC624\u0020\uBE14\uB799',
-      '\uC624\uB85C\uB77C\u0020\uC2E4\uBC84'
+    id: 'living',
+    name: '홈 & 리빙',
+    tagline: '집 안을 호텔처럼, 감각적인 리빙 아이템',
+    description: '따뜻한 무드 조명부터 프리미엄 커피·키친 웨어까지, 하루를 채우는 라이프스타일 큐레이션.',
+    accent: '#f97316',
+    heroImage: 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1600&q=80',
+    subheading: '감각적인 홈카페 · 인테리어 소품으로 일상 업그레이드',
+    products: [
+      {
+        id: 'bruno-airfryer',
+        name: 'BRUNO 프리미엄 에어프라이어 오븐 16L',
+        brand: 'BRUNO',
+        price: 289000,
+        originalPrice: 329000,
+        rating: 4.7,
+        reviews: 952,
+        badges: ['로켓와우 추가할인', '쿠폰 10%', 'MD 추천'],
+        shortDescription: '16L 대용량과 9가지 자동 메뉴, 감각적인 컬러로 주방을 채우는 브루노 대표 제품.',
+        highlights: [
+          '360도 공기순환으로 바삭하게 익히는 대용량 조리',
+          '9가지 자동메뉴와 손쉬운 다이얼 조작',
+          '강화유리 도어와 세련된 파스텔 컬러 디자인',
+          '탈착식 오븐 트레이로 손쉬운 세척'
+        ],
+        shipping: '오늘 주문 시 새벽 도착 · 무료 배송',
+        colorOptions: ['크림 아이보리', '세이지 민트', '모던 블랙'],
+        monthlyInstallment: '월 12,000원 (24개월, 무이자)',
+        promoLabel: '전용 쿠킹 가이드북 동봉',
+        image: 'https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?auto=format&fit=crop&w=800&q=80'
+      },
+      {
+        id: 'breville-barista-pro',
+        name: 'Breville 바리스타 프로 BES878',
+        brand: 'Breville',
+        price: 1090000,
+        originalPrice: 1190000,
+        rating: 4.8,
+        reviews: 255,
+        badges: ['무료 바리스타 교육', '카드 청구할인', '로켓배송'],
+        shortDescription: '홈카페의 완성, 정확한 온도 제어와 분쇄를 갖춘 브레빌의 시그니처 반자동 에스프레소 머신.',
+        highlights: [
+          'ThermoJet 시스템으로 3초 예열, 즉시 추출',
+          '통합 버 그라인더가 30단계 입자 조절 지원',
+          'LCD 디스플레이로 추출 시간과 온도 확인',
+          '스테인리스 스팀 완드로 라떼 아트 가능'
+        ],
+        shipping: '내일(화) 새벽 도착 · 프리미엄 포장',
+        colorOptions: ['브러시드 스테인리스', '블랙 트러플'],
+        monthlyInstallment: '월 45,400원 (24개월, 무이자)',
+        promoLabel: '원두 2종 + 템퍼 세트 증정',
+        image: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=800&q=80'
+      },
+      {
+        id: 'muji-floor-lamp',
+        name: 'MUJI 플로어 조명 3단 디밍',
+        brand: 'MUJI',
+        price: 199000,
+        originalPrice: 229000,
+        rating: 4.6,
+        reviews: 688,
+        badges: ['신상품', '로켓배송', '무료 반품'],
+        shortDescription: '부드러운 실루엣과 3단 밝기 조절로 거실·침실 어디든 은은한 무드를 더하는 플로어 스탠드.',
+        highlights: [
+          '패브릭 쉐이드로 부드러운 확산광 연출',
+          '3단 밝기 조절 및 메모리 기능 지원',
+          '슬림한 베이스로 좁은 공간에도 OK',
+          '에너지 효율 높은 LED 모듈 포함'
+        ],
+        shipping: '내일(화) 도착 보장 · 설치 간편',
+        colorOptions: ['내추럴 베이지', '차콜 그레이'],
+        monthlyInstallment: '월 8,300원 (24개월, 무이자)',
+        promoLabel: '무인양품 공식 스토어 · 2년 보증',
+        image: 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=800&q=80'
+      }
     ]
   }
 ];
+
+const INITIAL_PRODUCT = CATEGORIES[0].products[0];
 
 const currencyFormatter = new Intl.NumberFormat('ko-KR', {
   style: 'currency',
@@ -46,9 +250,25 @@ function randomKey() {
   return `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function formatNumber(value) {
+  return value.toLocaleString('ko-KR');
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return '-';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+  return date.toLocaleString('ko-KR', { hour12: false });
+}
+
 export default function App() {
-  const [selectedProductId, setSelectedProductId] = useState(PRODUCTS[0].id);
-  const [selectedColor, setSelectedColor] = useState(PRODUCTS[0].colors[0]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(CATEGORIES[0].id);
+  const [selectedProductId, setSelectedProductId] = useState(INITIAL_PRODUCT.id);
+  const [selectedColor, setSelectedColor] = useState(INITIAL_PRODUCT.colorOptions[0]);
   const [quantity, setQuantity] = useState(1);
   const [receipt, setReceipt] = useState(null);
   const [status, setStatus] = useState(null);
@@ -59,10 +279,32 @@ export default function App() {
   const [refundReason, setRefundReason] = useState('');
   const [sessionDetails, setSessionDetails] = useState(null);
 
-  const selectedProduct = useMemo(
-    () => PRODUCTS.find((product) => product.id === selectedProductId) ?? PRODUCTS[0],
-    [selectedProductId]
+  const selectedCategory = useMemo(
+    () => CATEGORIES.find((category) => category.id === selectedCategoryId) ?? CATEGORIES[0],
+    [selectedCategoryId]
   );
+
+  useEffect(() => {
+    const defaultProduct = selectedCategory.products[0];
+    setSelectedProductId(defaultProduct.id);
+  }, [selectedCategory]);
+
+  const selectedProduct = useMemo(() => {
+    return (
+      selectedCategory.products.find((product) => product.id === selectedProductId) ??
+      selectedCategory.products[0]
+    );
+  }, [selectedCategory, selectedProductId]);
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      return;
+    }
+    setSelectedColor((previous) =>
+      selectedProduct.colorOptions.includes(previous) ? previous : selectedProduct.colorOptions[0]
+    );
+    setQuantity(1);
+  }, [selectedProduct]);
 
   const totalAmount = selectedProduct.price * quantity;
 
@@ -87,9 +329,12 @@ export default function App() {
     try {
       const merchantId = 'MOCK-MERCHANT';
       const details = {
-        product: selectedProduct.name,
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
         color: selectedColor,
-        quantity
+        quantity,
+        unitPrice: selectedProduct.price,
+        totalAmount
       };
 
       const authorizeResponse = await api.post('/payments/authorize', {
@@ -104,35 +349,36 @@ export default function App() {
       setManualPaymentId(paymentId ? String(paymentId) : '');
       setSessionDetails(details);
       setReceipt({
-        ...details,
+        order: details,
         authorization: authorizeResponse.data,
         capture: null,
         refund: null
       });
       setStatus({
         type: 'success',
-        message: '\uC2B9\uC778\uC774\u0020\uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4\u002E'
+        message: '승인이 완료되었습니다. 동일 키로 재시도 시 멱등 응답이 반환됩니다.'
       });
     } catch (error) {
-      handleApiError(error, '\uC2B9\uC778\u0020\uC694\uCCAD\uC5D0\u0020\uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4\u002E');
+      handleApiError(error, '승인 요청 중 문제가 발생했습니다.');
     } finally {
       setLoading(false);
     }
   };
 
   const resolvePaymentId = () => {
-    const candidate = manualPaymentId.trim() || (lastPaymentId != null ? String(lastPaymentId) : '');
+    const candidate =
+      manualPaymentId.trim() || (lastPaymentId != null ? String(lastPaymentId) : '');
     if (!candidate) {
       setStatus({
         type: 'error',
-        message: '\uACB0\uC81C\u0020\u0049\u0044\uB97C\u0020\uC785\uB825\uD558\uAC70\uB098\u0020\uBA3C\uC800\u0020\uC2B9\uC778\uC744\u0020\uC9C4\uD589\uD558\uC138\uC694\u002E'
+        message: '결제 ID를 입력하거나 먼저 승인을 진행해주세요.'
       });
       return null;
     }
     if (!/^\d+$/.test(candidate)) {
       setStatus({
         type: 'error',
-        message: '\uACB0\uC81C\u0020\u0049\u0044\uB294\u0020\uC22B\uC790\uB85C\uB9CC\u0020\uC785\uB825\uD558\uC138\uC694\u002E'
+        message: '결제 ID는 숫자만 입력할 수 있습니다.'
       });
       return null;
     }
@@ -156,28 +402,30 @@ export default function App() {
 
       const details =
         sessionDetails ??
-        receipt ??
-        {
-          product: selectedProduct.name,
+        receipt?.order ?? {
+          productId: selectedProduct.id,
+          productName: selectedProduct.name,
           color: selectedColor,
-          quantity
+          quantity,
+          unitPrice: selectedProduct.price,
+          totalAmount
         };
 
       setSessionDetails(details);
       setLastPaymentId(captureResponse.data.paymentId ?? Number(paymentId));
       setManualPaymentId(paymentId);
       setReceipt((previous) => ({
-        ...details,
+        order: details,
         authorization: previous?.authorization ?? null,
         capture: captureResponse.data,
         refund: null
       }));
       setStatus({
         type: 'success',
-        message: '\uC815\uC0B0\uC774\u0020\uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4\u002E'
+        message: '정산이 성공적으로 완료되었습니다.'
       });
     } catch (error) {
-      handleApiError(error, '\uC815\uC0B0\u0020\uC694\uCCAD\uC5D0\u0020\uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4\u002E');
+      handleApiError(error, '정산 요청 중 문제가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -196,33 +444,35 @@ export default function App() {
       const merchantId = 'MOCK-MERCHANT';
       const refundResponse = await api.post(`/payments/refund/${paymentId}`, {
         merchantId,
-        reason: refundReason?.trim() ? refundReason.trim() : 'manual-refund'
+        reason: refundReason.trim() ? refundReason.trim() : 'manual-refund'
       });
 
       const details =
         sessionDetails ??
-        receipt ??
-        {
-          product: selectedProduct.name,
+        receipt?.order ?? {
+          productId: selectedProduct.id,
+          productName: selectedProduct.name,
           color: selectedColor,
-          quantity
+          quantity,
+          unitPrice: selectedProduct.price,
+          totalAmount
         };
 
       setSessionDetails(details);
       setLastPaymentId(refundResponse.data.paymentId ?? Number(paymentId));
       setManualPaymentId(paymentId);
       setReceipt((previous) => ({
-        ...details,
+        order: details,
         authorization: previous?.authorization ?? null,
         capture: previous?.capture ?? null,
         refund: refundResponse.data
       }));
       setStatus({
         type: 'success',
-        message: '\uD658\uBD88\uC774\u0020\uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4\u002E'
+        message: '환불이 완료되었습니다.'
       });
     } catch (error) {
-      handleApiError(error, '\uD658\uBD88\u0020\uC694\uCCAD\uC5D0\u0020\uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4\u002E');
+      handleApiError(error, '환불 요청 중 문제가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -236,9 +486,12 @@ export default function App() {
       const merchantId = 'MOCK-MERCHANT';
       const keyToUse = idempotencyKey;
       const details = {
-        product: selectedProduct.name,
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
         color: selectedColor,
-        quantity
+        quantity,
+        unitPrice: selectedProduct.price,
+        totalAmount
       };
 
       const authorizeResponse = await api.post('/payments/authorize', {
@@ -257,18 +510,18 @@ export default function App() {
       setLastPaymentId(paymentId ?? null);
       setManualPaymentId(paymentId ? String(paymentId) : '');
       setReceipt({
-        ...details,
+        order: details,
         authorization: authorizeResponse.data,
         capture: captureResponse.data,
         refund: null
       });
       setStatus({
         type: 'success',
-        message: '\uC2B9\uC778\uACFC\u0020\uC815\uC0B0\uC774\u0020\uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4\u002E'
+        message: '승인과 정산이 연속으로 완료되었습니다.'
       });
       setIdempotencyKey(randomKey());
     } catch (error) {
-      handleApiError(error, '\uC2B9\uC778\u0020\uBC0F\u0020\uC815\uC0B0\u0020\uC694\uCCAD\uC5D0\u0020\uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4\u002E');
+      handleApiError(error, '승인 및 정산 처리 중 문제가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -278,235 +531,477 @@ export default function App() {
     setIdempotencyKey(randomKey());
     setManualPaymentId('');
     setLastPaymentId(null);
-    setRefundReason('Enter your Refund reason');
+    setRefundReason('');
     setSessionDetails(null);
     setReceipt(null);
     setStatus(null);
+    setQuantity(1);
+    setSelectedColor(selectedProduct.colorOptions[0]);
   };
 
   return (
-    <div className="app-container">
-      <header>
-        <div>
-          <h1>{'\uD504\uB9AC\uBBF8\uC5C4\u0020\uAE30\uAE30\u0020\uC2A4\uD1A0\uC5B4'}</h1>
-          <p>{'\u0052\u0065\u0061\u0063\u0074\u0020\uACB0\uC81C\u0020\uBAA9\uC5C5\u0020\u00B7\u0020\u004B\u0061\u0066\u006B\u0061\u0020\u002F\u0020\u004D\u0061\u0072\u0069\u0061\u0044\u0042\u0020\uD30C\uC774\uD504\uB77C\uC778'}</p>
+    <div className="marketplace-app">
+      <header className="marketplace-header">
+        <div className="brand">
+          <span className="brand__badge">PAYMENT SWELITE</span>
+          <h1>프리미엄 마켓</h1>
+          <p>오늘 주문하면 내일 도착하는 하이엔드 쇼핑 경험</p>
         </div>
-        <button
-          onClick={handlePurchase}
-          disabled={loading}
-          style={{
-            background: '#16a34a',
-            color: '#fff',
-            border: 'none',
-            padding: '0.85rem 1.5rem',
-            borderRadius: '10px',
-            fontSize: '1.05rem',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.7 : 1
-          }}
-        >
-          {loading ? '\uCC98\uB9AC\u0020\uC911\u2026' : '\uC2B9\uC778\u0020\uD6C4\u0020\uC815\uC0B0'}
-        </button>
+        <div className="search-bar">
+          <input
+            type="text"
+            placeholder="찾으시는 상품명을 입력해보세요 (예: 아이폰 16, 로봇청소기, 바리스타 머신)"
+            disabled
+          />
+          <button type="button" disabled>
+            검색 준비 중
+          </button>
+        </div>
+        <dl className="summary">
+          <div>
+            <dt>최근 결제 ID</dt>
+            <dd>{lastPaymentId ?? '-'}</dd>
+          </div>
+          <div>
+            <dt>선택한 상품</dt>
+            <dd>{selectedProduct.name}</dd>
+          </div>
+          <div>
+            <dt>총 결제 금액</dt>
+            <dd>{currencyFormatter.format(totalAmount)}</dd>
+          </div>
+        </dl>
       </header>
 
+      <CategoryTabs
+        categories={CATEGORIES}
+        selectedId={selectedCategoryId}
+        onSelect={setSelectedCategoryId}
+      />
+
       <section
+        className="hero-banner"
         style={{
-          background: '#f8fafc',
-          border: '1px solid #e2e8f0',
-          borderRadius: '12px',
-          padding: '1.25rem',
-          marginTop: '1.5rem'
+          '--accent': selectedCategory.accent
         }}
       >
-        <h3 style={{ marginTop: 0, marginBottom: '0.75rem' }}>{'\uACB0\uC81C\u0020\uD14C\uC2A4\uD2B8\u0020\uB3C4\uAD6C'}</h3>
-
-        <div
-          style={{
-            display: 'grid',
-            gap: '0.75rem'
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '0.75rem'
-            }}
-          >
-            <label style={{ flex: '1 1 260px', minWidth: '200px' }}>
-              <span style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                {'\uBA71\uB4F1\u0020\uD0A4'}
-              </span>
-              <input
-                type="text"
-                value={idempotencyKey}
-                onChange={(event) => setIdempotencyKey(event.target.value)}
-                style={{ width: '100%' }}
-                disabled={loading}
-              />
-            </label>
-            <button type="button" onClick={() => setIdempotencyKey(randomKey())} disabled={loading}>
-              {'\uD0A4\u0020\uC0DD\uC131'}
-            </button>
-            <button type="button" onClick={handleAuthorizeOnly} disabled={loading}>
-              {'\uC2B9\uC778\u0020\uD638\uCD9C'}
-            </button>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '0.75rem'
-            }}
-          >
-            <label style={{ flex: '1 1 200px', minWidth: '160px' }}>
-              <span style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                {'\uACB0\uC81C\u0020\u0049\u0044'}
-              </span>
-              <input
-                type="text"
-                value={manualPaymentId}
-                onChange={(event) => setManualPaymentId(event.target.value)}
-                placeholder={'\uC608\u003A\u0020\u0031'}
-                style={{ width: '100%' }}
-                disabled={loading}
-              />
-            </label>
-            <label style={{ flex: '1 1 220px', minWidth: '180px' }}>
-              <span style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                {'\uD658\uBD88\u0020\uC0AC\uC720'}
-              </span>
-              <input
-                type="text"
-                value={refundReason}
-                onChange={(event) => setRefundReason(event.target.value)}
-                placeholder={'\uC0AC\uC720\u0020\uC785\uB825'}
-                style={{ width: '100%' }}
-                disabled={loading}
-              />
-            </label>
-            <button type="button" onClick={handleCapture} disabled={loading}>
-              {'\uC815\uC0B0\u0020\uD638\uCD9C'}
-            </button>
-            <button type="button" onClick={handleRefund} disabled={loading}>
-              {'\uD658\uBD88\u0020\uD638\uCD9C'}
-            </button>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '0.75rem'
-            }}
-          >
-            <button type="button" onClick={handleReset} disabled={loading}>
-              {'\uC785\uB825\u0020\uCD08\uAE30\uD654'}
-            </button>
-            <span style={{ alignSelf: 'center', fontSize: '0.85rem', color: '#475569' }}>
-              {'\uB9C8\uC9C0\uB9C9\u0020\uACB0\uC81C\u0020\u0049\u0044\u003A\u0020'}
-              {lastPaymentId != null ? lastPaymentId : '-'}
-            </span>
-          </div>
+        <div className="hero-banner__copy">
+          <h2>{selectedCategory.tagline}</h2>
+          <p>{selectedCategory.description}</p>
+          <ul>
+            <li>카드사 제휴 할인 · 무이자 할부 혜택</li>
+            <li>실시간 재고 연동 · 주문 상태 추적</li>
+            <li>멱등 키를 활용한 안전한 결제 시나리오 실험</li>
+          </ul>
+        </div>
+        <div className="hero-banner__visual">
+          <img src={selectedCategory.heroImage} alt={selectedCategory.name} />
         </div>
       </section>
 
-      <section className="products-grid">
-        {PRODUCTS.map((product) => (
-          <article key={product.id} className="product-card">
-            <h2>{product.name}</h2>
-            <strong>{currencyFormatter.format(product.price)}</strong>
+      <section className="catalog-section">
+        <header className="catalog-section__header">
+          <div>
+            <h2>{selectedCategory.name} 추천 상품</h2>
+            <p>{selectedCategory.subheading}</p>
+          </div>
+          <span className="catalog-section__badge">총 {formatNumber(selectedCategory.products.length)}개 상품</span>
+        </header>
 
-            <label>
-              {'\uC0C9\uC0C1'}
-              <select
-                value={product.id === selectedProductId ? selectedColor : product.colors[0]}
-                onChange={(event) => {
-                  setSelectedProductId(product.id);
-                  setSelectedColor(event.target.value);
-                }}
-              >
-                {product.colors.map((color) => (
-                  <option key={color} value={color}>
-                    {color}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              {'\uC218\uB7C9'}
-              <input
-                type="number"
-                min={1}
-                max={5}
-                value={product.id === selectedProductId ? quantity : 1}
-                onFocus={() => {
-                  setSelectedProductId(product.id);
-                  setSelectedColor(product.colors[0]);
-                }}
-                onChange={(event) => {
-                  const value = Number(event.target.value);
-                  setQuantity(Number.isNaN(value) ? 1 : Math.min(Math.max(value, 1), 5));
-                }}
-              />
-            </label>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedProductId(product.id);
-                setSelectedColor(product.colors[0]);
-              }}
-            >
-              {'\uC774\u0020\uC0C1\uD488\uC73C\uB85C\u0020\uD14C\uC2A4\uD2B8'}
-            </button>
-          </article>
-        ))}
+        <div className="catalog-grid">
+          {selectedCategory.products.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              active={product.id === selectedProduct.id}
+              onSelect={() => setSelectedProductId(product.id)}
+            />
+          ))}
+        </div>
       </section>
 
-      <section className="receipt">
-        <h3>{'\uACB0\uC81C\u0020\uC694\uC57D'}</h3>
-        <p>
-          {'\uC120\uD0DD\uD55C\u0020\uC0C1\uD488\u003A\u0020'}
-          <strong>{selectedProduct.name}</strong>
-        </p>
-        <p>
-          {'\uC0C9\uC0C1\u003A\u0020'}
-          {selectedColor}
-        </p>
-        <p>
-          {'\uC218\uB7C9\u003A\u0020'}
-          {quantity}
-          {'\uAC1C'}
-        </p>
-        <p>
-          {'\uCD1D\u0020\uACB0\uC81C\u0020\uAE08\uC561\u003A\u0020'}
-          {currencyFormatter.format(totalAmount)}
-        </p>
+      <section className="detail-layout">
+        <ProductDetailPanel
+          product={selectedProduct}
+          selectedColor={selectedColor}
+          onColorChange={setSelectedColor}
+          quantity={quantity}
+          onQuantityChange={setQuantity}
+          totalAmount={totalAmount}
+        />
 
-        {status && (
-          <p className={status.type === 'success' ? 'status-success' : 'status-error'}>{status.message}</p>
-        )}
+        <aside className="side-panel">
+          <OrderControlPanel
+            idempotencyKey={idempotencyKey}
+            onIdempotencyKeyChange={setIdempotencyKey}
+            onRandomizeKey={() => setIdempotencyKey(randomKey())}
+            manualPaymentId={manualPaymentId}
+            onManualPaymentIdChange={setManualPaymentId}
+            refundReason={refundReason}
+            onRefundReasonChange={setRefundReason}
+            onAuthorize={handleAuthorizeOnly}
+            onCapture={handleCapture}
+            onRefund={handleRefund}
+            onPurchase={handlePurchase}
+            onReset={handleReset}
+            loading={loading}
+            status={status}
+            lastPaymentId={lastPaymentId}
+            selectedProduct={selectedProduct}
+            selectedColor={selectedColor}
+            quantity={quantity}
+            totalAmount={totalAmount}
+          />
 
-        {receipt && (
-          <div style={{ marginTop: '1.5rem' }}>
-            <h4>{'\uCD5C\uADFC\u0020\u0041\u0050\u0049\u0020\uC751\uB2F5'}</h4>
-            <pre
-              style={{
-                background: '#0f172a',
-                color: '#e2e8f0',
-                padding: '1rem',
-                borderRadius: '8px',
-                overflowX: 'auto'
-              }}
-            >
-              {JSON.stringify(receipt, null, 2)}
-            </pre>
-          </div>
-        )}
+          <ReceiptPanel receipt={receipt} />
+        </aside>
       </section>
     </div>
+  );
+}
+
+function CategoryTabs({ categories, selectedId, onSelect }) {
+  return (
+    <nav className="category-tabs">
+      {categories.map((category) => (
+        <button
+          key={category.id}
+          type="button"
+          className={category.id === selectedId ? 'active' : ''}
+          onClick={() => onSelect(category.id)}
+        >
+          <span>{category.name}</span>
+          <small>{category.tagline}</small>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function ProductCard({ product, active, onSelect }) {
+  return (
+    <article
+      className={active ? 'product-card is-active' : 'product-card'}
+      onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+    >
+      <div className="product-card__media">
+        <img src={product.image} alt={product.name} />
+        <span className="product-card__promo">{product.promoLabel}</span>
+      </div>
+      <div className="product-card__body">
+        <div className="product-card__brand">{product.brand}</div>
+        <h3>{product.name}</h3>
+        <p className="product-card__description">{product.shortDescription}</p>
+        <div className="product-card__rating">
+          <strong>{product.rating.toFixed(1)}</strong>
+          <span>리뷰 {formatNumber(product.reviews)}</span>
+        </div>
+        <div className="product-card__price">
+          <strong>{currencyFormatter.format(product.price)}</strong>
+          {product.originalPrice && (
+            <span className="product-card__original">{currencyFormatter.format(product.originalPrice)}</span>
+          )}
+        </div>
+        <div className="product-card__installment">{product.monthlyInstallment}</div>
+        <div className="product-card__badges">
+          {product.badges.map((badge) => (
+            <span key={badge}>{badge}</span>
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ProductDetailPanel({ product, selectedColor, onColorChange, quantity, onQuantityChange, totalAmount }) {
+  return (
+    <section className="detail-panel">
+      <div className="detail-panel__visual">
+        <img src={product.image} alt={product.name} />
+        <span className="detail-panel__shipping">{product.shipping}</span>
+      </div>
+      <div className="detail-panel__content">
+        <div className="detail-panel__header">
+          <span className="detail-panel__brand">{product.brand}</span>
+          <h2>{product.name}</h2>
+          <p>{product.shortDescription}</p>
+        </div>
+
+        <div className="detail-panel__pricing">
+          <div className="detail-panel__price">
+            <strong>{currencyFormatter.format(product.price)}</strong>
+            {product.originalPrice && (
+              <span>{currencyFormatter.format(product.originalPrice)}</span>
+            )}
+          </div>
+          <div className="detail-panel__installment">{product.monthlyInstallment}</div>
+        </div>
+
+        <div className="detail-panel__meta">
+          <div>
+            <span className="label">색상 선택</span>
+            <select value={selectedColor} onChange={(event) => onColorChange(event.target.value)}>
+              {product.colorOptions.map((color) => (
+                <option key={color} value={color}>
+                  {color}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <span className="label">수량</span>
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={quantity}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                onQuantityChange(Number.isNaN(value) ? 1 : Math.min(Math.max(value, 1), 5));
+              }}
+            />
+          </div>
+
+          <div>
+            <span className="label">결제 예상 금액</span>
+            <strong>{currencyFormatter.format(totalAmount)}</strong>
+          </div>
+        </div>
+
+        <ul className="detail-panel__highlights">
+          {product.highlights.map((highlight) => (
+            <li key={highlight}>{highlight}</li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function OrderControlPanel({
+  idempotencyKey,
+  onIdempotencyKeyChange,
+  onRandomizeKey,
+  manualPaymentId,
+  onManualPaymentIdChange,
+  refundReason,
+  onRefundReasonChange,
+  onAuthorize,
+  onCapture,
+  onRefund,
+  onPurchase,
+  onReset,
+  loading,
+  status,
+  lastPaymentId,
+  selectedProduct,
+  selectedColor,
+  quantity,
+  totalAmount
+}) {
+  return (
+    <section className="order-panel">
+      <header>
+        <h3>주문 & 결제 제어판</h3>
+        <p>멱등 키를 활용해 승인·정산·환불 시나리오를 단계별로 실험해보세요.</p>
+      </header>
+
+      <div className="order-panel__summary">
+        <div>
+          <span className="label">선택한 상품</span>
+          <strong>{selectedProduct.name}</strong>
+          <span>{selectedColor} · {quantity}개</span>
+        </div>
+        <div>
+          <span className="label">총 결제 금액</span>
+          <strong>{currencyFormatter.format(totalAmount)}</strong>
+          <span>최근 결제 ID: {lastPaymentId ?? '-'}</span>
+        </div>
+      </div>
+
+      <div className="order-panel__group">
+        <label>
+          <span>멱등 키</span>
+          <div className="field-with-action">
+            <input
+              type="text"
+              value={idempotencyKey}
+              onChange={(event) => onIdempotencyKeyChange(event.target.value)}
+              disabled={loading}
+            />
+            <button type="button" onClick={onRandomizeKey} disabled={loading}>
+              새 키 생성
+            </button>
+          </div>
+        </label>
+
+        <label>
+          <span>결제 ID</span>
+          <input
+            type="text"
+            value={manualPaymentId}
+            onChange={(event) => onManualPaymentIdChange(event.target.value)}
+            placeholder="예: 1"
+            disabled={loading}
+          />
+        </label>
+
+        <label>
+          <span>환불 사유</span>
+          <input
+            type="text"
+            value={refundReason}
+            onChange={(event) => onRefundReasonChange(event.target.value)}
+            placeholder="환불 사유를 입력해주세요"
+            disabled={loading}
+          />
+        </label>
+      </div>
+
+      <div className="order-panel__actions">
+        <button type="button" onClick={onAuthorize} disabled={loading}>
+          승인만 요청
+        </button>
+        <button type="button" onClick={onCapture} disabled={loading}>
+          정산 요청
+        </button>
+        <button type="button" onClick={onRefund} disabled={loading}>
+          환불 요청
+        </button>
+        <button type="button" className="primary" onClick={onPurchase} disabled={loading}>
+          즉시 구매 (승인→정산)
+        </button>
+      </div>
+
+      <div className="order-panel__footer">
+        <button type="button" onClick={onReset} disabled={loading}>
+          화면 초기화
+        </button>
+        <span>요청 시 백엔드 Redis/DB/Kafka 상태를 함께 확인해보세요.</span>
+      </div>
+
+      {status && (
+        <div className={status.type === 'success' ? 'status-banner success' : 'status-banner error'}>
+          {status.message}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ReceiptPanel({ receipt }) {
+  if (!receipt) {
+    return (
+      <section className="receipt-panel empty">
+        <h3>주문 타임라인</h3>
+        <p>승인 또는 정산을 진행하면 여기에 상세한 타임라인이 표시됩니다.</p>
+      </section>
+    );
+  }
+
+  const { order, authorization, capture, refund } = receipt;
+
+  return (
+    <section className="receipt-panel">
+      <h3>주문 타임라인</h3>
+
+      <div className="receipt-panel__order">
+        <div>
+          <span className="label">상품</span>
+          <strong>{order.productName}</strong>
+          <span>{order.color} · {order.quantity}개</span>
+        </div>
+        <div>
+          <span className="label">결제 금액</span>
+          <strong>{currencyFormatter.format(order.totalAmount)}</strong>
+        </div>
+      </div>
+
+      <div className="receipt-panel__steps">
+        {authorization && (
+          <div className="receipt-panel__step">
+            <header>
+              <span className="step-badge">Authorize</span>
+              <time dateTime={authorization.createdAt}>{formatDateTime(authorization.createdAt)}</time>
+            </header>
+            <dl>
+              <div>
+                <dt>결제 상태</dt>
+                <dd>{authorization.status}</dd>
+              </div>
+              <div>
+                <dt>메시지</dt>
+                <dd>{authorization.message}</dd>
+              </div>
+              <div>
+                <dt>결제 ID</dt>
+                <dd>{authorization.paymentId}</dd>
+              </div>
+            </dl>
+          </div>
+        )}
+
+        {capture && (
+          <div className="receipt-panel__step">
+            <header>
+              <span className="step-badge capture">Capture</span>
+              <time dateTime={capture.createdAt}>{formatDateTime(capture.createdAt)}</time>
+            </header>
+            <dl>
+              <div>
+                <dt>결제 상태</dt>
+                <dd>{capture.status}</dd>
+              </div>
+              <div>
+                <dt>메시지</dt>
+                <dd>{capture.message}</dd>
+              </div>
+              <div>
+                <dt>장부 기록</dt>
+                <dd>
+                  {capture.ledgerEntries?.map((entry) => `${entry.debitAccount} → ${entry.creditAccount}`).join(', ') ??
+                    '없음'}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        )}
+
+        {refund && (
+          <div className="receipt-panel__step">
+            <header>
+              <span className="step-badge refund">Refund</span>
+              <time dateTime={refund.createdAt}>{formatDateTime(refund.createdAt)}</time>
+            </header>
+            <dl>
+              <div>
+                <dt>결제 상태</dt>
+                <dd>{refund.status}</dd>
+              </div>
+              <div>
+                <dt>메시지</dt>
+                <dd>{refund.message}</dd>
+              </div>
+              <div>
+                <dt>장부 기록</dt>
+                <dd>
+                  {refund.ledgerEntries?.map((entry) => `${entry.debitAccount} → ${entry.creditAccount}`).join(', ') ??
+                    '없음'}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
