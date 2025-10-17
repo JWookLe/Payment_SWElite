@@ -12,7 +12,7 @@ const CATEGORIES = [
     tagline: '새로운 플래그십을 가장 빠르게 받아보세요',
     description: '프리미엄 스마트폰과 태블릿을 하루 만에 받아보고, 카드 추가 할인과 보상 프로그램까지 한 번에 누리세요.',
     accent: '#2563eb',
-    heroImage: 'https://images.unsplash.com/photo-1510557880182-3d4d3cba35bf?auto=format&fit=crop&w=1600&q=80',
+    heroImage: '/category-mobile.jpg',
     subheading: '오늘 주문하면 내일 도착하는 로켓배송 스마트 디바이스',
     products: [
       {
@@ -35,7 +35,7 @@ const CATEGORIES = [
         colorOptions: ['화이트 티타늄', '내추럴 티타늄', '데저트 티타늄'],
         monthlyInstallment: '월 70,900원 (24개월, 무이자)',
         promoLabel: '카드 즉시할인 7% + 사은품 증정',
-        image: 'https://images.unsplash.com/photo-1695048207831-7be35d8aacbb?auto=format&fit=crop&w=800&q=80'
+        image: '/iphone-16-pro.jpg'
       },
       {
         id: 'galaxy-s25-ultra',
@@ -57,7 +57,7 @@ const CATEGORIES = [
         colorOptions: ['팬텀 블랙', '미드나잇 블루', '크림 화이트'],
         monthlyInstallment: '월 66,300원 (24개월, 무이자)',
         promoLabel: '삼성 카드 청구할인 10만원',
-        image: 'https://images.unsplash.com/photo-1580915411954-282cb1c03389?auto=format&fit=crop&w=800&q=80'
+        image: '/galaxy-s25-ultra.jpg'
       },
       {
         id: 'ipad-pro-m4',
@@ -79,7 +79,7 @@ const CATEGORIES = [
         colorOptions: ['스페이스 블랙', '실버'],
         monthlyInstallment: '월 68,300원 (24개월, 무이자)',
         promoLabel: '교육 고객 전용가 · 정품 파우치 증정',
-        image: 'https://images.pexels.com/photos/5082578/pexels-photo-5082578.jpeg?auto=compress&cs=tinysrgb&w=800'
+        image: '/ipad-pro.jpg'
       }
     ]
   },
@@ -89,7 +89,7 @@ const CATEGORIES = [
     tagline: '공간을 완성하는 하이엔드 라이프스타일 가전',
     description: '호텔 스위트룸처럼 연출되는 빌트인 가전부터 공기 청정, 청소까지 프리미엄 라인업을 모았습니다.',
     accent: '#0ea5e9',
-    heroImage: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1600&q=80',
+    heroImage: '/category-appliance.jpg',
     subheading: '전문 기사 설치부터 사후 케어까지 한 번에',
     products: [
       {
@@ -112,7 +112,7 @@ const CATEGORIES = [
         colorOptions: ['니켈/퍼플'],
         monthlyInstallment: '월 53,700원 (24개월, 무이자)',
         promoLabel: '다이슨 정품 청소 거치대 포함',
-        image: 'https://images.unsplash.com/photo-1616628182501-ab0211c73695?auto=format&fit=crop&w=800&q=80'
+        image: '/dyson-gen5.jpg'
       },
       {
         id: 'lg-object-collection',
@@ -134,7 +134,7 @@ const CATEGORIES = [
         colorOptions: ['크림 화이트', '그레이 베이지', '딥 그린'],
         monthlyInstallment: '월 95,400원 (24개월, 무이자)',
         promoLabel: '설치비 무료 + 베이킹소다 세제 증정',
-        image: 'https://images.pexels.com/photos/5591513/pexels-photo-5591513.jpeg?auto=compress&cs=tinysrgb&w=800'
+        image: '/lg-washtower.jpg'
       },
       {
         id: 'balmung-air-purifier',
@@ -156,7 +156,7 @@ const CATEGORIES = [
         colorOptions: ['화이트', '차콜 블랙'],
         monthlyInstallment: '월 31,200원 (24개월, 무이자)',
         promoLabel: '필터 1회 무료 교체권 포함',
-        image: 'https://images.pexels.com/photos/3965545/pexels-photo-3965545.jpeg?auto=compress&cs=tinysrgb&w=800'
+        image: '/balmuda-air-purifier.jpg'
       }
     ]
   },
@@ -189,7 +189,7 @@ const CATEGORIES = [
         colorOptions: ['크림 아이보리', '세이지 민트', '모던 블랙'],
         monthlyInstallment: '월 12,000원 (24개월, 무이자)',
         promoLabel: '전용 쿠킹 가이드북 동봉',
-        image: 'https://images.pexels.com/photos/5591715/pexels-photo-5591715.jpeg?auto=compress&cs=tinysrgb&w=800'
+        image: '/bruno-airfryer.jpg'
       },
       {
         id: 'breville-barista-pro',
@@ -211,29 +211,29 @@ const CATEGORIES = [
         colorOptions: ['브러시드 스테인리스', '블랙 트러플'],
         monthlyInstallment: '월 45,400원 (24개월, 무이자)',
         promoLabel: '원두 2종 + 템퍼 세트 증정',
-        image: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=800&q=80'
+        image: '/breville-barista-pro.jpg'
       },
       {
-        id: 'muji-floor-lamp',
-        name: 'MUJI 플로어 조명 3단 디밍',
-        brand: 'MUJI',
-        price: 199000,
-        originalPrice: 229000,
-        rating: 4.6,
-        reviews: 688,
-        badges: ['신상품', '로켓배송', '무료 반품'],
-        shortDescription: '부드러운 실루엣과 3단 밝기 조절로 거실·침실 어디든 은은한 무드를 더하는 플로어 스탠드.',
+        id: 'atelier-modular-sofa',
+        name: 'Atelier 모듈 소파 4인용',
+        brand: 'Atelier Lounge',
+        price: 1590000,
+        originalPrice: 1790000,
+        rating: 4.7,
+        reviews: 532,
+        badges: ['쇼룸 설치', '로켓와우 전용 혜택', '프리미엄 패브릭'],
+        shortDescription: '깊은 좌방석과 모듈형 구조로 거실 공간을 자유롭게 연출할 수 있는 프리미엄 패브릭 소파.',
         highlights: [
-          '패브릭 쉐이드로 부드러운 확산광 연출',
-          '3단 밝기 조절 및 메모리 기능 지원',
-          '슬림한 베이스로 좁은 공간에도 OK',
-          '에너지 효율 높은 LED 모듈 포함'
+          '분리형 모듈 구성으로 L자·일자형 자유 배치',
+          '생활 방수 및 이지케어 기능성 패브릭 적용',
+          '하이백 헤드레스트와 35kg/m³ 고밀도 쿠션',
+          '전문 시공 팀이 배송·설치·폐가구 수거까지 지원'
         ],
-        shipping: '내일(화) 도착 보장 · 설치 간편',
-        colorOptions: ['내추럴 베이지', '차콜 그레이'],
-        monthlyInstallment: '월 8,300원 (24개월, 무이자)',
-        promoLabel: '무인양품 공식 스토어 · 2년 보증',
-        image: 'https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&fit=crop&w=800&q=80'
+        shipping: '희망일 지정 배송 · 설치 전문가 방문',
+        colorOptions: ['아이보리 린넨', '그레이 트윌', '샌드 베이지'],
+        monthlyInstallment: '월 66,300원 (24개월, 무이자)',
+        promoLabel: '패브릭 보호 코팅 서비스 무상 제공',
+        image: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=800&q=80'
       }
     ]
   }
