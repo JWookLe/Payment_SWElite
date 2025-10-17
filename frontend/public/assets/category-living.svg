@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="livingBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1f2937"/>
+      <stop offset="55%" stop-color="#fb923c"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+    <filter id="livingGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="40" result="blur"/>
+      <feBlend in="SourceGraphic" in2="blur" mode="screen"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#livingBg)"/>
+  <g opacity="0.3" filter="url(#livingGlow)">
+    <circle cx="1260" cy="280" r="190" fill="#fed7aa"/>
+    <circle cx="420" cy="200" r="180" fill="#f97316"/>
+    <circle cx="360" cy="640" r="250" fill="#fb923c"/>
+    <circle cx="1180" cy="640" r="230" fill="#f59e0b"/>
+  </g>
+  <g transform="translate(260,260)" fill="none" stroke="#fef3c7" stroke-width="5" stroke-linejoin="round">
+    <path d="M0 180h220l-28 160H28z" />
+    <rect x="60" y="0" width="100" height="60" rx="12"/>
+    <path d="M40 180V60h140v120" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(560,240)" fill="none" stroke="#fff7ed" stroke-width="4" stroke-linejoin="round">
+    <path d="M0 200h140l20 20v120H-20V220z"/>
+    <path d="M-20 220h180v20H-20z"/>
+  </g>
+  <path d="M940 320c60-70 172-90 260-48 82 38 120 118 104 188-120 55-280 10-336-80 26-36 29-78 0-60z" fill="rgba(255,255,255,0.28)"/>
+  <rect x="1000" y="540" width="360" height="150" rx="32" fill="rgba(30,41,59,0.5)" stroke="rgba(254,243,199,0.35)" stroke-width="2"/>
+  <text x="1045" y="600" fill="#fef3c7" font-size="34" font-family="Pretendard, 'Segoe UI', sans-serif" font-weight="600">
+    HOME &amp; LIVING
+  </text>
+  <text x="1045" y="638" fill="#fde68a" font-size="20" font-family="Pretendard, 'Segoe UI', sans-serif" opacity="0.8">
+    호텔처럼 꾸미는 감각적인 라이프스타일
+  </text>
+</svg>

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="brevilleBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1f2937"/>
+      <stop offset="70%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+    <linearGradient id="brevilleBody" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4d4d8"/>
+      <stop offset="100%" stop-color="#71717a"/>
+    </linearGradient>
+    <filter id="brevilleShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feOffset dy="18"/>
+      <feColorMatrix values="0 0 0 0 0  0 0 0 0 0.12  0 0 0 0 0.2  0 0 0 0.3 0"/>
+      <feBlend in="SourceGraphic" in2="blur" mode="normal"/>
+    </filter>
+  </defs>
+  <rect width="800" height="600" rx="38" fill="url(#brevilleBg)"/>
+  <g transform="translate(210,140)" filter="url(#brevilleShadow)">
+    <rect x="0" y="70" width="280" height="220" rx="28" fill="url(#brevilleBody)" stroke="rgba(39,39,42,0.3)" stroke-width="3"/>
+    <rect x="40" y="0" width="200" height="90" rx="22" fill="rgba(229,229,234,0.95)" stroke="rgba(55,65,81,0.3)" stroke-width="3"/>
+    <rect x="55" y="110" width="80" height="110" rx="18" fill="rgba(15,23,42,0.2)"/>
+    <rect x="145" y="110" width="80" height="110" rx="18" fill="rgba(15,23,42,0.2)"/>
+    <circle cx="70" cy="260" r="18" fill="rgba(15,23,42,0.4)"/>
+    <circle cx="210" cy="260" r="18" fill="rgba(15,23,42,0.4)"/>
+  </g>
+  <g transform="translate(470,170)" fill="#fff7ed" font-family="Pretendard, 'Segoe UI', sans-serif">
+    <text x="0" y="0" font-size="18" opacity="0.8">Breville</text>
+    <text x="0" y="44" font-size="36" font-weight="700">Barista Pro</text>
+    <text x="0" y="84" font-size="18" opacity="0.8">ThermoJet 3초 예열 · 버 그라인더 30단계 · LCD 디스플레이</text>
+    <text x="0" y="136" font-size="22" font-weight="600">₩1,090,000</text>
+    <text x="0" y="174" font-size="16" opacity="0.75">무료 바리스타 교육 | 원두 2종 + 템퍼 세트</text>
+  </g>
+</svg>
