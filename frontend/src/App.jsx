@@ -12,7 +12,7 @@ const CATEGORIES = [
     tagline: '새로운 플래그십을 가장 빠르게 받아보세요',
     description: '프리미엄 스마트폰과 태블릿을 하루 만에 받아보고, 카드 추가 할인과 보상 프로그램까지 한 번에 누리세요.',
     accent: '#2563eb',
-    heroImage: '/assets/category-mobile.svg',
+    heroImage: 'https://images.pexels.com/photos/6078126/pexels-photo-6078126.jpeg?auto=compress&cs=tinysrgb&w=1600',
     subheading: '오늘 주문하면 내일 도착하는 로켓배송 스마트 디바이스',
     products: [
       {
@@ -35,7 +35,7 @@ const CATEGORIES = [
         colorOptions: ['티탄 블루', '내추럴 티타늄', '데저트 티타늄'],
         monthlyInstallment: '월 70,900원 (24개월, 무이자)',
         promoLabel: '카드 즉시할인 7% + 사은품 증정',
-        image: '/assets/product-iphone.svg'
+        image: 'https://images.pexels.com/photos/1093657/pexels-photo-1093657.jpeg?auto=compress&cs=tinysrgb&w=800'
       },
       {
         id: 'galaxy-s25-ultra',
@@ -57,7 +57,7 @@ const CATEGORIES = [
         colorOptions: ['팬텀 블랙', '미드나잇 블루', '크림 화이트'],
         monthlyInstallment: '월 66,300원 (24개월, 무이자)',
         promoLabel: '삼성 카드 청구할인 10만원',
-        image: '/assets/product-galaxy.svg'
+        image: 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=800'
       },
       {
         id: 'ipad-pro-m4',
@@ -79,7 +79,7 @@ const CATEGORIES = [
         colorOptions: ['스페이스 블랙', '실버'],
         monthlyInstallment: '월 68,300원 (24개월, 무이자)',
         promoLabel: '교육 고객 전용가 · 정품 파우치 증정',
-        image: '/assets/product-ipad.svg'
+        image: 'https://images.pexels.com/photos/5082568/pexels-photo-5082568.jpeg?auto=compress&cs=tinysrgb&w=800'
       }
     ]
   },
@@ -89,7 +89,7 @@ const CATEGORIES = [
     tagline: '공간을 완성하는 하이엔드 라이프스타일 가전',
     description: '호텔 스위트룸처럼 연출되는 빌트인 가전부터 공기 청정, 청소까지 프리미엄 라인업을 모았습니다.',
     accent: '#0ea5e9',
-    heroImage: '/assets/category-appliance.svg',
+    heroImage: 'https://images.pexels.com/photos/6934177/pexels-photo-6934177.jpeg?auto=compress&cs=tinysrgb&w=1600',
     subheading: '전문 기사 설치부터 사후 케어까지 한 번에',
     products: [
       {
@@ -112,7 +112,7 @@ const CATEGORIES = [
         colorOptions: ['니켈/퍼플'],
         monthlyInstallment: '월 53,700원 (24개월, 무이자)',
         promoLabel: '다이슨 정품 청소 거치대 포함',
-        image: '/assets/product-dyson.svg'
+        image: 'https://images.pexels.com/photos/5591467/pexels-photo-5591467.jpeg?auto=compress&cs=tinysrgb&w=800'
       },
       {
         id: 'lg-object-collection',
@@ -134,7 +134,7 @@ const CATEGORIES = [
         colorOptions: ['크림 화이트', '그레이 베이지', '딥 그린'],
         monthlyInstallment: '월 95,400원 (24개월, 무이자)',
         promoLabel: '설치비 무료 + 베이킹소다 세제 증정',
-        image: '/assets/product-lg-washtower.svg'
+        image: 'https://images.pexels.com/photos/5591518/pexels-photo-5591518.jpeg?auto=compress&cs=tinysrgb&w=800'
       },
       {
         id: 'balmung-air-purifier',
@@ -156,7 +156,7 @@ const CATEGORIES = [
         colorOptions: ['화이트', '차콜 블랙'],
         monthlyInstallment: '월 31,200원 (24개월, 무이자)',
         promoLabel: '필터 1회 무료 교체권 포함',
-        image: '/assets/product-balmuda.svg'
+        image: 'https://images.pexels.com/photos/3616761/pexels-photo-3616761.jpeg?auto=compress&cs=tinysrgb&w=800'
       }
     ]
   },
@@ -166,7 +166,7 @@ const CATEGORIES = [
     tagline: '집 안을 호텔처럼, 감각적인 리빙 아이템',
     description: '따뜻한 무드 조명부터 프리미엄 커피·키친 웨어까지, 하루를 채우는 라이프스타일 큐레이션.',
     accent: '#f97316',
-    heroImage: '/assets/category-living.svg',
+    heroImage: 'https://images.pexels.com/photos/1571459/pexels-photo-1571459.jpeg?auto=compress&cs=tinysrgb&w=1600',
     subheading: '감각적인 홈카페 · 인테리어 소품으로 일상 업그레이드',
     products: [
       {
@@ -189,7 +189,7 @@ const CATEGORIES = [
         colorOptions: ['크림 아이보리', '세이지 민트', '모던 블랙'],
         monthlyInstallment: '월 12,000원 (24개월, 무이자)',
         promoLabel: '전용 쿠킹 가이드북 동봉',
-        image: '/assets/product-bruno.svg'
+        image: 'https://images.pexels.com/photos/4108592/pexels-photo-4108592.jpeg?auto=compress&cs=tinysrgb&w=800'
       },
       {
         id: 'breville-barista-pro',
@@ -211,7 +211,7 @@ const CATEGORIES = [
         colorOptions: ['브러시드 스테인리스', '블랙 트러플'],
         monthlyInstallment: '월 45,400원 (24개월, 무이자)',
         promoLabel: '원두 2종 + 템퍼 세트 증정',
-        image: '/assets/product-breville.svg'
+        image: 'https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg?auto=compress&cs=tinysrgb&w=800'
       },
       {
         id: 'muji-floor-lamp',
@@ -233,7 +233,7 @@ const CATEGORIES = [
         colorOptions: ['내추럴 베이지', '차콜 그레이'],
         monthlyInstallment: '월 8,300원 (24개월, 무이자)',
         promoLabel: '무인양품 공식 스토어 · 2년 보증',
-        image: '/assets/product-muji.svg'
+        image: 'https://images.pexels.com/photos/6585529/pexels-photo-6585529.jpeg?auto=compress&cs=tinysrgb&w=800'
       }
     ]
   }
