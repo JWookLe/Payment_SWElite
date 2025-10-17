@@ -61,6 +61,9 @@ services:
       PAYMENT_DB_PASSWORD: paypass
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       REDIS_HOST: redis
+      APP_RATE_LIMIT_AUTHORIZE_CAPACITY: 1000
+      APP_RATE_LIMIT_CAPTURE_CAPACITY: 1000
+      APP_RATE_LIMIT_REFUND_CAPACITY: 500
     depends_on:
       mariadb:
         condition: service_healthy
