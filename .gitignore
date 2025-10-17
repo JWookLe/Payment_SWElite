@@ -35,3 +35,6 @@ jenkins-data/
 backend/consumer-worker/bin/
 backend/ingest-service/bin/
 
+# Load testing artifacts
+loadtest/k6/*.json
+

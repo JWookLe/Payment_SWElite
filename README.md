@@ -1,74 +1,69 @@
 # Payment_SWElite
 
-## ì£¼ì°¨ë³„ ëª©í‘œ
+## ì£¼ì°¨ë³?ëª©í‘œ
 
 - **1ì£¼ì°¨**
-  - React ëª©ì—… ìƒì ê³¼ Spring Boot ê¸°ë°˜ ê²°ì œ API(ìŠ¹ì¸Â·ì •ì‚°Â·í™˜ë¶ˆ)ë¡œ E2E í”Œë¡œìš° êµ¬í˜„
-  - Kafka, Redis, MariaDB, Jenkinsë¥¼ í¬í•¨í•œ Docker Compose ë¡œì»¬ í™˜ê²½ êµ¬ì¶•
+  - React ëª©ì—… ?ì ê³?Spring Boot ê¸°ë°˜ ê²°ì œ API(?¹ì¸Â·?•ì‚°Â·?˜ë¶ˆ)ë¡?E2E ?Œë¡œ??êµ¬í˜„
+  - Kafka, Redis, MariaDB, Jenkinsë¥??¬í•¨??Docker Compose ë¡œì»¬ ?˜ê²½ êµ¬ì¶•
 - **2ì£¼ì°¨**
-  - [x] Redisë¥¼ í™œìš©í•œ rate limit ë° ë©±ë“± ìºì‹œ ê³ ë„í™”
-  - [ ] Prometheus + Grafana ì§€í‘œ ìˆ˜ì§‘ ë° ì‹œê°í™” íŒŒì´í”„ë¼ì¸ êµ¬ì„±
-  - [ ] k6 ë¶€í•˜/ìŠ¤íŠ¸ë ˆìŠ¤ í…ŒìŠ¤íŠ¸ ì‹œë‚˜ë¦¬ì˜¤ ì‘ì„± ë° Jenkins ë¦¬í¬íŠ¸ ìë™í™”
-  - [ ] Settlement/Reconciliation ì„œë¹„ìŠ¤ í…Œì´ë¸” ì¶”ê°€ ë° ë¹„ë™ê¸° ì²˜ë¦¬ í™•ì¥
-  - [x] payment.dlq í† í”½ìœ¼ë¡œ ì¬ì „ì†¡í•˜ëŠ” Consumer ì˜ˆì™¸ ì²˜ë¦¬ ë³´ê°•
+  - [x] Redis ±â¹İ rate limit ¹× ¸èµî Ä³½Ã °íµµÈ­
+  - [x] Prometheus + Grafana ÁöÇ¥ ¼öÁı ¹× ½Ã°¢È­ ÆÄÀÌÇÁ¶óÀÎ ±¸¼º
+  - [ ] k6 ºÎÇÏ/½ºÆ®·¹½º Å×½ºÆ® ½Ã³ª¸®¿À ÀÛ¼º ¹× Jenkins ¸®Æ÷Æ® ÀÚµ¿È­
+  - [ ] Settlement/Reconciliation ´ëºñ ºñµ¿±â Ã³¸® º¸°­
+  - [x] payment.dlq ÅäÇÈ ÀçÀü¼Û ±â¹İ Consumer ¿¹¿Ü Ã³¸® º¸°­
 
-## ì‹œìŠ¤í…œ êµ¬ì„± ìš”ì†Œ
-
-| êµ¬ì„± | ì„¤ëª… |
+| êµ¬ì„± | ?¤ëª… |
 | --- | --- |
-| **frontend** | React + Viteë¡œ ì‘ì„±ëœ ëª©ì—… ìƒì  UI. iPhone 16 Pro, Galaxy S25 Ultra, Xiaomi 14T Proë¥¼ ëŒ€ìƒìœ¼ë¡œ í…ŒìŠ¤íŠ¸ ì‹œë‚˜ë¦¬ì˜¤ ì œê³µ. |
-| **ingest-service** | Spring Boot(Java 21) ê¸°ë°˜ ê²°ì œ API. ìŠ¹ì¸/ì •ì‚°/í™˜ë¶ˆ ì²˜ë¦¬ì™€ outbox ì´ë²¤íŠ¸ ë°œí–‰ ë‹´ë‹¹. |
-| **consumer-worker** | Kafka Consumer. ê²°ì œ ì´ë²¤íŠ¸ë¥¼ ìˆ˜ì‹ í•´ ledger ë°ì´í„°ë¥¼ ë³´ê°•í•˜ê³  í›„ì† ì²˜ë¦¬ë¥¼ ì¤€ë¹„. |
-| **mariadb** | ë©”ì¸ ë°ì´í„°ë² ì´ìŠ¤(paydb). payment, ledger_entry, outbox_event, idem_response_cache í…Œì´ë¸”ì„ ê´€ë¦¬. |
-| **kafka & zookeeper** | ê²°ì œ ì´ë²¤íŠ¸ í† í”½(`payment.authorized`, `payment.captured`, `payment.refunded`)ì„ í˜¸ìŠ¤íŒ…. |
-| **redis** | rate limitê³¼ ë©±ë“± ì‘ë‹µ ìºì‹œë¥¼ ë‹´ëŠ” in-memory ìŠ¤í† ë¦¬ì§€. |
-| **jenkins** | Gradle + NPM ë¹Œë“œì™€ Docker Compose ë°°í¬ë¥¼ ìë™í™”í•˜ëŠ” CI ì„œë²„. |
+| **frontend** | React + Viteë¡??‘ì„±??ëª©ì—… ?ì  UI. iPhone 16 Pro, Galaxy S25 Ultra, Xiaomi 14T Proë¥??€?ìœ¼ë¡??ŒìŠ¤???œë‚˜ë¦¬ì˜¤ ?œê³µ. |
+| **ingest-service** | Spring Boot(Java 21) ê¸°ë°˜ ê²°ì œ API. ?¹ì¸/?•ì‚°/?˜ë¶ˆ ì²˜ë¦¬?€ outbox ?´ë²¤??ë°œí–‰ ?´ë‹¹. |
+| **consumer-worker** | Kafka Consumer. ê²°ì œ ?´ë²¤?¸ë? ?˜ì‹ ??ledger ?°ì´?°ë? ë³´ê°•?˜ê³  ?„ì† ì²˜ë¦¬ë¥?ì¤€ë¹? |
+| **mariadb** | ë©”ì¸ ?°ì´?°ë² ?´ìŠ¤(paydb). payment, ledger_entry, outbox_event, idem_response_cache ?Œì´ë¸”ì„ ê´€ë¦? |
+| **kafka & zookeeper** | ê²°ì œ ?´ë²¤??? í”½(`payment.authorized`, `payment.captured`, `payment.refunded`)???¸ìŠ¤?? |
+| **redis** | rate limitê³?ë©±ë“± ?‘ë‹µ ìºì‹œë¥??´ëŠ” in-memory ?¤í† ë¦¬ì?. |
+| **jenkins** | Gradle + NPM ë¹Œë“œ?€ Docker Compose ë°°í¬ë¥??ë™?”í•˜??CI ?œë²„. |
 
-## ì£¼ìš” í…Œì´ë¸” DDL
+## ì£¼ìš” ?Œì´ë¸?DDL
 
-`backend/ingest-service/src/main/resources/schema.sql`ì—ì„œ í™•ì¸í•  ìˆ˜ ìˆëŠ” í•µì‹¬ í…Œì´ë¸”ì€ ë‹¤ìŒê³¼ ê°™ìŠµë‹ˆë‹¤.
+`backend/ingest-service/src/main/resources/schema.sql`?ì„œ ?•ì¸?????ˆëŠ” ?µì‹¬ ?Œì´ë¸”ì? ?¤ìŒê³?ê°™ìŠµ?ˆë‹¤.
 
-- `payment` : ê²°ì œ ìƒíƒœ ë° ë©±ë“± í‚¤ ê´€ë¦¬
-- `ledger_entry` : ìŠ¹ì¸/ì •ì‚°/í™˜ë¶ˆ ì‹œ ìƒì„±ë˜ëŠ” ì›ì¥ ë°ì´í„°
-- `outbox_event` : Kafka ë°œí–‰ ëŒ€ê¸° ì´ë²¤íŠ¸ ì €ì¥
-- `idem_response_cache` : ìŠ¹ì¸ ì‘ë‹µ ë©±ë“± ìºì‹œ
+- `payment` : ê²°ì œ ?íƒœ ë°?ë©±ë“± ??ê´€ë¦?- `ledger_entry` : ?¹ì¸/?•ì‚°/?˜ë¶ˆ ???ì„±?˜ëŠ” ?ì¥ ?°ì´??- `outbox_event` : Kafka ë°œí–‰ ?€ê¸??´ë²¤???€??- `idem_response_cache` : ?¹ì¸ ?‘ë‹µ ë©±ë“± ìºì‹œ
 
-## REST API ìš”ì•½
+## REST API ?”ì•½
 
-| Method | Path | ì„¤ëª… |
+| Method | Path | ?¤ëª… |
 | --- | --- | --- |
-| `POST` | `/payments/authorize` | ë©±ë“±ì„±ì„ ë³´ì¥í•˜ëŠ” ìŠ¹ì¸ì„ ì²˜ë¦¬í•˜ê³  `payment` ë° `outbox_event`ì— ê¸°ë¡ |
-| `POST` | `/payments/capture/{paymentId}` | ìŠ¹ì¸ëœ ê²°ì œë¥¼ ì •ì‚° ì²˜ë¦¬, ledger ê¸°ë¡, ì´ë²¤íŠ¸ ë°œí–‰ |
-| `POST` | `/payments/refund/{paymentId}` | ì •ì‚°ëœ ê²°ì œë¥¼ í™˜ë¶ˆ ì²˜ë¦¬, ledger ê¸°ë¡, ì´ë²¤íŠ¸ ë°œí–‰ |
+| `POST` | `/payments/authorize` | ë©±ë“±?±ì„ ë³´ì¥?˜ëŠ” ?¹ì¸??ì²˜ë¦¬?˜ê³  `payment` ë°?`outbox_event`??ê¸°ë¡ |
+| `POST` | `/payments/capture/{paymentId}` | ?¹ì¸??ê²°ì œë¥??•ì‚° ì²˜ë¦¬, ledger ê¸°ë¡, ?´ë²¤??ë°œí–‰ |
+| `POST` | `/payments/refund/{paymentId}` | ?•ì‚°??ê²°ì œë¥??˜ë¶ˆ ì²˜ë¦¬, ledger ê¸°ë¡, ?´ë²¤??ë°œí–‰ |
 
-ì˜¤ë¥˜ ì‘ë‹µì€ ìš”êµ¬ì‚¬í•­ì— ë§ì¶° `DUPLICATE_REQUEST`, `CAPTURE_CONFLICT`, `REFUND_CONFLICT`, `NOT_FOUND` ì½”ë“œë¥¼ ë°˜í™˜í•©ë‹ˆë‹¤.
+?¤ë¥˜ ?‘ë‹µ?€ ?”êµ¬?¬í•­??ë§ì¶° `DUPLICATE_REQUEST`, `CAPTURE_CONFLICT`, `REFUND_CONFLICT`, `NOT_FOUND` ì½”ë“œë¥?ë°˜í™˜?©ë‹ˆ??
 
-## Kafka í† í”½
+## Kafka ? í”½
 
 - `payment.authorized`
 - `payment.captured`
 - `payment.refunded`
-- `payment.dlq` (Consumer ì‹¤íŒ¨ ì‹œ ì¬ì „ì†¡)
+- `payment.dlq` (Consumer ?¤íŒ¨ ???¬ì „??
 
 ## Redis ê¸°ë°˜ ë³´í˜¸ ê¸°ëŠ¥
 
-- ìŠ¹ì¸ API ì‘ë‹µì€ Redis TTL ìºì‹œì— ë™ì‹œ ì €ì¥ë¼ ì¤‘ë³µ ìš”ì²­ ì‹œ ë¹ ë¥´ê²Œ ì¬ì‚¬ìš©ë©ë‹ˆë‹¤. ê¸°ë³¸ TTLì€ 600ì´ˆì´ë©° `APP_IDEMPOTENCY_CACHE_TTL_SECONDS` í™˜ê²½ ë³€ìˆ˜ë¡œ ì¡°ì •í•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.
-- ìƒì (`merchantId`) ë‹¨ìœ„ ìŠ¹ì¸Â·ì •ì‚°Â·í™˜ë¶ˆ APIëŠ” ë¶„ë‹¹ 20/40/20íšŒ ë ˆì´íŠ¸ ë¦¬ë°‹ì´ ì ìš©ë©ë‹ˆë‹¤. `APP_RATE_LIMIT_*` í™˜ê²½ ë³€ìˆ˜ë¡œ ì¡°ì • ê°€ëŠ¥í•˜ê³ , Redis ì¥ì•  ì‹œ ì œí•œ ì—†ì´ ì²˜ë¦¬í•˜ë„ë¡ fail-openìœ¼ë¡œ êµ¬ì„±í–ˆìŠµë‹ˆë‹¤.
+- ?¹ì¸ API ?‘ë‹µ?€ Redis TTL ìºì‹œ???™ì‹œ ?€?¥ë¼ ì¤‘ë³µ ?”ì²­ ??ë¹ ë¥´ê²??¬ì‚¬?©ë©?ˆë‹¤. ê¸°ë³¸ TTL?€ 600ì´ˆì´ë©?`APP_IDEMPOTENCY_CACHE_TTL_SECONDS` ?˜ê²½ ë³€?˜ë¡œ ì¡°ì •?????ˆìŠµ?ˆë‹¤.
+- ?ì (`merchantId`) ?¨ìœ„ ?¹ì¸Â·?•ì‚°Â·?˜ë¶ˆ API??ë¶„ë‹¹ 20/40/20???ˆì´??ë¦¬ë°‹???ìš©?©ë‹ˆ?? `APP_RATE_LIMIT_*` ?˜ê²½ ë³€?˜ë¡œ ì¡°ì • ê°€?¥í•˜ê³? Redis ?¥ì•  ???œí•œ ?†ì´ ì²˜ë¦¬?˜ë„ë¡?fail-open?¼ë¡œ êµ¬ì„±?ˆìŠµ?ˆë‹¤.
 
-## ë¡œì»¬ ì‹¤í–‰ ë°©ë²•
+## ë¡œì»¬ ?¤í–‰ ë°©ë²•
 
 1. **Docker Compose ê¸°ë™**
    ```bash
    docker compose up --build
    ```
-   MariaDB, Redis, Kafka, ingest-service, consumer-worker, frontendê°€ í•¨ê»˜ ê¸°ë™ë©ë‹ˆë‹¤.
+   MariaDB, Redis, Kafka, ingest-service, consumer-worker, frontendê°€ ?¨ê»˜ ê¸°ë™?©ë‹ˆ??
 
-2. **í”„ëŸ°íŠ¸ì—”ë“œ ì ‘ì†**
+2. **?„ëŸ°?¸ì—”???‘ì†**
    - http://localhost:5173
-   - ìƒí’ˆ, ìƒ‰ìƒ, ìˆ˜ëŸ‰ì„ ì„ íƒí•˜ê³  ê²°ì œ í…ŒìŠ¤íŠ¸ ìˆ˜í–‰
-   - ì„±ê³µ ì‹œ authorize + capture ì‘ë‹µ JSON í™•ì¸
+   - ?í’ˆ, ?‰ìƒ, ?˜ëŸ‰??? íƒ?˜ê³  ê²°ì œ ?ŒìŠ¤???˜í–‰
+   - ?±ê³µ ??authorize + capture ?‘ë‹µ JSON ?•ì¸
 
-3. **ìˆ˜ë™ API í…ŒìŠ¤íŠ¸**
+3. **?˜ë™ API ?ŒìŠ¤??*
    ```bash
    curl -X POST http://localhost:8080/payments/authorize \
      -H 'Content-Type: application/json' \
@@ -80,24 +75,40 @@
      }'
    ```
 
-4. **ì„œë¹„ìŠ¤ ì¢…ë£Œ**
+4. **?œë¹„??ì¢…ë£Œ**
    ```bash
    docker compose down
    ```
 
-## Jenkins íŒŒì´í”„ë¼ì¸
+## Jenkins ?Œì´?„ë¼??
+`Jenkinsfile`?€ ?¤ìŒ ?¨ê³„ë¥??ë™?”í•©?ˆë‹¤.
 
-`Jenkinsfile`ì€ ë‹¤ìŒ ë‹¨ê³„ë¥¼ ìë™í™”í•©ë‹ˆë‹¤.
-
-1. ì†ŒìŠ¤ ì²´í¬ì•„ì›ƒ
+1. ?ŒìŠ¤ ì²´í¬?„ì›ƒ
 2. `frontend` ë¹Œë“œ (npm install + Vite build)
 3. `backend` ë¹Œë“œ (Gradle clean build)
-4. Docker ì´ë¯¸ì§€ ë¹Œë“œ ë° Compose ê¸°ë™
-5. ê°„ë‹¨í•œ `curl` ê¸°ë°˜ Smoke Test
-6. íŒŒì´í”„ë¼ì¸ ì¢…ë£Œ í›„ Compose ì •ë¦¬
+4. Docker ?´ë?ì§€ ë¹Œë“œ ë°?Compose ê¸°ë™
+5. ê°„ë‹¨??`curl` ê¸°ë°˜ Smoke Test
+6. ?Œì´?„ë¼??ì¢…ë£Œ ??Compose ?•ë¦¬
 
-## ë‹¤ìŒ ë‹¨ê³„ ì œì•ˆ
+## ?¤ìŒ ?¨ê³„ ?œì•ˆ
 
-- Prometheus + Grafana ì§€í‘œ ìˆ˜ì§‘/ì‹œê°í™”
-- k6 ë¶€í•˜/ìŠ¤íŠ¸ë ˆìŠ¤ í…ŒìŠ¤íŠ¸ ì‹œë‚˜ë¦¬ì˜¤ ë° Jenkins ë¦¬í¬íŠ¸ ìë™í™”
-- Settlement/Reconciliation ì„œë¹„ìŠ¤ í…Œì´ë¸” ì¶”ê°€ ë° ë¹„ë™ê¸° ì²˜ë¦¬ í™•ì¥
+- Prometheus + Grafana ì§€???˜ì§‘/?œê°??- k6 ë¶€???¤íŠ¸?ˆìŠ¤ ?ŒìŠ¤???œë‚˜ë¦¬ì˜¤ ë°?Jenkins ë¦¬í¬???ë™??- Settlement/Reconciliation ?œë¹„???Œì´ë¸?ì¶”ê? ë°?ë¹„ë™ê¸?ì²˜ë¦¬ ?•ì¥
+
+## Observability (Prometheus & Grafana)
+
+- Prometheus¿Í Grafana´Â `docker compose` ½ÇÇà ½Ã ÀÚµ¿À¸·Î ±âµ¿µË´Ï´Ù.
+- Prometheus UI: http://localhost:9090 (ingest-service / consumer-workerÀÇ `/actuator/prometheus` ¿£µåÆ÷ÀÎÆ®¸¦ ½ºÅ©·¦)
+- Grafana UI: http://localhost:3000 (±âº» °èÁ¤ `admin`/`admin`). Ã¹ ·Î±×ÀÎ ½Ã ºñ¹Ğ¹øÈ£ º¯°æÀ» ±ÇÀåÇÕ´Ï´Ù.
+- Grafana¿¡´Â `Payment Service Overview` ±âº» ´ë½Ãº¸µå°¡ Æ÷ÇÔµÇ¾î API ¿äÃ» ¼Óµµ, p95 Áö¿¬½Ã°£, Kafka Consumer Ã³¸®·®À» È®ÀÎÇÒ ¼ö ÀÖ½À´Ï´Ù.
+
+
+## Load Testing (k6)
+
+- `loadtest/k6/payment-scenario.js` ½Ã³ª¸®¿À´Â ½ÂÀÎ¡æÁ¤»ê¡æ(¼±ÅÃÀû)È¯ºÒ±îÁö ÇÑ ¹ø¿¡ °ËÁõÇÕ´Ï´Ù.
+- ±âº» ¿É¼ÇÀº 1ºĞ ¿ú¾÷ ÈÄ ÃÖ´ë ÃÊ´ç 30¿äÃ»±îÁö Áõ°¡ÇÕ´Ï´Ù. `BASE_URL` ¶Ç´Â `MERCHANT_ID`¸¦ È¯°æº¯¼ö·Î ¿À¹ö¶óÀÌµåÇÒ ¼ö ÀÖ½À´Ï´Ù.
+- ·ÎÄÃ ½ÇÇà ¿¹½Ã:
+  ```bash
+  k6 run loadtest/k6/payment-scenario.js
+  ```
+- CI¿¡¼­´Â ÃßÈÄ Jenkins ÆÄÀÌÇÁ¶óÀÎÀ» ÅëÇØ ÀÚµ¿È­µË´Ï´Ù.
+

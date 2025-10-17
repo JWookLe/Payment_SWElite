@@ -31,7 +31,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
 
 payment:
   dlq-topic: ${PAYMENT_DLQ_TOPIC:payment.dlq}
