@@ -47,9 +47,9 @@ pipeline {
       steps {
         sh '''
           sleep 25
-          curl -X POST -H 'Content-Type: application/json' \
+          docker compose exec -T ingest-service curl -X POST -H 'Content-Type: application/json' \
             -d '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"jenkins-1"}' \
-            http://ingest-service:8080/payments/authorize
+            http://localhost:8080/payments/authorize
         '''
       }
     }
