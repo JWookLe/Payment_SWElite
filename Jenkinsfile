@@ -43,8 +43,9 @@ pipeline {
     stage('Docker Build & Compose') {
       steps {
         sh '''
-          # monitoring 디렉토리가 workspace에 있는지 확인 (Git checkout으로 이미 있음)
-          ls -la monitoring/
+          # Docker 빌드 컨텍스트 확인
+          pwd
+          ls -la monitoring/prometheus/
 
           docker compose down --remove-orphans || true
           docker compose up -d mariadb redis zookeeper kafka

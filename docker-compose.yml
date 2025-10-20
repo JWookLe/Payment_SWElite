@@ -101,7 +101,7 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
     volumes:
-      - ./monitoring/prometheus:/etc/prometheus:ro
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
       - ingest-service
       - consumer-worker
@@ -115,9 +115,9 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
-      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
-      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
-      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
     depends_on:
       - prometheus
     ports:
