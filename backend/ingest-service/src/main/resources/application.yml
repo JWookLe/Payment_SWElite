@@ -36,10 +36,11 @@ management:
     web:
       exposure:
         include: health,info,metrics,prometheus
-  metrics:
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
         enabled: true
+  metrics:
     tags:
       application: ${spring.application.name}
     distribution:
@@ -52,13 +53,13 @@ app:
   rate-limit:
     authorize:
       window-seconds: ${APP_RATE_LIMIT_AUTHORIZE_WINDOW_SECONDS:60}
-      capacity: ${APP_RATE_LIMIT_AUTHORIZE_CAPACITY:20}
+      capacity: ${APP_RATE_LIMIT_AUTHORIZE_CAPACITY:1000}
     capture:
       window-seconds: ${APP_RATE_LIMIT_CAPTURE_WINDOW_SECONDS:60}
-      capacity: ${APP_RATE_LIMIT_CAPTURE_CAPACITY:40}
+      capacity: ${APP_RATE_LIMIT_CAPTURE_CAPACITY:1000}
     refund:
       window-seconds: ${APP_RATE_LIMIT_REFUND_WINDOW_SECONDS:60}
-      capacity: ${APP_RATE_LIMIT_REFUND_CAPACITY:20}
+      capacity: ${APP_RATE_LIMIT_REFUND_CAPACITY:500}
   idempotency-cache:
     ttl-seconds: ${APP_IDEMPOTENCY_CACHE_TTL_SECONDS:600}
 
