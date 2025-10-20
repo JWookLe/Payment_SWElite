@@ -43,13 +43,33 @@ pipeline {
       }
     }
 
+    stage('Wait for Services') {
+      steps {
+        script {
+          echo 'Waiting for ingest-service to be ready...'
+          sh '''
+            # Health check with retry (최대 60초)
+            for i in $(seq 1 30); do
+              if docker compose exec -T ingest-service curl -f http://localhost:8080/actuator/health 2>/dev/null; then
+                echo "ingest-service is ready!"
+                break
+              fi
+              echo "Waiting for ingest-service... attempt $i/30"
+              sleep 2
+            done
+          '''
+        }
+      }
+    }
+
     stage('Smoke Test') {
       steps {
         sh '''
-          sleep 25
+          echo "Running smoke test..."
           docker compose exec -T ingest-service curl -X POST -H 'Content-Type: application/json' \
-            -d '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"jenkins-1"}' \
+            -d '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"smoke-test-'$(date +%s)'"}' \
             http://localhost:8080/payments/authorize
+          echo "Smoke test completed successfully"
         '''
       }
     }
@@ -57,12 +77,16 @@ pipeline {
     stage('Load Test (k6)') {
       steps {
         script {
+          echo 'Preparing for load test...'
+          sleep 5  // 추가 안정화 시간
+
           // Jenkins workspace의 실제 호스트 경로 찾기
           def hostWorkspace = sh(script: 'docker inspect pay-jenkins --format "{{ range .Mounts }}{{ if eq .Destination \\"/var/jenkins_home\\" }}{{ .Source }}{{ end }}{{ end }}"', returnStdout: true).trim()
           def k6Path = "${hostWorkspace}/workspace/Payment-SWElite-Pipeline/loadtest/k6"
 
           sh """
             rm -f loadtest/k6/summary.json || true
+            echo "Starting k6 load test..."
             docker run --rm \
               --network payment-swelite-pipeline_default \
               -v "${k6Path}":/k6 \
