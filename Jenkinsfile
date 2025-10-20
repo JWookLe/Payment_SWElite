@@ -42,41 +42,15 @@ pipeline {
 
     stage('Docker Build & Compose') {
       steps {
-        script {
-          sh '''
-            docker compose down --remove-orphans || true
-            docker compose up -d mariadb redis zookeeper kafka
-            sleep 20
-            docker compose up -d ingest-service consumer-worker frontend
-          '''
+        sh '''
+          # monitoring 디렉토리가 workspace에 있는지 확인 (Git checkout으로 이미 있음)
+          ls -la monitoring/
 
-          // Prometheus와 Grafana는 호스트 볼륨 경로로 수동 시작
-          def hostWorkspace = sh(script: 'docker inspect pay-jenkins --format "{{ range .Mounts }}{{ if eq .Destination \\"/var/jenkins_home\\" }}{{ .Source }}{{ end }}{{ end }}"', returnStdout: true).trim()
-          def monitoringPath = "${hostWorkspace}/workspace/Payment-SWElite-Pipeline/monitoring"
-          // ingest-service 컨테이너가 속한 네트워크를 찾음
-          def projectNetwork = sh(script: 'docker inspect payment-swelite-pipeline-ingest-service-1 --format "{{range .NetworkSettings.Networks}}{{.NetworkID}}{{end}}" | xargs docker network inspect --format "{{.Name}}"', returnStdout: true).trim()
-
-          sh """
-            # Prometheus 시작
-            docker run -d --name pay-prometheus \
-              --network ${projectNetwork} \
-              -p 9090:9090 \
-              -v "${monitoringPath}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
-              prom/prometheus:v2.54.1 \
-              --config.file=/etc/prometheus/prometheus.yml || echo "Prometheus already running"
-
-            # Grafana 시작
-            docker run -d --name pay-grafana \
-              --network ${projectNetwork} \
-              -p 3000:3000 \
-              -e GF_SECURITY_ADMIN_USER=admin \
-              -e GF_SECURITY_ADMIN_PASSWORD=admin \
-              -v "${monitoringPath}/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro" \
-              -v "${monitoringPath}/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro" \
-              -v "${monitoringPath}/grafana/dashboards:/etc/grafana/dashboards:ro" \
-              grafana/grafana:10.4.3 || echo "Grafana already running"
-          """
-        }
+          docker compose down --remove-orphans || true
+          docker compose up -d mariadb redis zookeeper kafka
+          sleep 20
+          docker compose up -d ingest-service consumer-worker frontend prometheus grafana
+        '''
       }
     }
 
@@ -121,10 +95,7 @@ pipeline {
       script {
         if (params.AUTO_CLEANUP == true) {
           echo 'Auto cleanup enabled - stopping all services...'
-          sh '''
-            docker compose down --remove-orphans || true
-            docker rm -f pay-prometheus pay-grafana || true
-          '''
+          sh 'docker compose down --remove-orphans || true'
         } else {
           echo 'Auto cleanup disabled - services remain running'
           echo 'Access services at:'
@@ -132,7 +103,7 @@ pipeline {
           echo '  - API: http://localhost:8080'
           echo '  - Prometheus: http://localhost:9090'
           echo '  - Grafana: http://localhost:3000'
-          echo 'To stop manually: docker compose down && docker rm -f pay-prometheus pay-grafana'
+          echo 'To stop manually: docker compose down'
         }
       }
     }
