@@ -6,6 +6,10 @@ pipeline {
     BACKEND_DIR = "backend"
   }
 
+  tools {
+    gradle 'gradle-8.13'
+  }
+
   stages {
     stage('Checkout') {
       steps {
@@ -24,9 +28,7 @@ pipeline {
 
     stage('Build Spring Boot Services') {
       steps {
-        dir(BACKEND_DIR) {
-          sh 'gradle build'
-        }
+        sh './gradlew :backend:ingest-service:bootJar :backend:consumer-worker:bootJar'
       }
     }
 
@@ -60,9 +62,9 @@ pipeline {
             --network payment_swelite_default \
             -v "$PWD/loadtest/k6":/k6 \
             -e BASE_URL=http://ingest-service:8080 \
-            -e MERCHANT_ID=JENKINS \\
-            -e ENABLE_CAPTURE=false \\
-            -e ENABLE_REFUND=false \\
+            -e MERCHANT_ID=JENKINS \
+            -e ENABLE_CAPTURE=false \
+            -e ENABLE_REFUND=false \
             grafana/k6:0.49.0 run /k6/payment-scenario.js --summary-export=/k6/summary.json
         '''
         archiveArtifacts artifacts: 'loadtest/k6/summary.json', allowEmptyArchive: true
@@ -76,4 +78,3 @@ pipeline {
     }
   }
 }
-
