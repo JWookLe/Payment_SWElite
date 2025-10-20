@@ -53,7 +53,8 @@ pipeline {
           // Prometheus와 Grafana는 호스트 볼륨 경로로 수동 시작
           def hostWorkspace = sh(script: 'docker inspect pay-jenkins --format "{{ range .Mounts }}{{ if eq .Destination \\"/var/jenkins_home\\" }}{{ .Source }}{{ end }}{{ end }}"', returnStdout: true).trim()
           def monitoringPath = "${hostWorkspace}/workspace/Payment-SWElite-Pipeline/monitoring"
-          def projectNetwork = sh(script: 'docker network ls --filter name=payment --format "{{.Name}}" | head -1', returnStdout: true).trim()
+          // ingest-service 컨테이너가 속한 네트워크를 찾음
+          def projectNetwork = sh(script: 'docker inspect payment-swelite-pipeline-ingest-service-1 --format "{{range .NetworkSettings.Networks}}{{.NetworkID}}{{end}}" | xargs docker network inspect --format "{{.Name}}"', returnStdout: true).trim()
 
           sh """
             # Prometheus 시작
