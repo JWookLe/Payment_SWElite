@@ -60,7 +60,7 @@ pipeline {
           rm -f loadtest/k6/summary.json || true
           docker run --rm \
             --network payment-swelite-pipeline_default \
-            -v "$PWD/loadtest/k6":/k6 \
+            -v "$WORKSPACE/loadtest/k6":/k6 \
             -e BASE_URL=http://ingest-service:8080 \
             -e MERCHANT_ID=JENKINS \
             -e ENABLE_CAPTURE=false \
