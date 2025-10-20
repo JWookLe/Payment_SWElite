@@ -1,6 +1,19 @@
 pipeline {
   agent any
 
+  parameters {
+    booleanParam(
+      name: 'RUN_LOAD_TEST',
+      defaultValue: false,
+      description: 'k6 부하 테스트 실행 여부 (체크하면 실행)'
+    )
+    booleanParam(
+      name: 'AUTO_CLEANUP',
+      defaultValue: false,
+      description: '빌드 완료 후 자동으로 서비스 중지 (체크하면 docker compose down 실행)'
+    )
+  }
+
   environment {
     FRONTEND_DIR = "frontend"
     BACKEND_DIR = "backend"
@@ -75,6 +88,11 @@ pipeline {
     }
 
     stage('Load Test (k6)') {
+      when {
+        expression {
+          return params.RUN_LOAD_TEST == true
+        }
+      }
       steps {
         script {
           echo 'Preparing for load test...'
@@ -104,7 +122,20 @@ pipeline {
 
   post {
     always {
-      sh 'docker compose down --remove-orphans || true'
+      script {
+        if (params.AUTO_CLEANUP == true) {
+          echo 'Auto cleanup enabled - stopping all services...'
+          sh 'docker compose down --remove-orphans || true'
+        } else {
+          echo 'Auto cleanup disabled - services remain running'
+          echo 'Access services at:'
+          echo '  - Frontend: http://localhost:5173'
+          echo '  - API: http://localhost:8080'
+          echo '  - Prometheus: http://localhost:9090'
+          echo '  - Grafana: http://localhost:3000'
+          echo 'To stop manually: docker compose down'
+        }
+      }
     }
   }
 }
