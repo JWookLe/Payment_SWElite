@@ -1,8 +1,8 @@
 FROM gradle:8.7-jdk21 AS build
 WORKDIR /workspace
+COPY settings.gradle.kts /workspace/
 COPY backend /workspace/backend
-WORKDIR /workspace/backend
-RUN gradle :ingest-service:bootJar --no-daemon
+RUN gradle :backend:ingest-service:bootJar --no-daemon
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app

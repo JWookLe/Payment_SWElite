@@ -10,5 +10,6 @@ pluginManagement {
 
 rootProject.name = "payment-platform"
 
-include("ingest-service")
-include("consumer-worker")
+include(":backend")
+include(":backend:ingest-service")
+include(":backend:consumer-worker")
