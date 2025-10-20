@@ -56,17 +56,23 @@ pipeline {
 
     stage('Load Test (k6)') {
       steps {
-        sh '''
-          rm -f loadtest/k6/summary.json || true
-          docker run --rm \
-            --network payment-swelite-pipeline_default \
-            -v /loadtest/k6:/k6 \
-            -e BASE_URL=http://ingest-service:8080 \
-            -e MERCHANT_ID=JENKINS \
-            -e ENABLE_CAPTURE=false \
-            -e ENABLE_REFUND=false \
-            grafana/k6:0.49.0 run /k6/payment-scenario.js --summary-export=/k6/summary.json
-        '''
+        script {
+          // Jenkins workspace의 실제 호스트 경로 찾기
+          def hostWorkspace = sh(script: 'docker inspect pay-jenkins --format "{{ range .Mounts }}{{ if eq .Destination \\"/var/jenkins_home\\" }}{{ .Source }}{{ end }}{{ end }}"', returnStdout: true).trim()
+          def k6Path = "${hostWorkspace}/workspace/Payment-SWElite-Pipeline/loadtest/k6"
+
+          sh """
+            rm -f loadtest/k6/summary.json || true
+            docker run --rm \
+              --network payment-swelite-pipeline_default \
+              -v "${k6Path}":/k6 \
+              -e BASE_URL=http://ingest-service:8080 \
+              -e MERCHANT_ID=JENKINS \
+              -e ENABLE_CAPTURE=false \
+              -e ENABLE_REFUND=false \
+              grafana/k6:0.49.0 run /k6/payment-scenario.js --summary-export=/k6/summary.json
+          """
+        }
         archiveArtifacts artifacts: 'loadtest/k6/summary.json', allowEmptyArchive: true
       }
     }
