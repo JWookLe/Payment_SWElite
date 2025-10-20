@@ -49,7 +49,7 @@ pipeline {
           sleep 25
           curl -X POST -H 'Content-Type: application/json' \
             -d '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"jenkins-1"}' \
-            http://localhost:8080/payments/authorize
+            http://ingest-service:8080/payments/authorize
         '''
       }
     }
@@ -59,7 +59,7 @@ pipeline {
         sh '''
           rm -f loadtest/k6/summary.json || true
           docker run --rm \
-            --network payment_swelite_default \
+            --network payment-swelite-pipeline_default \
             -v "$PWD/loadtest/k6":/k6 \
             -e BASE_URL=http://ingest-service:8080 \
             -e MERCHANT_ID=JENKINS \
