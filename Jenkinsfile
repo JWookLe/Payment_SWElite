@@ -3,11 +3,6 @@ pipeline {
 
   parameters {
     booleanParam(
-      name: 'RUN_LOAD_TEST',
-      defaultValue: false,
-      description: 'k6 부하 테스트 실행 여부 (체크하면 실행)'
-    )
-    booleanParam(
       name: 'AUTO_CLEANUP',
       defaultValue: false,
       description: '빌드 완료 후 자동으로 서비스 중지 (체크하면 docker compose down 실행)'
@@ -83,39 +78,11 @@ pipeline {
             -d '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"smoke-test-'$(date +%s)'"}' \
             http://localhost:8080/payments/authorize
           echo "Smoke test completed successfully"
+          echo ""
+          echo "=========================================="
+          echo "Build completed! Services are running."
+          echo "=========================================="
         '''
-      }
-    }
-
-    stage('Load Test (k6)') {
-      when {
-        expression {
-          return params.RUN_LOAD_TEST == true
-        }
-      }
-      steps {
-        script {
-          echo 'Preparing for load test...'
-          sleep 5  // 추가 안정화 시간
-
-          // Jenkins workspace의 실제 호스트 경로 찾기
-          def hostWorkspace = sh(script: 'docker inspect pay-jenkins --format "{{ range .Mounts }}{{ if eq .Destination \\"/var/jenkins_home\\" }}{{ .Source }}{{ end }}{{ end }}"', returnStdout: true).trim()
-          def k6Path = "${hostWorkspace}/workspace/Payment-SWElite-Pipeline/loadtest/k6"
-
-          sh """
-            rm -f loadtest/k6/summary.json || true
-            echo "Starting k6 load test..."
-            docker run --rm \
-              --network payment-swelite-pipeline_default \
-              -v "${k6Path}":/k6 \
-              -e BASE_URL=http://ingest-service:8080 \
-              -e MERCHANT_ID=JENKINS \
-              -e ENABLE_CAPTURE=false \
-              -e ENABLE_REFUND=false \
-              grafana/k6:0.49.0 run /k6/payment-scenario.js --summary-export=/k6/summary.json
-          """
-        }
-        archiveArtifacts artifacts: 'loadtest/k6/summary.json', allowEmptyArchive: true
       }
     }
   }

@@ -144,20 +144,40 @@ curl -X POST http://localhost:8080/payments/refund/{paymentId} \
 
 ### Load Testing (k6)
 
+**k6 부하 테스트는 Jenkins 파이프라인에 포함되지 않습니다.** 필요할 때 로컬에서 직접 실행하세요.
+
+**전제 조건:** 서비스가 실행 중이어야 합니다 (`docker compose up -d` 또는 Jenkins 빌드 완료 후)
+
 ```bash
-# Run from repository root
-MSYS_NO_PATHCONV=1 docker run --rm --network payment_swelite_default \
+# 기본 실행 (승인 API만 테스트)
+docker run --rm --network payment_swelite_default \
   -v "$PWD/loadtest/k6":/k6 \
   -e BASE_URL=http://ingest-service:8080 \
   -e MERCHANT_ID=LOADTEST \
   grafana/k6:0.49.0 run /k6/payment-scenario.js --summary-export=/k6/summary.json
 
-# Enable capture/refund stages (default: authorize only)
--e ENABLE_CAPTURE=true \
--e ENABLE_REFUND=true
+# 정산/환불 단계 포함 (전체 플로우 테스트)
+docker run --rm --network payment_swelite_default \
+  -v "$PWD/loadtest/k6":/k6 \
+  -e BASE_URL=http://ingest-service:8080 \
+  -e MERCHANT_ID=LOADTEST \
+  -e ENABLE_CAPTURE=true \
+  -e ENABLE_REFUND=true \
+  grafana/k6:0.49.0 run /k6/payment-scenario.js --summary-export=/k6/summary.json
+
+# Windows Git Bash 사용 시 (경로 변환 방지)
+MSYS_NO_PATHCONV=1 docker run --rm --network payment_swelite_default \
+  -v "$PWD/loadtest/k6":/k6 \
+  -e BASE_URL=http://ingest-service:8080 \
+  -e MERCHANT_ID=LOADTEST \
+  grafana/k6:0.49.0 run /k6/payment-scenario.js
 ```
 
-The k6 script (`loadtest/k6/payment-scenario.js`) ramps up to 200 RPS and supports toggling capture/refund stages via environment variables for targeted performance testing.
+**k6 스크립트 설정:**
+- 시나리오: `loadtest/k6/payment-scenario.js`
+- 부하 수준: 초당 최대 200 RPS까지 ramp-up
+- 환경 변수로 단계별 토글 가능 (ENABLE_CAPTURE, ENABLE_REFUND)
+- 기본값: 승인(Authorize) API만 테스트 (빠른 피드백)
 
 ### Monitoring
 
@@ -170,14 +190,18 @@ The k6 script (`loadtest/k6/payment-scenario.js`) ramps up to 200 RPS and suppor
 ### Jenkins
 
 - UI: http://localhost:8088
-- Pipeline defined in `Jenkinsfile` runs: frontend build → backend build → Docker Compose deployment → smoke test → k6 load test
+- Pipeline defined in `Jenkinsfile` runs: frontend build → backend build → Docker Compose deployment → health check → smoke test
 
 **Pipeline Details:**
 - Uses Jenkins tool: `gradle-8.13`
 - Builds with: `./gradlew :backend:ingest-service:bootJar :backend:consumer-worker:bootJar`
-- Smoke test runs inside container: `docker compose exec -T ingest-service curl ...`
-- k6 uses dynamic network name: `payment-swelite-pipeline_default`
-- Uses `${env.WORKSPACE}` for volume mounting in Jenkins environment
+- Health check: Retry loop for `/actuator/health` endpoint (최대 60초)
+- Smoke test: 실제 결제 승인 요청으로 E2E 검증
+- **기본 동작**: 빌드 후 서비스가 계속 실행됨 (개발/검증 가능)
+
+**Pipeline Parameters:**
+- `AUTO_CLEANUP` (기본값: false): 체크 시 빌드 완료 후 `docker compose down` 실행
+- 체크하지 않으면 서비스가 계속 실행되어 로컬에서 접속/테스트 가능
 
 ## Code Architecture Patterns
 
