@@ -2,6 +2,11 @@ services:
   mariadb:
     image: mariadb:11.4
     container_name: pay-mariadb
+    command:
+      - --max-connections=200
+      - --innodb-buffer-pool-size=512M
+      - --innodb-log-file-size=128M
+      - --innodb-flush-log-at-trx-commit=2
     environment:
       MARIADB_ROOT_PASSWORD: 4535
       MARIADB_DATABASE: paydb
@@ -61,11 +66,12 @@ services:
       PAYMENT_DB_PASSWORD: paypass
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       REDIS_HOST: redis
-      APP_RATE_LIMIT_AUTHORIZE_CAPACITY: 1000
-      APP_RATE_LIMIT_CAPTURE_CAPACITY: 1000
-      APP_RATE_LIMIT_REFUND_CAPACITY: 500
-      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 50
-      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 10
+      # Phase 1: 200 RPS 목표 (분당 12,000건 + 25% 여유분)
+      APP_RATE_LIMIT_AUTHORIZE_CAPACITY: 15000
+      APP_RATE_LIMIT_CAPTURE_CAPACITY: 15000
+      APP_RATE_LIMIT_REFUND_CAPACITY: 7500
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 100
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 20
       SERVER_TOMCAT_THREADS_MAX: 400
     depends_on:
       mariadb:

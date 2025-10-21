@@ -30,15 +30,17 @@ export const options = {
   scenarios: {
     authorize_flow: {
       executor: "ramping-arrival-rate",
-      startRate: 20,
+      startRate: 10,
       timeUnit: "1s",
       preAllocatedVUs: 400,
       maxVUs: 800,
       stages: [
-        { duration: "1m", target: 100 },
-        { duration: "3m", target: 200 },
-        { duration: "1m", target: 200 },
-        { duration: "1m", target: 0 },
+        { duration: "30s", target: 50 },   // Warm-up: 50 RPS
+        { duration: "1m", target: 100 },   // Ramp-up: 100 RPS
+        { duration: "2m", target: 150 },   // Increase: 150 RPS
+        { duration: "2m", target: 200 },   // Target: 200 RPS
+        { duration: "2m", target: 200 },   // Sustain: 200 RPS
+        { duration: "30s", target: 0 },    // Cool-down
       ],
     },
   },
