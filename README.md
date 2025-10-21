@@ -240,6 +240,74 @@ stages: [
 ]
 ```
 
+## DLQ (Dead Letter Queue) 테스트
+
+### 테스트 목적
+Consumer 처리 실패 시 DLQ로 메시지가 전송되는지 검증
+
+### 테스트 방법
+
+#### 방법 1: 존재하지 않는 Payment ID (FK 제약조건 위반)
+```bash
+# 잘못된 paymentId로 이벤트 전송
+echo '{"paymentId":99999,"amount":10000,"occurredAt":"2025-01-01T00:00:00Z"}' | \
+docker exec -i pay-kafka kafka-console-producer \
+  --bootstrap-server localhost:9092 \
+  --topic payment.captured
+
+# DLQ 확인
+docker exec pay-kafka kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic payment.dlq \
+  --from-beginning
+```
+
+#### 방법 2: JSON 파싱 실패
+```bash
+# 잘못된 JSON 전송
+echo 'invalid json data' | \
+docker exec -i pay-kafka kafka-console-producer \
+  --bootstrap-server localhost:9092 \
+  --topic payment.captured
+
+# DLQ 확인 (위와 동일)
+```
+
+#### 방법 3: 프론트엔드 + DB 중지 (실전 시나리오)
+```bash
+# 1. http://localhost:5173 에서 정상 결제 진행
+
+# 2. MariaDB 중지
+docker stop pay-mariadb
+
+# 3. 프론트엔드에서 다시 결제 시도 (승인은 성공, Capture 이벤트 발행)
+
+# 4. Consumer 로그 확인 (DB 연결 실패)
+docker logs -f payment_swelite-consumer-worker-1
+
+# 5. MariaDB 재시작
+docker start pay-mariadb
+
+# 6. DLQ 확인
+docker exec pay-kafka kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic payment.dlq \
+  --from-beginning
+```
+
+### DLQ 메시지 구조
+```json
+{
+  "originalTopic": "payment.captured",
+  "partition": 0,
+  "offset": 123,
+  "payload": "{원본 이벤트}",
+  "errorType": "DataIntegrityViolationException",
+  "errorMessage": "상세 에러 메시지",
+  "timestamp": "2025-10-21T..."
+}
+```
+
 ## 향후 계획
 - Settlement/Reconciliation 대비 비동기 처리 보강
 - 추가 대시보드/알람 구성 및 운영 안정화
