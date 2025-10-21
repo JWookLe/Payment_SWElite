@@ -98,8 +98,10 @@ services:
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: pay-prometheus
+    command:
+      - '--config.file=/prometheus.yml'
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/prometheus.yml:/prometheus.yml:ro
     depends_on:
       - ingest-service
       - consumer-worker
