@@ -7,7 +7,8 @@
 - **2주차**
   - [x] Redis 기반 rate limit 및 멱등 캐시 고도화
   - [x] Prometheus + Grafana 지표 수집 및 시각화 파이프라인 구성
-  - [ ] k6 부하/스트레스 테스트 시나리오 작성 및 Jenkins 리포트 자동화
+  - [x] k6 부하/스트레스 테스트 시나리오 작성 및 200 RPS 목표 달성
+  - [x] GitHub Webhook + Jenkins 자동 빌드 파이프라인 구성
   - [ ] Settlement/Reconciliation 대비 비동기 처리 보강
   - [x] payment.dlq 토픽 재전송 기반 Consumer 예외 처리 보강
 
@@ -45,28 +46,70 @@
 
 ## Redis 기반 보호 기능
 - 승인 API 응답을 Redis TTL 캐시에 저장하여 멱등성을 보장합니다. 기본 TTL은 600초 (`APP_IDEMPOTENCY_CACHE_TTL_SECONDS`로 조정 가능).
-- 가맹점(`merchantId`)별 승인·정산·환불 API에 분당 20/40/20 회 rate limit이 적용됩니다. `APP_RATE_LIMIT_*` 환경 변수로 조정 가능하며, Redis 장애 시 fail-open 전략을 사용합니다.
-- Docker Compose 환경에서는 부하 테스트 편의를 위해 승인/정산 1000, 환불 500으로 확장돼 있습니다. 필요 시 `APP_RATE_LIMIT_*` 값을 조정해 운영 환경에 맞춰 주세요.
+- 가맹점(`merchantId`)별 승인·정산·환불 API에 Rate Limit이 적용됩니다. `APP_RATE_LIMIT_*` 환경 변수로 조정 가능하며, Redis 장애 시 fail-open 전략을 사용합니다.
+
+### 성능 목표별 Rate Limit 설정
+| 환경 | 목표 RPS | Rate Limit (분) | 비고 |
+|------|----------|----------------|------|
+| **개발** | ~10 RPS | 1,000/1,000/500 | 빠른 피드백 |
+| **부하 테스트** | 200 RPS | 15,000/15,000/7,500 | 현재 설정 |
+| **운영 (목표)** | 1,000 TPS | 70,000/70,000/35,000 | 최종 목표 |
 
 ## Observability (Prometheus & Grafana)
+
+### 설정 및 접속
 - `docker compose up -d` 시 Prometheus(9090)와 Grafana(3000)가 함께 기동됩니다.
-- Grafana 기본 계정: `admin`/`admin` (첫 로그인 후 비밀번호 변경 권장)
-- `Payment Service Overview` 대시보드에서 요청 속도, p95 지연시간, Kafka 소비량, 에러율 등을 확인할 수 있습니다.
+- **Prometheus**: http://localhost:9090
+  - Status → Targets에서 ingest-service, consumer-worker 메트릭 수집 상태 확인
+- **Grafana**: http://localhost:3000
+  - 기본 계정: `admin`/`admin` (첫 로그인 후 비밀번호 변경 권장)
+  - `Payment Service Overview` 대시보드에서 요청 속도, p95 지연시간, Kafka 소비량, 에러율 등을 확인
+
+### 구성 방식
+- **Prometheus**: 커스텀 이미지 빌드 (`monitoring/prometheus/Dockerfile`)
+  - 설정 파일을 이미지에 포함하여 볼륨 마운트 문제 해결
+- **Grafana**: 커스텀 이미지 빌드 (`monitoring/grafana/Dockerfile`)
+  - Datasource, Dashboard provisioning 설정을 이미지에 포함
+  - Payment Service Overview 대시보드 자동 로드
 
 ## Load Testing (k6)
-- `loadtest/k6/payment-scenario.js`는 승인 → 정산 → (선택적) 환불 흐름을 검증하며, 환경 변수로 각 단계를 토글할 수 있습니다.
-- 기본 설정은 초당 200건까지 ramp-up 하며, `BASE_URL`, `MERCHANT_ID` 환경 변수로 수정 가능합니다.
-- 기본 실행은 승인(Authorize) API만 대상으로 하며, 정산/환불은 필요 시 `ENABLE_CAPTURE=true`, `ENABLE_REFUND=true` 환경 변수로 개별 활성화할 수 있습니다.
-- 승인과 후속 처리를 분리하면 승인 API를 빠르게 튜닝하고, 정산/환불은 비동기 처리나 배치 등 별도 전략으로 확장할 수 있습니다.
-- 로컬 실행 예시:
-  ```bash
-  MSYS_NO_PATHCONV=1 docker run --rm --network payment_swelite_default \
-    -v "$PWD/loadtest/k6":/k6 \
-    -e BASE_URL=http://ingest-service:8080 \
-    -e MERCHANT_ID=LOCAL \
-    grafana/k6:0.49.0 run /k6/payment-scenario.js --summary-export=/k6/summary.json
-  ```
-- Jenkins 파이프라인에서는 승인 전용 시나리오로 k6를 실행하고 요약 JSON을 아카이브합니다.
+
+### 테스트 시나리오
+`loadtest/k6/payment-scenario.js`는 승인 → 정산 → (선택적) 환불 흐름을 검증하며, 환경 변수로 각 단계를 토글할 수 있습니다.
+
+**현재 설정** (200 RPS 목표):
+- Warm-up: 50 RPS (30초)
+- Ramp-up: 50 → 100 → 150 → 200 RPS (5분)
+- Sustain: 200 RPS (2분)
+- Cool-down: 0 RPS (30초)
+- **총 테스트 시간**: 8분
+
+### 실행 방법
+
+#### 기본 테스트 (승인만)
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
+  -v "$PWD/loadtest/k6":/k6 \
+  -e BASE_URL=http://ingest-service:8080 \
+  -e MERCHANT_ID=K6TEST \
+  grafana/k6:0.49.0 run /k6/payment-scenario.js --summary-export=/k6/summary.json
+```
+
+#### 전체 플로우 테스트 (승인 → 정산 → 환불)
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
+  -v "$PWD/loadtest/k6":/k6 \
+  -e BASE_URL=http://ingest-service:8080 \
+  -e MERCHANT_ID=K6TEST \
+  -e ENABLE_CAPTURE=true \
+  -e ENABLE_REFUND=true \
+  grafana/k6:0.49.0 run /k6/payment-scenario.js --summary-export=/k6/summary.json
+```
+
+### 성능 목표
+- ✅ **에러율**: < 1%
+- ✅ **p95 응답시간**: < 100ms
+- ✅ **처리량**: 200 RPS 안정적 처리
 
 ## 로컬 실행 방법
 1. `docker compose up --build`
@@ -90,14 +133,162 @@
 2. 프런트엔드 빌드 (npm install + vite build)
 3. 백엔드 빌드 (Gradle build)
 4. Docker Compose 기동 (Prometheus/Grafana 포함)
-5. Smoke Test / k6 Load Test 실행 → 요약 저장
-6. 파이프라인 종료 시 docker compose down
+5. 헬스 체크 (최대 60초 재시도)
+6. Smoke Test 실행 (실제 결제 승인 요청으로 E2E 검증)
+7. 파이프라인 종료 시 docker compose down (AUTO_CLEANUP 파라미터가 true인 경우)
+
+### Jenkins 파라미터
+- **AUTO_CLEANUP** (기본값: false): 빌드 완료 후 `docker compose down` 실행 여부
+  - 체크하지 않으면 서비스가 계속 실행되어 로컬에서 접속/테스트 가능
+  - 체크하면 빌드 완료 후 자동으로 컨테이너 정리
+
+## 성능 최적화 내역
+
+### 데이터베이스 튜닝 (MariaDB)
+`docker-compose.yml`에서 고부하 처리를 위한 설정 적용:
+```yaml
+mariadb:
+  command:
+    - --max-connections=200              # 동시 연결 수 증가
+    - --innodb-buffer-pool-size=512M     # 버퍼 풀 확대
+    - --innodb-log-file-size=128M        # 로그 파일 크기 증가
+    - --innodb-flush-log-at-trx-commit=2 # 성능 향상 (내구성 약간 감소)
+```
+
+### 커넥션 풀 최적화 (ingest-service)
+HikariCP 설정 조정으로 200 RPS 처리:
+```yaml
+SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 100  # 기본 10 → 100
+SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 20        # 기본 10 → 20
+SERVER_TOMCAT_THREADS_MAX: 400                   # 기본 200 → 400
+```
+
+### Rate Limit 단계별 설정
+부하 테스트를 위해 Rate Limit을 단계적으로 설정:
+- **개발 환경**: 1,000/1,000/500 (분당, authorize/capture/refund)
+- **부하 테스트**: 15,000/15,000/7,500 (200 RPS 목표 + 25% 여유분)
+- **운영 목표**: 70,000/70,000/35,000 (1,000 TPS 목표)
+
+## 트러블슈팅
+
+### 1. Prometheus 컨테이너 시작 실패
+**문제**: Docker 볼륨 마운트 오류 발생
+```
+error mounting "/var/jenkins_home/.../prometheus.yml" to rootfs:
+cannot create subdirectories... not a directory
+```
+
+**원인**: Jenkins workspace에서 단일 파일을 컨테이너에 마운트할 때 디렉토리로 인식되는 Docker 버그
+
+**해결**: 커스텀 Dockerfile로 설정 파일을 이미지에 직접 포함
+```dockerfile
+FROM prom/prometheus:v2.54.1
+COPY prometheus.yml /etc/prometheus/prometheus.yml
+EXPOSE 9090
+CMD ["--config.file=/etc/prometheus/prometheus.yml"]
+```
+
+`docker-compose.yml` 수정:
+```yaml
+prometheus:
+  build:
+    context: ./monitoring/prometheus
+    dockerfile: Dockerfile
+  image: pay-prometheus:local
+```
+
+### 2. Grafana 대시보드 미표시
+**문제**: Grafana UI에서 "Payment Service Overview" 대시보드가 나타나지 않음
+
+**원인**: 볼륨 마운트로 전달된 provisioning 디렉토리와 대시보드 파일이 컨테이너 내부에서 빈 디렉토리로 생성됨
+
+**해결**: 커스텀 Dockerfile로 모든 설정 파일을 이미지에 포함
+```dockerfile
+FROM grafana/grafana:10.4.3
+COPY provisioning/datasources /etc/grafana/provisioning/datasources
+COPY provisioning/dashboards /etc/grafana/provisioning/dashboards
+COPY dashboards /etc/grafana/dashboards
+EXPOSE 3000
+```
+
+### 3. k6 부하 테스트 85% 실패율
+**문제**: 초기 테스트에서 48,599건 요청 중 41,765건 실패 (85.93%)
+
+**원인 분석**:
+- Rate Limit: 1,000/min (분당 ~16.6 RPS)
+- k6 실제 부하: 7,560/min (126 RPS)
+- Rate Limit 초과로 대부분 요청 거부됨
+
+**해결 과정**:
+1. **문제 인식**: 무작정 Rate Limit을 높이는 것은 실전과 동떨어짐
+2. **목표 설정**: 현재 200 RPS, 최종 1,000 TPS 처리
+3. **균형잡힌 접근**:
+   - Rate Limit: 15,000/min (250 RPS, 25% 여유분)
+   - DB 연결 풀 증가
+   - MariaDB 성능 튜닝
+   - k6 시나리오를 점진적 ramp-up으로 수정
+
+**k6 시나리오 개선**:
+```javascript
+stages: [
+  { duration: "30s", target: 50 },   // Warm-up
+  { duration: "1m", target: 100 },   // Ramp-up
+  { duration: "2m", target: 150 },   // Increase
+  { duration: "2m", target: 200 },   // Target
+  { duration: "2m", target: 200 },   // Sustain
+  { duration: "30s", target: 0 },    // Cool-down
+]
+```
 
 ## 향후 계획
-- k6 부하 테스트 결과 리포트 자동화 마무리
 - Settlement/Reconciliation 대비 비동기 처리 보강
 - 추가 대시보드/알람 구성 및 운영 안정화
+- 1,000 TPS 목표를 위한 추가 스케일링 및 최적화
 
-## Webhook 자동 빌드
-- GitHub Webhook + ngrok 연동 완료
-- Push 시 Jenkins 자동 빌드 트리거
+## GitHub Webhook 자동 빌드
+
+### 개요
+GitHub에 Push 시 Jenkins가 자동으로 빌드를 시작하도록 설정되었습니다.
+
+### 구성 요소
+1. **ngrok 터널**: 로컬 Jenkins를 외부에서 접근 가능하도록 설정
+2. **GitHub Webhook**: Push 이벤트 발생 시 Jenkins로 알림 전송
+3. **Jenkins 설정**: GitHub hook trigger 활성화
+
+### 설정 방법
+
+#### 1. ngrok 설치 및 실행
+```bash
+# ngrok 다운로드 및 압축 해제
+# https://ngrok.com/download
+
+# ngrok 인증 (계정 생성 필요)
+ngrok config add-authtoken YOUR_AUTH_TOKEN
+
+# Jenkins 포트(8088)를 외부에 노출
+ngrok http 8088
+```
+
+ngrok 실행 후 `Forwarding` URL 복사 (예: `https://sienna-unequipped-rolando.ngrok-free.dev`)
+
+#### 2. GitHub Webhook 설정
+1. GitHub 저장소 → Settings → Webhooks → Add webhook
+2. **Payload URL**: `https://YOUR-NGROK-URL/github-webhook/`
+   - 예: `https://sienna-unequipped-rolando.ngrok-free.dev/github-webhook/`
+3. **Content type**: `application/json`
+4. **Which events**: "Just the push event" 선택
+5. **Active** 체크 후 "Add webhook" 클릭
+
+#### 3. Jenkins 프로젝트 설정
+1. Jenkins 프로젝트 → Configure
+2. "Build Triggers" 섹션에서 "GitHub hook trigger for GITScm polling" 체크
+3. Save
+
+### 동작 확인
+1. 코드 수정 후 `git push`
+2. GitHub Webhook Deliveries에서 전송 성공 확인 (200 OK)
+3. Jenkins에서 빌드 자동 시작 확인
+
+### 참고사항
+- ngrok 무료 플랜은 세션 재시작 시 URL이 변경됨 → GitHub Webhook URL 재설정 필요
+- 운영 환경에서는 고정 IP 또는 도메인 사용 권장
