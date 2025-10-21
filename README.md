@@ -97,3 +97,7 @@
 - k6 부하 테스트 결과 리포트 자동화 마무리
 - Settlement/Reconciliation 대비 비동기 처리 보강
 - 추가 대시보드/알람 구성 및 운영 안정화
+
+## Webhook 자동 빌드
+- GitHub Webhook + ngrok 연동 완료
+- Push 시 Jenkins 자동 빌드 트리거
