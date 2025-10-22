@@ -521,23 +521,16 @@ mariadb:
     - mariadb-data:/var/lib/mysql
 ```
 
-### 4️⃣ 로드 밸런서 (Server 1 또는 별도)
+### 4️⃣ Nginx (로드 밸런서)
 
-**파일**: `nginx.conf`
+**역할**: Public IP (포트 80)로 들어온 요청을 ingest-service (포트 8080)로 전달
 
+**간단한 설정** (`nginx.conf`):
 ```nginx
-upstream api_servers {
-  server server1:8080;    # 유일한 ingest-service
-}
-
 server {
   listen 80;
-
   location /payments {
-    proxy_pass http://api_servers;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_pass http://server1:8080;
   }
 }
 ```
@@ -546,13 +539,8 @@ server {
 ```yaml
 nginx:
   image: nginx:latest
-  volumes:
-    - ./nginx.conf:/etc/nginx/nginx.conf:ro
   ports:
     - "80:80"
-    - "443:443"
-  depends_on:
-    - ingest-service
 ```
 
 ### 5️⃣ 네트워크 구성
@@ -677,15 +665,32 @@ Server 2 (Data Processing):
   - "Scale: Separate API and Data Processing layers (1000 RPS)"
 ```
 
+### 최종 WAS 구성 (Phase 5)
+
+**총 2개 WAS**:
+```
+Server 1 (API Layer):
+  └─ WAS #1: ingest-service (8080) ← HTTP 요청 처리
+
+Server 2 (Data Processing Layer):
+  └─ WAS #2: consumer-worker (8081) ← Kafka 이벤트 처리
+```
+
+**추가 컴포넌트**:
+- Nginx (포트 80): Public IP 진입점
+- Kafka, Redis, MariaDB: Server 1에서 제공 (공유 인프라)
+
+**총 처리 능력**: 400 RPS × 2 = **1000 RPS**
+
 ### 핵심 차이점
 
-| 항목 | 이전 (처리량 분산) | 현재 (책임 분리) |
+| 항목 | Phase 1 (현재) | Phase 5 (목표) |
 |------|---|---|
-| Server 1 | ingest-service + consumer-worker | ingest-service + 공유 인프라 |
-| Server 2 | 중복된 모든 서비스 | consumer-worker만 |
-| 확장성 | 수평적 (서버 복제) | 수직적 (계층별 확장) |
-| 리소스 효율 | 중복 투자 | 최소화 |
-| 관리 복잡도 | 높음 (동기화 필요) | 낮음 (단방향) |
+| **WAS 개수** | 1개 | 2개 |
+| **처리 능력** | 200 RPS | 1000 RPS |
+| **Server 1** | 모든 것 | API 처리 |
+| **Server 2** | 없음 | 데이터 처리 |
+| **인프라** | 1개 서버 | 공유 (Server 1) |
 
 ---
 
