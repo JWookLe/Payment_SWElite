@@ -374,213 +374,318 @@ http://PUBLIC_IP:3000 (admin/admin)
 
 ---
 
-## Phase 5: 수평 확장 (2대 서버 추가)
+## Phase 5: 비즈니스/데이터 처리 분리 (2대 서버)
 
-### 목표: 1000 RPS 달성
+### 목표: 1000 RPS 달성 (비즈니스 로직과 데이터 처리 분리)
 
 ### 상황: "추가로 같은 스펙 1대를 더 할당받음"
+
+### 핵심 아이디어
+**처리량 분산이 아니라 책임 분리**:
+- Server 1: 비즈니스 로직 (ingest-service) - HTTP 요청 처리
+- Server 2: 데이터 처리 (consumer-worker) - Kafka 이벤트 처리
+- 공유 인프라: Kafka, Redis, MariaDB (두 서버 모두 접근)
 
 ### 아키텍처 변경
 
 ```
 Before (1대):
-┌─────────────────────────────────────┐
-│ Server 1 (4Core/16GB)               │
-├─────────────────────────────────────┤
-│ ingest-service (8080)               │
-│ consumer-worker (8081)              │
-│ Kafka Broker #1                     │
-│ Redis                               │
-│ MariaDB Primary                     │
-└─────────────────────────────────────┘
+┌────────────────────────────────────────┐
+│ Server 1 (4Core/16GB)                  │
+├────────────────────────────────────────┤
+│ ingest-service (200 RPS)               │
+│ consumer-worker (200 RPS)              │
+│ Kafka (1 Broker)                       │
+│ Redis                                  │
+│ MariaDB Primary                        │
+└────────────────────────────────────────┘
 
-After (2대):
-┌──────────────────────┐  ┌──────────────────────┐
-│ Server 1             │  │ Server 2             │
-├──────────────────────┤  ├──────────────────────┤
-│ ingest-service       │  │ ingest-service       │
-│ consumer-worker      │  │ consumer-worker      │
-│ Kafka Broker #1      │  │ Kafka Broker #2      │
-│ Redis Master         │  │ Redis Replica        │
-│ MariaDB Primary      │  │ MariaDB Replica      │
-└──────────────────────┘  └──────────────────────┘
-         ↓                        ↓
-    ┌────────────────────────────┐
-    │   Load Balancer (Nginx)    │ (Server 1 또는 별도)
-    │   - Port 80/443            │
-    │   - ingest-service 분산    │
-    └────────────────────────────┘
+After (2대 - 분리):
+┌─────────────────────────┐  ┌──────────────────────────┐
+│ Server 1                │  │ Server 2                 │
+│ (API Layer)             │  │ (Data Processing Layer)  │
+├─────────────────────────┤  ├──────────────────────────┤
+│ ingest-service (400 RPS)│  │ consumer-worker (400 RPS)│
+│                         │  │                          │
+│ Role:                   │  │ Role:                    │
+│ - HTTP 요청 수신        │  │ - Kafka 이벤트 구독      │
+│ - 비즈니스 로직         │  │ - 데이터 변환/저장       │
+│ - Rate Limit            │  │ - Ledger 생성           │
+│ - 멱등성 검증           │  │ - 회계 검증              │
+└─────────────────────────┘  └──────────────────────────┘
+         ↓                             ↓
+    ┌─────────────────────────────────────────┐
+    │ Shared Infrastructure                   │
+    ├─────────────────────────────────────────┤
+    │ Kafka Cluster (3 Brokers)               │
+    │ Redis Cluster (고가용성)                 │
+    │ MariaDB (Primary + Read Replicas)       │
+    │                                         │
+    │ Load Balancer (Nginx)                   │
+    │ - Public IP로 ingest-service 접근       │
+    └─────────────────────────────────────────┘
 ```
 
-### 1️⃣ 로드 밸런서 설정 (Nginx)
+### 1️⃣ Server 1 (API Layer) - ingest-service 전용
 
-**파일**: `nginx.conf` (새로 생성)
+**docker-compose.yml**:
+```yaml
+services:
+  ingest-service:
+    image: ingest-service:latest
+    environment:
+      # 400 RPS 처리 (1대 서버가 400 RPS 전담)
+      APP_RATE_LIMIT_AUTHORIZE_CAPACITY: 30000
+      APP_RATE_LIMIT_CAPTURE_CAPACITY: 30000
+      APP_RATE_LIMIT_REFUND_CAPACITY: 15000
+
+      SERVER_TOMCAT_THREADS_MAX: 250
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 40
+
+      # Kafka/Redis/DB는 모두 공유 인프라 접근
+      KAFKA_BOOTSTRAP_SERVERS: shared-kafka:9092
+      REDIS_HOST: shared-redis
+      PAYMENT_DB_HOST: shared-mariadb
+
+    ports:
+      - "8080:8080"
+    resources:
+      limits:
+        cpus: "3"         # CPU 거의 다 사용
+        memory: "3g"
+
+  # consumer-worker 제거 (Server 2로 이동)
+  # kafka/redis/mariadb 제거 (공유 인프라로 이동)
+
+  # 다른 인프라는 제거
+```
+
+### 2️⃣ Server 2 (Data Processing Layer) - consumer-worker 전용
+
+**docker-compose.yml**:
+```yaml
+services:
+  consumer-worker:
+    image: consumer-worker:latest
+    environment:
+      # 400 RPS 처리 (1대 서버가 400 RPS 전담)
+      SPRING_KAFKA_CONSUMER_GROUP_ID: payment-consumer
+
+      # 공유 인프라 접근
+      KAFKA_BOOTSTRAP_SERVERS: shared-kafka:9092
+      PAYMENT_DB_HOST: shared-mariadb
+
+    resources:
+      limits:
+        cpus: "3"         # CPU 거의 다 사용
+        memory: "3g"
+
+  # ingest-service 제거 (Server 1로 이동)
+  # kafka/redis/mariadb 제거 (공유 인프라로 이동)
+
+  # 다른 인프라는 제거
+```
+
+### 3️⃣ 공유 인프라 구성 (별도 관리 또는 임시)
+
+**전담 인프라 서버 생성 (Optional - 초기엔 Server 1에서 제공 가능)**:
+
+```yaml
+# 초기 단계: Server 1에서 제공
+# 최적화 단계: 별도 서버로 분리
+
+kafka:
+  image: confluentinc/cp-kafka:7.6.1
+  environment:
+    KAFKA_BROKER_ID: 1
+    KAFKA_NUM_PARTITIONS: 2      # 2개 Consumer 대응
+    KAFKA_REPLICATION_FACTOR: 1   # 초기엔 1
+  ports:
+    - "9092:9092"
+
+redis:
+  image: redis:7.4-alpine
+  command: redis-server
+  ports:
+    - "6379:6379"
+
+mariadb:
+  image: mariadb:11.4
+  environment:
+    MARIADB_DATABASE: paydb
+    MARIADB_USER: payuser
+    MARIADB_PASSWORD: paypass
+  ports:
+    - "3306:3306"
+  volumes:
+    - mariadb-data:/var/lib/mysql
+```
+
+### 4️⃣ 로드 밸런서 (Server 1 또는 별도)
+
+**파일**: `nginx.conf`
 
 ```nginx
 upstream api_servers {
-  server server1:8080 weight=1;
-  server server2:8080 weight=1;
+  server server1:8080;    # 유일한 ingest-service
 }
 
 server {
   listen 80;
 
-  location / {
+  location /payments {
     proxy_pass http://api_servers;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   }
 }
 ```
 
-**설정**: Server 1에서 Nginx 실행
-```bash
-# docker-compose.yml에 nginx 서비스 추가
+**docker-compose.yml에 추가** (Server 1):
+```yaml
 nginx:
   image: nginx:latest
   volumes:
-    - ./nginx.conf:/etc/nginx/nginx.conf
+    - ./nginx.conf:/etc/nginx/nginx.conf:ro
   ports:
     - "80:80"
+    - "443:443"
   depends_on:
     - ingest-service
 ```
 
-### 2️⃣ Kafka 클러스터화
+### 5️⃣ 네트워크 구성
 
-**파일**: `docker-compose.yml` 수정
-
-```yaml
-# Server 1
-kafka-1:
-  KAFKA_BROKER_ID: 1
-  KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:2181,zookeeper-2:2181
-  KAFKA_NUM_PARTITIONS: 2  # 파티션 2개 (2개 Consumer 대응)
-
-# Server 2
-kafka-2:
-  KAFKA_BROKER_ID: 2
-  KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:2181,zookeeper-2:2181
-
-# 토픽 재설정 (RF=2)
-payment.authorized:
-  replication-factor: 2
-```
-
-### 3️⃣ Redis Replication
-
-**파일**: `docker-compose.yml` 수정
-
-```yaml
-# Server 1
-redis-master:
-  command: redis-server --port 6379
-  ports:
-    - "6379:6379"
-
-# Server 2
-redis-slave:
-  command: redis-server --slaveof redis-master 6379
-  links:
-    - redis-master:redis-master
-```
-
-**application.yml 수정** (자동 failover 지원):
-```yaml
-spring:
-  data:
-    redis:
-      url: redis://redis-master:6379
-      timeout: 3000
-```
-
-### 4️⃣ MariaDB Replication
-
-**Server 1 (Primary)**:
-```sql
--- Primary 설정
-CHANGE MASTER TO
-  MASTER_USER='repl',
-  MASTER_PASSWORD='password',
-  MASTER_LOG_FILE='mysql-bin.000001',
-  MASTER_LOG_POS=154;
-
-START SLAVE;
-```
-
-**Server 2 (Replica)**:
-```sql
--- Replica 설정
-CHANGE MASTER TO
-  MASTER_HOST='server1',
-  MASTER_USER='repl',
-  MASTER_PASSWORD='password';
-
-START SLAVE;
-```
-
-**application.yml 수정**:
-```yaml
-# ingest-service (Server 1) - Write
-spring:
-  datasource:
-    primary:
-      url: jdbc:mariadb://server1:3306/paydb
-
-# consumer-worker (모두) - Read Replica
-spring:
-  datasource:
-    replica:
-      url: jdbc:mariadb://server2:3306/paydb
-```
-
-### 5️⃣ Rate Limit 조정 (1000 RPS)
-
-**파일**: `docker-compose.yml`
-
-```yaml
-# 2개 서버 × 500 RPS = 1000 RPS
-ingest-service:
-  environment:
-    APP_RATE_LIMIT_AUTHORIZE_CAPACITY: 30000   # 각 서버당
-    APP_RATE_LIMIT_CAPTURE_CAPACITY: 30000
-    APP_RATE_LIMIT_REFUND_CAPACITY: 15000
-```
-
-### 6️⃣ 배포 및 검증
-
+**Server 간 통신**:
 ```bash
-# Server 2에서 실행
+# Server 1 → Server 2 통신 (Docker 네트워크 또는 VPC)
+# 또는 Public IP로 직접 통신
+
+# docker-compose.yml 수정
+services:
+  ingest-service:
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: <SERVER1_PRIVATE_IP>:9092
+      REDIS_HOST: <SERVER1_PRIVATE_IP>
+      PAYMENT_DB_HOST: <SERVER1_PRIVATE_IP>
+
+  consumer-worker:
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: <SERVER1_PRIVATE_IP>:9092
+      PAYMENT_DB_HOST: <SERVER1_PRIVATE_IP>
+```
+
+### 6️⃣ 배포 순서
+
+**Step 1: Server 1 배포 (API + 공유 인프라)**
+```bash
+# Server 1에서
+ssh -i key.pem user@SERVER1_IP
+
+git clone <repo>
+docker compose up --build -d
+
+# Kafka, Redis, MariaDB가 준비될 때까지 대기
+sleep 30
+
+# ingest-service 상태 확인
+curl http://localhost:8080/actuator/health
+```
+
+**Step 2: Server 2 배포 (Data Processing)**
+```bash
+# Server 2에서
 ssh -i key.pem user@SERVER2_IP
-bash deploy-single-server.sh
 
-# 로드 밸런서 (Server 1) 재구동
-docker compose up -d nginx
+git clone <repo>
+docker compose up --build -d
 
-# 원격 테스트 (Load Balancer 경유)
-curl -X POST http://LOADBALANCER_IP/payments/authorize \
+# consumer-worker 상태 확인
+docker logs -f consumer-worker
+```
+
+**Step 3: 통합 테스트**
+```bash
+# 로드 밸런서 경유 테스트
+curl -X POST http://<LOADBALANCER_OR_SERVER1_IP>/payments/authorize \
   -H 'Content-Type: application/json' \
   -d '{"merchantId":"TEST","amount":10000,"currency":"KRW","idempotencyKey":"test-1"}'
 
 # k6로 1000 RPS 테스트
 MSYS_NO_PATHCONV=1 docker run --rm \
-  -e BASE_URL=http://LOADBALANCER_IP \
+  -e BASE_URL=http://<LOADBALANCER_IP> \
   -e MERCHANT_ID=K6TEST \
   grafana/k6:0.49.0 run /k6/payment-scenario.js
 ```
 
-**체크리스트**:
+### 7️⃣ 모니터링
+
+**각 Server별 모니터링**:
 ```
-□ Server 2 VM 생성 및 배포
-□ Nginx 로드 밸런서 설정
-□ Kafka 클러스터화 (2 Brokers)
-□ Redis Replication 설정
-□ MariaDB Replication 설정
-□ Rate Limit 조정 (1000 RPS 분산)
-□ 원격 테스트 실행 (1000 RPS)
-□ Grafana 모니터링 확인
-□ Git 커밋: "Scale: Add 2nd server, implement clustering (1000 RPS)"
+Server 1 (API Layer):
+  □ CPU 사용률: 70-90% (ingest-service 처리)
+  □ 메모리: 3GB
+  □ p95 응답시간: 100-150ms
+  □ QPS: 400 RPS
+
+Server 2 (Data Processing):
+  □ CPU 사용률: 60-80% (consumer-worker 처리)
+  □ 메모리: 3GB
+  □ Kafka Lag: < 100ms
+  □ TPS: 400 RPS
 ```
+
+**Grafana 대시보드**:
+```
+- API 요청 속도 (ingest-service)
+- 데이터 처리 속도 (consumer-worker)
+- Kafka 토픽별 처리량
+- 에러율 및 응답시간
+```
+
+### 체크리스트
+
+```
+□ docker-compose.yml을 서버별로 분리
+  - Server 1: ingest-service + Kafka/Redis/MariaDB
+  - Server 2: consumer-worker만
+
+□ Server 1 배포 및 테스트
+  - ingest-service 400 RPS 처리 확인
+  - Kafka/Redis/MariaDB 정상 동작 확인
+
+□ Server 2 배포 및 테스트
+  - consumer-worker 400 RPS 처리 확인
+  - Kafka 이벤트 소비 확인
+
+□ 네트워크 구성
+  - Server 간 통신 확인 (Kafka, Redis, DB)
+
+□ 로드 밸런서 설정
+  - Nginx로 ingest-service 라우팅
+
+□ 통합 테스트
+  - E2E 흐름 검증 (authorize → capture → refund)
+  - k6로 1000 RPS 부하 테스트
+
+□ 모니터링 설정
+  - 각 Server 리소스 모니터링
+  - Grafana 대시보드 구성
+
+□ Git 커밋
+  - "Scale: Separate API and Data Processing layers (1000 RPS)"
+```
+
+### 핵심 차이점
+
+| 항목 | 이전 (처리량 분산) | 현재 (책임 분리) |
+|------|---|---|
+| Server 1 | ingest-service + consumer-worker | ingest-service + 공유 인프라 |
+| Server 2 | 중복된 모든 서비스 | consumer-worker만 |
+| 확장성 | 수평적 (서버 복제) | 수직적 (계층별 확장) |
+| 리소스 효율 | 중복 투자 | 최소화 |
+| 관리 복잡도 | 높음 (동기화 필요) | 낮음 (단방향) |
 
 ---
 
