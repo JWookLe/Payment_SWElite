@@ -62,7 +62,7 @@
 - **Prometheus**: http://localhost:9090
   - Status → Targets에서 ingest-service, consumer-worker 메트릭 수집 상태 확인
 - **Grafana**: http://localhost:3000
-  - 기본 계정: `admin`/`admin` (첫 로그인 후 비밀번호 변경 권장)
+  - 기본 계정: `admin`/`admin`
   - `Payment Service Overview` 대시보드에서 요청 속도, p95 지연시간, Kafka 소비량, 에러율 등을 확인
 
 ### 구성 방식
@@ -107,9 +107,9 @@ MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
 ```
 
 ### 성능 목표
-- ✅ **에러율**: < 1%
-- ✅ **p95 응답시간**: < 100ms
-- ✅ **처리량**: 200 RPS 안정적 처리
+-  **에러율**: < 1%
+-  **p95 응답시간**: < 100ms
+-  **처리량**: 200 RPS 안정적 처리
 
 ## 로컬 실행 방법
 1. `docker compose up --build`
@@ -322,41 +322,3 @@ GitHub에 Push 시 Jenkins가 자동으로 빌드를 시작하도록 설정되�
 1. **ngrok 터널**: 로컬 Jenkins를 외부에서 접근 가능하도록 설정
 2. **GitHub Webhook**: Push 이벤트 발생 시 Jenkins로 알림 전송
 3. **Jenkins 설정**: GitHub hook trigger 활성화
-
-### 설정 방법
-
-#### 1. ngrok 설치 및 실행
-```bash
-# ngrok 다운로드 및 압축 해제
-# https://ngrok.com/download
-
-# ngrok 인증 (계정 생성 필요)
-ngrok config add-authtoken YOUR_AUTH_TOKEN
-
-# Jenkins 포트(8088)를 외부에 노출
-ngrok http 8088
-```
-
-ngrok 실행 후 `Forwarding` URL 복사 (예: `https://sienna-unequipped-rolando.ngrok-free.dev`)
-
-#### 2. GitHub Webhook 설정
-1. GitHub 저장소 → Settings → Webhooks → Add webhook
-2. **Payload URL**: `https://YOUR-NGROK-URL/github-webhook/`
-   - 예: `https://sienna-unequipped-rolando.ngrok-free.dev/github-webhook/`
-3. **Content type**: `application/json`
-4. **Which events**: "Just the push event" 선택
-5. **Active** 체크 후 "Add webhook" 클릭
-
-#### 3. Jenkins 프로젝트 설정
-1. Jenkins 프로젝트 → Configure
-2. "Build Triggers" 섹션에서 "GitHub hook trigger for GITScm polling" 체크
-3. Save
-
-### 동작 확인
-1. 코드 수정 후 `git push`
-2. GitHub Webhook Deliveries에서 전송 성공 확인 (200 OK)
-3. Jenkins에서 빌드 자동 시작 확인
-
-### 참고사항
-- ngrok 무료 플랜은 세션 재시작 시 URL이 변경됨 → GitHub Webhook URL 재설정 필요
-- 운영 환경에서는 고정 IP 또는 도메인 사용 권장
