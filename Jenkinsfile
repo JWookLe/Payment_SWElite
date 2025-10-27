@@ -18,6 +18,10 @@ pipeline {
     gradle 'gradle-8.13'
   }
 
+  triggers {
+    githubPush()
+  }
+
   stages {
     stage('Checkout') {
       steps {
