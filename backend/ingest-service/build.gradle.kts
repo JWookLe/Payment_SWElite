@@ -13,6 +13,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("io.micrometer:micrometer-registry-prometheus")
 
+    // Resilience4j for Circuit Breaker
+    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.1.0")
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.1.0")
+    implementation("io.github.resilience4j:resilience4j-micrometer:2.1.0")
+
     runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")

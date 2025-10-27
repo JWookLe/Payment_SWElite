@@ -182,6 +182,240 @@
         "x": 12,
         "y": 8
       }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Circuit Breaker State",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\"}",
+          "legendFormat": "State"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "CLOSED",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "OPEN",
+                  "color": "red"
+                },
+                "2": {
+                  "text": "HALF_OPEN",
+                  "color": "yellow"
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 16
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Slow Call Rate (%)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "resilience4j_circuitbreaker_slow_call_rate{name=\"kafka-publisher\"}",
+          "legendFormat": "Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 25
+              },
+              {
+                "color": "orange",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 75
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 16
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Failure Rate (%)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "resilience4j_circuitbreaker_failure_rate{name=\"kafka-publisher\"}",
+          "legendFormat": "Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 16
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Circuit Breaker Call Metrics",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "resilience4j_circuitbreaker_buffered_calls{kind=\"successful\",name=\"kafka-publisher\"}",
+          "legendFormat": "Successful"
+        },
+        {
+          "refId": "B",
+          "expr": "resilience4j_circuitbreaker_slow_calls{kind=\"successful\",name=\"kafka-publisher\"}",
+          "legendFormat": "Slow"
+        },
+        {
+          "refId": "C",
+          "expr": "resilience4j_circuitbreaker_not_permitted_calls_total{name=\"kafka-publisher\"}",
+          "legendFormat": "Not Permitted"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      }
     }
   ]
 }

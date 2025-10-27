@@ -18,6 +18,14 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # Timeout configuration for Circuit Breaker to detect Kafka failures
+      acks: all                    # Wait for all replicas to acknowledge
+      retries: 1                   # Retry once on failure
+      request-timeout-ms: 10000    # 10 second timeout for send request
+      delivery-timeout-ms: 15000   # 15 second total timeout including retries
+      # Batching configuration for performance
+      batch-size: 16384            # 16KB batch size
+      linger-ms: 10                # Wait up to 10ms for batching
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -62,4 +70,36 @@ app:
       capacity: ${APP_RATE_LIMIT_REFUND_CAPACITY:500}
   idempotency-cache:
     ttl-seconds: ${APP_IDEMPOTENCY_CACHE_TTL_SECONDS:600}
+  circuit-breaker:
+    kafka-publisher:
+      failure-threshold-percentage: ${APP_CB_KAFKA_FAILURE_THRESHOLD:50}
+      wait-duration-in-open-state: ${APP_CB_KAFKA_WAIT_DURATION:30000}
+      permitted-calls-in-half-open-state: ${APP_CB_KAFKA_HALF_OPEN_CALLS:3}
+      minimum-number-of-calls: ${APP_CB_KAFKA_MIN_CALLS:5}
+      slow-call-duration-threshold: ${APP_CB_KAFKA_SLOW_CALL_THRESHOLD:5000}
+      slow-call-rate-threshold: ${APP_CB_KAFKA_SLOW_CALL_RATE:50}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      kafka-publisher:
+        registerHealthIndicator: true
+        failureRateThreshold: 50
+        slowCallRateThreshold: 50
+        slowCallDurationThreshold: 5000ms
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        minimumNumberOfCalls: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        eventConsumerBufferSize: 10
+        recordFailurePredicate: com.example.payment.service.KafkaPublishingFailurePredicate
+    metrics:
+      enabled: true
+  retry:
+    instances:
+      kafka-publisher:
+        maxAttempts: 3
+        waitDuration: 1000ms
+        retryExceptions:
+          - org.springframework.kafka.KafkaException
 

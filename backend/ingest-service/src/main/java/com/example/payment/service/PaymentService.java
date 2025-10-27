@@ -1,19 +1,15 @@
 package com.example.payment.service;
 
 import com.example.payment.domain.LedgerEntry;
-import com.example.payment.domain.OutboxEvent;
 import com.example.payment.domain.Payment;
 import com.example.payment.domain.PaymentStatus;
 import com.example.payment.repository.LedgerEntryRepository;
-import com.example.payment.repository.OutboxEventRepository;
 import com.example.payment.repository.PaymentRepository;
 import com.example.payment.web.dto.AuthorizePaymentRequest;
 import com.example.payment.web.dto.CapturePaymentRequest;
 import com.example.payment.web.dto.LedgerEntryResponse;
 import com.example.payment.web.dto.PaymentResponse;
 import com.example.payment.web.dto.RefundPaymentRequest;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -21,7 +17,6 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,26 +28,20 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
-    private final OutboxEventRepository outboxEventRepository;
     private final IdempotencyCacheService idempotencyCacheService;
     private final RedisRateLimiter rateLimiter;
-    private final KafkaTemplate<String, String> kafkaTemplate;
-    private final ObjectMapper objectMapper;
+    private final PaymentEventPublisher eventPublisher;
 
     public PaymentService(PaymentRepository paymentRepository,
                           LedgerEntryRepository ledgerEntryRepository,
-                          OutboxEventRepository outboxEventRepository,
                           IdempotencyCacheService idempotencyCacheService,
                           RedisRateLimiter rateLimiter,
-                          KafkaTemplate<String, String> kafkaTemplate,
-                          ObjectMapper objectMapper) {
+                          PaymentEventPublisher eventPublisher) {
         this.paymentRepository = paymentRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
-        this.outboxEventRepository = outboxEventRepository;
         this.idempotencyCacheService = idempotencyCacheService;
         this.rateLimiter = rateLimiter;
-        this.kafkaTemplate = kafkaTemplate;
-        this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -169,31 +158,8 @@ public class PaymentService {
     }
 
     private void publishEvent(Payment payment, String eventType, Map<String, Object> payload) {
-        try {
-            String jsonPayload = objectMapper.writeValueAsString(payload);
-            OutboxEvent outboxEvent = outboxEventRepository.save(
-                    new OutboxEvent(AGGREGATE_TYPE, payment.getId(), eventType, jsonPayload));
-            kafkaTemplate.send(topicNameFor(eventType), jsonPayload)
-                    .whenComplete((result, ex) -> {
-                        if (ex == null) {
-                            outboxEvent.markPublished();
-                            outboxEventRepository.save(outboxEvent);
-                        } else {
-                            log.error("Failed to publish event {}", eventType, ex);
-                        }
-                    });
-        } catch (JsonProcessingException e) {
-            log.error("Failed to serialize event payload", e);
-        }
-    }
-
-    private String topicNameFor(String eventType) {
-        return switch (eventType) {
-            case "PAYMENT_AUTHORIZED" -> "payment.authorized";
-            case "PAYMENT_CAPTURED" -> "payment.captured";
-            case "PAYMENT_REFUNDED" -> "payment.refunded";
-            default -> "payment.unknown";
-        };
+        // Delegate to PaymentEventPublisher which handles circuit breaker logic
+        eventPublisher.publishEvent(payment.getId(), eventType, payload);
     }
 
     private PaymentResponse toResponse(Payment payment, List<LedgerEntryResponse> ledgerEntries, String message) {

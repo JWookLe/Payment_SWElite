@@ -128,6 +128,60 @@ MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
    ```
 4. 종료: `docker compose down`
 
+## Circuit Breaker (Resilience4j)
+
+Kafka 발행 실패로부터 시스템을 보호하는 프로덕션 수준의 Circuit Breaker 구현입니다.
+
+### 개요
+- **프레임워크**: Resilience4j 2.1.0
+- **보호 대상**: Kafka Publisher (ingest-service)
+- **상태 관리**: CLOSED → OPEN → HALF_OPEN → CLOSED
+- **자동 복구**: 의존성 회복 시 자동으로 서비스 복구
+
+### 모니터링
+```
+Circuit Breaker 상태 확인:
+curl http://localhost:8080/circuit-breaker/kafka-publisher
+
+응답 예시:
+{
+  "state": "CLOSED",
+  "numberOfSuccessfulCalls": 25,
+  "numberOfSlowCalls": 11,
+  "slowCallRate": "44.00%",
+  "failureRate": "0.00%"
+}
+```
+
+### 자동 테스트
+```bash
+# 전체 Circuit Breaker 시나리오 자동 실행 (9단계)
+bash scripts/test-circuit-breaker.sh
+
+# Jenkins 파이프라인에서 자동 실행됨
+# Smoke Test 다음 "Circuit Breaker Test" 단계 포함
+```
+
+### 실시간 모니터링
+- **Prometheus**: http://localhost:9090 → 쿼리 검색 → `resilience4j_circuitbreaker_state`
+- **Grafana**: http://localhost:3000 → Dashboards → "Payment Service Overview" → Circuit Breaker 패널
+
+### 상태별 동작
+| 상태 | 의미 | 동작 |
+|------|------|------|
+| **CLOSED** | 정상 | 모든 요청 통과, 메트릭 기록 |
+| **OPEN** | 장애 감지 | 요청 즉시 차단 (30초 대기) |
+| **HALF_OPEN** | 복구 시도 | 제한된 요청으로 상태 확인 (최대 3개) |
+
+### 관련 문서
+- **완전한 가이드**: [CIRCUIT_BREAKER_GUIDE.md](CIRCUIT_BREAKER_GUIDE.md)
+  - 구현 상세 설명
+  - 수동 테스트 방법
+  - 모니터링 설정
+  - 트러블슈팅
+
+---
+
 ## Jenkins 파이프라인 개요
 1. 소스 체크아웃
 2. 프런트엔드 빌드 (npm install + vite build)

@@ -82,10 +82,33 @@ pipeline {
             -d '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"smoke-test-'$(date +%s)'"}' \
             http://localhost:8080/payments/authorize
           echo "Smoke test completed successfully"
+        '''
+      }
+    }
+
+    stage('Circuit Breaker Test') {
+      steps {
+        sh '''
           echo ""
           echo "=========================================="
-          echo "Build completed! Services are running."
+          echo "Circuit Breaker 자동 테스트 시작"
           echo "=========================================="
+          echo ""
+
+          # 스크립트 실행 권한 부여
+          chmod +x scripts/test-circuit-breaker.sh
+
+          # Circuit Breaker 자동 테스트 실행
+          bash scripts/test-circuit-breaker.sh
+
+          TEST_RESULT=$?
+
+          echo ""
+          if [ $TEST_RESULT -eq 0 ]; then
+            echo "✅ Circuit Breaker 테스트 통과"
+          else
+            echo "⚠️ Circuit Breaker 테스트 경고 (상세 로그 확인 필요)"
+          fi
         '''
       }
     }
