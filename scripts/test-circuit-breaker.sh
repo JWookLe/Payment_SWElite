@@ -34,7 +34,7 @@ log_error() {
 }
 
 # 설정
-API_BASE_URL="http://localhost:8080"
+API_BASE_URL="http://payment-swelite-pipeline-ingest-service-1:8080"
 CIRCUIT_BREAKER_ENDPOINT="${API_BASE_URL}/circuit-breaker/kafka-publisher"
 MAX_RETRIES=5
 RETRY_DELAY=2
