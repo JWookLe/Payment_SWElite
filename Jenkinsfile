@@ -107,11 +107,21 @@ pipeline {
           chmod +x scripts/test-circuit-breaker.sh
 
           # Circuit Breaker 자동 테스트를 ingest-service 컨테이너 내부에서 실행
-          # 스크립트를 먼저 컨테이너로 복사
-          docker compose cp scripts/test-circuit-breaker.sh payment-swelite-pipeline-ingest-service-1:/scripts/test-circuit-breaker.sh
+          # 컨테이너 ID를 동적으로 조회하여 실행
+          CONTAINER_ID=$(docker compose ps -q ingest-service)
+
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "Error: ingest-service 컨테이너를 찾을 수 없습니다"
+            exit 1
+          fi
+
+          echo "Container ID: $CONTAINER_ID"
+
+          # docker cp로 스크립트 복사
+          docker cp scripts/test-circuit-breaker.sh $CONTAINER_ID:/scripts/test-circuit-breaker.sh
 
           # 컨테이너 내부에서 실행
-          docker compose exec -T payment-swelite-pipeline-ingest-service-1 bash /scripts/test-circuit-breaker.sh
+          docker exec -T $CONTAINER_ID bash /scripts/test-circuit-breaker.sh
 
           TEST_RESULT=$?
 
