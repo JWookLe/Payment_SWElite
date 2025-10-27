@@ -1,16 +1,15 @@
 # 🔌 Circuit Breaker 완벽 가이드
 
-Payment_SWElite의 Resilience4j 기반 Circuit Breaker 구현에 대한 **완전한 통합 가이드**입니다.
+Payment_SWElite의 Resilience4j 기반 Circuit Breaker 구현에 대한 완전한 통합 가이드다.
 
 **최종 업데이트**: 2025-10-27
-**상태**: ✅ 프로덕션 배포 준비 완료
 **프레임워크**: Resilience4j 2.1.0 + Spring Boot 3.3.4
 
 ---
 
 ## 📋 개요
 
-Payment_SWElite에 **Resilience4j 기반 Circuit Breaker**를 구현했습니다. 이는 Kafka 발행 실패로부터 서비스를 보호하는 **프로덕션 수준의 솔루션**입니다.
+Payment_SWElite에 Resilience4j 기반 Circuit Breaker를 구현했음. Kafka 발행 실패로부터 서비스를 보호하는 프로덕션 수준의 솔루션이다.
 
 ### 구현 범위
 - **보호 대상**: Kafka Publisher (ingest-service)
@@ -22,11 +21,11 @@ Payment_SWElite에 **Resilience4j 기반 Circuit Breaker**를 구현했습니다
 
 ## 🎯 주요 목표
 
-- ✅ Kafka 장애 시 빠른 실패 (Fail-Fast)
-- ✅ 연쇄 장애 방지 (Cascading Failures Prevention)
-- ✅ 자동 복구 (Automatic Recovery)
-- ✅ 실시간 모니터링 (Real-time Monitoring)
-- ✅ 데이터 무결성 유지 (Transactional Outbox Pattern)
+- Kafka 장애 시 빠른 실패 (Fail-Fast)
+- 연쇄 장애 방지 (Cascading Failures Prevention)
+- 자동 복구 (Automatic Recovery)
+- 실시간 모니터링 (Real-time Monitoring)
+- 데이터 무결성 유지 (Transactional Outbox Pattern)
 
 ---
 
@@ -76,13 +75,13 @@ Payment_SWElite에 **Resilience4j 기반 Circuit Breaker**를 구현했습니다
 
 ---
 
-## 💻 핵심 구현 상세
+## 💻 핵심 구현
 
-### 1️⃣ PaymentEventPublisher.java (Kafka 발행 로직)
+### PaymentEventPublisher.java (Kafka 발행 로직)
 
 **위치**: `backend/ingest-service/src/main/java/com/example/payment/service/PaymentEventPublisher.java`
 
-#### 필드와 생성자
+필드와 생성자:
 
 ```java
 private final CircuitBreakerRegistry circuitBreakerRegistry;
@@ -100,7 +99,7 @@ public PaymentEventPublisher(
 }
 ```
 
-#### 핵심 메서드: publishToKafkaWithCircuitBreaker()
+핵심 메서드:
 
 ```java
 public void publishToKafkaWithCircuitBreaker(OutboxEvent outboxEvent, String topic, String payload) {
@@ -147,18 +146,13 @@ public void publishToKafkaWithCircuitBreaker(OutboxEvent outboxEvent, String top
 ```
 
 **중요 포인트**:
-- Line 18: `kafkaTemplate.send(message).get()`
-  - `send()`는 CompletableFuture 반환 (비동기)
-  - `.get()` 호출하여 동기적으로 대기
-  - Kafka 타임아웃 시 예외 발생 (Circuit Breaker가 캡처)
-- Line 22-25: 발행 성공 시 OutboxEvent 상태 업데이트
-- Line 27-34: Circuit Breaker에 작업 위임
-  - `CallNotPermittedException`: Circuit OPEN 상태 (차단됨)
-  - 기타 Exception: 느린 호출, 실패 등
+- `kafkaTemplate.send(message).get()`: `send()`는 비동기이지만 `.get()`으로 동기적으로 대기. Kafka 타임아웃 시 예외 발생해서 Circuit Breaker가 캡처함
+- `circuitBreaker.executeRunnable(publishTask)`: 작업을 Circuit Breaker에 위임해서 보호함
+- `CallNotPermittedException`: Circuit이 OPEN 상태일 때 발생. 하지만 OutboxEvent는 이미 DB에 저장되어 있으므로 데이터 손실 없음
 
-### 2️⃣ 설정: application.yml
+### 설정: application.yml
 
-#### Kafka Producer 타임아웃 설정
+Kafka Producer 타임아웃 설정:
 
 ```yaml
 spring:
@@ -172,12 +166,7 @@ spring:
       linger-ms: 10
 ```
 
-**의미**:
-- `request-timeout-ms: 10000`: 개별 요청 최대 10초 대기
-- `delivery-timeout-ms: 15000`: 전체 배송 최대 15초 대기
-- 타임아웃 시 예외 발생 → Circuit Breaker가 감지
-
-#### Resilience4j Circuit Breaker 설정
+Resilience4j Circuit Breaker 설정:
 
 ```yaml
 resilience4j:
@@ -193,19 +182,11 @@ resilience4j:
         automaticTransitionFromOpenToHalfOpenEnabled: true  # 자동 전환
 ```
 
-**각 설정 의미**:
-- `failureRateThreshold: 50`: 실패율이 50% 이상이면 OPEN
-- `slowCallRateThreshold: 50`: 느린 호출 비율이 50% 이상이면 OPEN
-- `slowCallDurationThreshold: 5000ms`: 5초 이상 걸리는 호출을 "느림"으로 분류
-- `minimumNumberOfCalls: 5`: 최소 5개 호출이 있어야 위 조건 판정
-- `waitDurationInOpenState: 30s`: OPEN 상태에서 30초 후 HALF_OPEN으로 자동 전환
-- `permittedNumberOfCallsInHalfOpenState: 3`: HALF_OPEN에서 최대 3개 요청으로 복구 시도
-
-### 3️⃣ CircuitBreakerStatusController.java (모니터링 API)
+### CircuitBreakerStatusController.java (모니터링 API)
 
 **위치**: `backend/ingest-service/src/main/java/com/example/payment/web/CircuitBreakerStatusController.java`
 
-#### REST 엔드포인트
+REST 엔드포인트:
 
 ```java
 @RestController
@@ -232,7 +213,7 @@ public class CircuitBreakerStatusController {
 }
 ```
 
-#### 응답 예시
+응답 예시:
 
 ```json
 {
@@ -248,26 +229,45 @@ public class CircuitBreakerStatusController {
 
 ---
 
-## 🧪 수동 테스트
+## 🧪 테스트 방법
 
-### 준비 사항
+### 자동 테스트 (추천)
 
-모든 서비스가 실행 중이어야 합니다:
+전체 시나리오를 자동으로 실행:
+
+```bash
+bash scripts/test-circuit-breaker.sh
+```
+
+9단계 자동 실행:
+1. API 헬스 체크 (최대 30초 대기)
+2. 초기 상태 확인 (CLOSED 상태 검증)
+3. 정상 요청 5개 전송 (Kafka UP)
+4. Kafka 중단
+5. 느린 요청 6개 전송 (Kafka DOWN, 타임아웃)
+6. Circuit Breaker 상태 확인 (HALF_OPEN 또는 OPEN)
+7. Kafka 재시작
+8. 복구 요청 전송
+9. 최종 상태 확인 및 결과 출력
+
+### 수동 테스트
+
+서비스 실행:
 
 ```bash
 docker compose up -d mariadb redis zookeeper kafka ingest-service consumer-worker
 sleep 20
 ```
 
-### Test 1: 초기 상태 확인
+**Test 1: 초기 상태 확인**
 
 ```bash
 curl http://localhost:8080/circuit-breaker/kafka-publisher
 ```
 
-**기대 결과**: `state: CLOSED`
+기대: `state: CLOSED`
 
-### Test 2: 정상 요청 5개 (Kafka UP)
+**Test 2: 정상 요청 5개 (Kafka UP)**
 
 ```bash
 for i in {1..5}; do
@@ -278,26 +278,22 @@ for i in {1..5}; do
 done
 ```
 
-**기대 결과**: 각 요청이 1-2초 내에 HTTP 200으로 응답
+기대: 각 요청이 1-2초 내에 HTTP 200으로 응답
 
-**메트릭 확인**:
+메트릭 확인:
+
 ```bash
 curl -s http://localhost:8080/circuit-breaker/kafka-publisher | grep numberOfSuccessfulCalls
 # 결과: 5 증가
 ```
 
-### Test 3: Kafka 중단
+**Test 3: Kafka 중단 후 느린 요청**
 
 ```bash
 docker compose stop kafka
 sleep 5
-```
 
-### Test 4: Kafka DOWN 상태에서 느린 요청 6개
-
-```bash
 for i in {1..6}; do
-  echo "Slow request $i..."
   timeout 15 curl -s -X POST http://localhost:8080/payments/authorize \
     -H "Content-Type: application/json" \
     -d "{\"merchantId\":\"SLOW_$i\",\"amount\":50000,\"currency\":\"KRW\",\"idempotencyKey\":\"slow-$i-$(date +%s)\"}" > /dev/null 2>&1 &
@@ -306,14 +302,16 @@ done
 wait
 ```
 
-**기대 결과**: 각 요청이 10-15초 정도 걸림 (타임아웃 대기)
+기대: 각 요청이 10-15초 정도 걸림 (타임아웃)
 
-**메트릭 확인**:
+메트릭 확인:
+
 ```bash
 curl -s http://localhost:8080/circuit-breaker/kafka-publisher
 ```
 
-**기대 결과**:
+기대:
+
 ```json
 {
   "state": "HALF_OPEN 또는 OPEN",
@@ -322,24 +320,21 @@ curl -s http://localhost:8080/circuit-breaker/kafka-publisher
 }
 ```
 
-### Test 5: Kafka 재시작
+**Test 4: Kafka 재시작 후 복구**
 
 ```bash
 docker compose start kafka
 sleep 15
-```
 
-### Test 6: 복구 요청
-
-```bash
 curl -s -X POST http://localhost:8080/payments/authorize \
   -H "Content-Type: application/json" \
   -d "{\"merchantId\":\"RECOVERY\",\"amount\":50000,\"currency\":\"KRW\",\"idempotencyKey\":\"recovery-$(date +%s)\"}"
 ```
 
-**기대 결과**: 1-2초 내에 빠른 응답
+기대: 1-2초 내에 빠른 응답
 
-**최종 상태 확인**:
+최종 상태:
+
 ```bash
 curl -s http://localhost:8080/circuit-breaker/kafka-publisher
 # 기대: state: CLOSED
@@ -347,150 +342,65 @@ curl -s http://localhost:8080/circuit-breaker/kafka-publisher
 
 ---
 
-## 🤖 자동 테스트
-
-### 자동 테스트 스크립트 실행
-
-모든 테스트를 자동으로 수행하려면:
-
-```bash
-bash scripts/test-circuit-breaker.sh
-```
-
-### 스크립트의 9단계 흐름
-
-1. **API 헬스 체크** - 최대 30초 대기
-2. **초기 상태 확인** - CLOSED 상태 검증
-3. **정상 요청 5개 전송** - Kafka UP
-4. **Kafka 중단**
-5. **느린 요청 6개 전송** - Kafka DOWN, 타임아웃
-6. **Circuit Breaker 상태 확인** - HALF_OPEN 또는 OPEN
-7. **Kafka 재시작**
-8. **복구 요청 전송**
-9. **최종 상태 확인 및 결과 출력**
-
-### Jenkins 파이프라인 통합
-
-`Jenkinsfile`에 "Circuit Breaker Test" 단계가 추가되었습니다:
-
-```groovy
-stage('Circuit Breaker Test') {
-  steps {
-    sh '''
-      chmod +x scripts/test-circuit-breaker.sh
-      bash scripts/test-circuit-breaker.sh
-
-      TEST_RESULT=$?
-      if [ $TEST_RESULT -eq 0 ]; then
-        echo "✅ Circuit Breaker 테스트 통과"
-      else
-        echo "⚠️ Circuit Breaker 테스트 경고"
-      fi
-    '''
-  }
-}
-```
-
-**실행 순서**:
-1. Jenkins 빌드 시작
-2. 프론트엔드 빌드
-3. 백엔드 빌드
-4. Docker Compose 시작
-5. 서비스 준비 대기
-6. Smoke Test (기본 결제 요청)
-7. **Circuit Breaker Test** (자동으로 전체 시나리오 실행)
-
----
-
 ## 📊 모니터링
 
 ### Prometheus
 
-#### 접속
-```
-http://localhost:9090
-```
+접속: http://localhost:9090
 
-#### 주요 쿼리
+주요 쿼리들:
 
-**Circuit Breaker 현재 상태**
+Circuit Breaker 현재 상태:
 ```promql
 resilience4j_circuitbreaker_state{name="kafka-publisher"}
 ```
-- 0 = CLOSED (정상)
-- 1 = OPEN (차단)
-- 2 = HALF_OPEN (복구 시도)
 
-**성공한 호출 수**
+성공한 호출 수:
 ```promql
 resilience4j_circuitbreaker_buffered_calls{kind="successful",name="kafka-publisher"}
 ```
 
-**느린 호출 수**
+느린 호출 수:
 ```promql
 resilience4j_circuitbreaker_buffered_calls{kind="slow_successful",name="kafka-publisher"}
 ```
 
-**느린 호출 비율**
+느린 호출 비율:
 ```promql
 resilience4j_circuitbreaker_slow_call_rate{name="kafka-publisher"}
 ```
 
-**실패율**
-```promql
-resilience4j_circuitbreaker_failure_rate{name="kafka-publisher"}
-```
-
 ### Grafana
 
-#### 접속
-```
-http://localhost:3000
-ID: admin / PW: admin
-```
+접속: http://localhost:3000 (ID: admin, PW: admin)
 
-#### 대시보드 확인
-
+대시보드 확인:
 1. **Dashboards** → **Payment Service Overview** 클릭
 2. 아래로 스크롤하여 Circuit Breaker 섹션 확인
 
-#### Circuit Breaker 패널 (4가지)
+Circuit Breaker 패널들:
 
 **패널 1: Circuit Breaker State** (상태 표시)
-- 유형: Gauge
+- Gauge 형식
 - 색상: CLOSED (초록), OPEN (빨강), HALF_OPEN (노랑)
 
 **패널 2: Slow Call Rate (%)** (느린 호출 비율)
-- 유형: Stat
-- 색상 임계값: 0-25% (초록), 25-50% (노랑), 50-75% (주황), 75%+ (빨강)
+- Stat 형식
+- 색상: 0-25% (초록), 25-50% (노랑), 50-75% (주황), 75%+ (빨강)
 
 **패널 3: Failure Rate (%)** (실패율)
-- 유형: Stat
-- 색상 임계값: 0-10% (초록), 10-25% (노랑), 25-50% (주황), 50%+ (빨강)
+- Stat 형식
+- 색상: 0-10% (초록), 10-25% (노랑), 25-50% (주황), 50%+ (빨강)
 
 **패널 4: Circuit Breaker Call Metrics** (호출 수 추이)
-- 유형: Time Series
+- Time Series 형식
 - 범례: Successful, Slow, Not Permitted
 
 ---
 
-## 📖 용어 설명
+## 🐛 문제 해결
 
-| 용어 | 의미 | 값 |
-|------|------|-----|
-| **numberOfSuccessfulCalls** | 5초 이내 완료된 호출 수 | - |
-| **numberOfFailedCalls** | 예외 발생한 호출 수 | - |
-| **numberOfSlowCalls** | 5초 이상 걸린 호출 수 | - |
-| **numberOfNotPermittedCalls** | Circuit OPEN일 때 차단된 호출 | - |
-| **slowCallRate** | 느린 호출 비율 (%) | >= 50% → OPEN |
-| **failureRate** | 실패한 호출 비율 (%) | >= 50% → OPEN |
-| **state** | 현재 Circuit 상태 | CLOSED/OPEN/HALF_OPEN |
-
----
-
-## 🐛 트러블슈팅
-
-### 문제 1: API가 응답하지 않습니다
+### API가 응답하지 않음
 
 ```bash
 docker compose ps
@@ -498,38 +408,36 @@ docker compose logs ingest-service | tail -50
 curl http://localhost:8080/actuator/health
 ```
 
-**해결책**: 서비스가 "Up (healthy)" 상태인지 확인
+확인사항: 서비스가 "Up (healthy)" 상태인지
 
-### 문제 2: 메트릭이 안 나옵니다
+### 메트릭이 안 나옴
 
 ```bash
 curl http://localhost:8080/circuit-breaker/kafka-publisher
 curl http://localhost:9090/api/v1/targets
 ```
 
-**해결책**: 결제 요청을 먼저 보낸 후 메트릭 확인
+팁: 결제 요청을 먼저 보낸 후 메트릭 확인
 
-### 문제 3: Grafana 패널이 안 보입니다
+### Grafana 패널이 안 보임
 
 ```bash
 docker compose build grafana --no-cache
 docker compose restart grafana
 ```
 
-**해결책**: Docker 이미지 재빌드
-
-### 문제 4: Circuit이 HALF_OPEN에 머물러 있습니다
+### Circuit이 HALF_OPEN에 머물러 있음
 
 ```bash
 docker compose ps kafka
 docker compose start kafka && sleep 15
 ```
 
-**해결책**: Kafka가 정상 재시작되면 자동으로 CLOSED로 전환
+자동으로 CLOSED로 전환됨
 
-### 문제 5: 느린 호출이 기록되지 않습니다
+### 느린 호출이 기록되지 않음
 
-**이는 정상입니다!** Kafka 중단 시:
+이건 정상임! Kafka 중단 시:
 - Producer가 타임아웃 대기 (request-timeout-ms: 10초)
 - slowCallDurationThreshold (5초) 초과 → "느린 호출" 기록
 - 실제 예외 발생하지 않음 → failureRate는 0%
@@ -538,29 +446,37 @@ docker compose start kafka && sleep 15
 
 ## ✅ 체크리스트
 
-Circuit Breaker 구현이 제대로 작동하는지 확인:
-
 ### 초기 설정
-- [ ] 서비스 실행: `docker compose up -d`
-- [ ] 헬스 체크 통과: `curl http://localhost:8080/actuator/health`
-- [ ] Circuit Breaker 엔드포인트 응답
-- [ ] Prometheus 타겟 추가 확인
-- [ ] Grafana 대시보드 접속
+- [x] 서비스 실행: `docker compose up -d`
+- [x] 헬스 체크 통과: `curl http://localhost:8080/actuator/health`
+- [x] Circuit Breaker 엔드포인트 응답 확인
+- [x] Prometheus 타겟 추가 확인
+- [x] Grafana 대시보드 접속
 
 ### 수동 테스트
-- [ ] 정상 요청 5개 완료
-- [ ] `numberOfSuccessfulCalls` 증가
-- [ ] Kafka 중단 후 느린 요청 6개
-- [ ] `numberOfSlowCalls` 증가
-- [ ] Circuit 상태: HALF_OPEN 또는 OPEN
-- [ ] Kafka 재시작
-- [ ] 복구 요청 빠른 응답
-- [ ] 최종 상태: CLOSED
+- [x] 정상 요청 5개 완료
+- [x] `numberOfSuccessfulCalls` 증가 확인
+- [x] Kafka 중단 후 느린 요청 6개 전송
+- [x] `numberOfSlowCalls` 증가 확인
+- [x] Circuit 상태: HALF_OPEN 또는 OPEN
+- [x] Kafka 재시작
+- [x] 복구 요청 빠른 응답 (1-2초)
+- [x] 최종 상태: CLOSED
 
 ### 자동 테스트
-- [ ] 스크립트 실행: `bash scripts/test-circuit-breaker.sh`
-- [ ] 모든 9단계 완료
-- [ ] 종료 코드 0 (성공)
+- [x] 스크립트 실행: `bash scripts/test-circuit-breaker.sh`
+- [x] 모든 9단계 완료
+- [x] 종료 코드 0 (성공)
+
+### 구현 확인
+- [x] PaymentEventPublisher.java 구현
+- [x] CircuitBreakerStatusController.java 구현
+- [x] Resilience4jConfig.java 추가
+- [x] application.yml 설정
+- [x] Kafka Producer 타임아웃 설정
+- [x] Grafana 패널 4개 추가
+- [x] 테스트 스크립트 작성
+- [x] Jenkins 파이프라인 통합
 
 ### 프로덕션 배포 전
 - [ ] 타임아웃 설정 검토
@@ -584,7 +500,6 @@ Circuit Breaker 구현이 제대로 작동하는지 확인:
 
 ### 모니터링 파일
 - `monitoring/grafana/dashboards/payment-overview.json`
-- `monitoring/prometheus/prometheus.yml`
 
 ### 테스트 파일
 - `scripts/test-circuit-breaker.sh`
@@ -592,52 +507,4 @@ Circuit Breaker 구현이 제대로 작동하는지 확인:
 
 ---
 
-## 📚 추가 참고 자료
-
-### Resilience4j 공식 문서
-- [Resilience4j Circuit Breaker](https://resilience4j.readme.io/docs/circuitbreaker)
-- [State Machine Documentation](https://resilience4j.readme.io/docs/circuitbreaker#state-machine)
-
-### Circuit Breaker 패턴
-- [Martin Fowler - Circuit Breaker Pattern](https://martinfowler.com/bliki/CircuitBreaker.html)
-- [Release It! - Michael Nygard](https://pragprog.com/titles/mnee2/release-it-second-edition/)
-
-### Spring Boot + Kafka
-- [Spring for Apache Kafka](https://spring.io/projects/spring-kafka)
-- [Transactional Outbox Pattern](https://microservices.io/patterns/data/transactional-outbox.html)
-
----
-
-## 🎓 구현 완료 항목
-
-### 의존성 추가
-- ✅ Resilience4j 라이브러리 3개 추가
-- ✅ Spring Boot 3 자동 설정
-
-### 설정 구현
-- ✅ Kafka Producer 타임아웃 설정
-- ✅ Circuit Breaker 상세 설정
-- ✅ Prometheus 메트릭 활성화
-
-### 핵심 로직
-- ✅ Programmatic Circuit Breaker API 사용
-- ✅ Transactional Outbox Pattern 적용
-- ✅ 느린 호출 감지 구현
-- ✅ 자동 복구 메커니즘
-
-### 모니터링 & 관찰성
-- ✅ REST API 엔드포인트
-- ✅ Actuator 통합
-- ✅ Prometheus 메트릭 노출
-- ✅ Grafana 패널 추가
-
-### 자동화
-- ✅ 테스트 스크립트 생성
-- ✅ Jenkins 파이프라인 통합
-- ✅ 종료 코드 기반 성공/실패 판정
-
----
-
-**최종 수정**: 2025-10-27
-**담당자**: Payment SWElite Team
-**상태**: 프로덕션 배포 준비 완료 ✅
+**마지막 수정**: 2025-10-27
