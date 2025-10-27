@@ -215,6 +215,18 @@
                 "2": {
                   "text": "HALF_OPEN",
                   "color": "yellow"
+                },
+                "3": {
+                  "text": "DISABLED",
+                  "color": "blue"
+                },
+                "4": {
+                  "text": "FORCED_OPEN",
+                  "color": "purple"
+                },
+                "5": {
+                  "text": "FORCED_HALF_OPEN",
+                  "color": "orange"
                 }
               }
             }
