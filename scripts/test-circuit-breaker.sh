@@ -34,7 +34,9 @@ log_error() {
 }
 
 # 설정
-API_BASE_URL="http://localhost:8080"
+# Jenkins 내부 docker compose 네트워크에서는 ingest-service로 접근
+# 로컬 호스트에서는 localhost:8080으로 접근
+API_BASE_URL="${API_BASE_URL:-http://ingest-service:8080}"
 CIRCUIT_BREAKER_ENDPOINT="${API_BASE_URL}/circuit-breaker/kafka-publisher"
 MAX_RETRIES=5
 RETRY_DELAY=2

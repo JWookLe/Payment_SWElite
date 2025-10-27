@@ -106,25 +106,9 @@ pipeline {
           # 스크립트 실행 권한 부여
           chmod +x scripts/test-circuit-breaker.sh
 
-          # Circuit Breaker 자동 테스트를 ingest-service 컨테이너 내부에서 실행
-          # 컨테이너 ID를 동적으로 조회하여 실행
-          CONTAINER_ID=$(docker compose ps -q ingest-service)
-
-          if [ -z "$CONTAINER_ID" ]; then
-            echo "Error: ingest-service 컨테이너를 찾을 수 없습니다"
-            exit 1
-          fi
-
-          echo "Container ID: $CONTAINER_ID"
-
-          # 컨테이너 내부에서 /scripts 디렉토리 생성
-          docker exec $CONTAINER_ID mkdir -p /scripts
-
-          # docker cp로 스크립트 복사
-          docker cp scripts/test-circuit-breaker.sh $CONTAINER_ID:/scripts/test-circuit-breaker.sh
-
-          # 컨테이너 내부에서 실행
-          docker exec $CONTAINER_ID bash /scripts/test-circuit-breaker.sh
+          # Jenkins 호스트에서 직접 스크립트 실행
+          # API는 docker compose의 ingest-service 서비스 이름으로 접근 가능
+          bash scripts/test-circuit-breaker.sh
 
           TEST_RESULT=$?
 
