@@ -505,6 +505,3 @@ docker compose start kafka && sleep 15
 - `scripts/test-circuit-breaker.sh`
 - `Jenkinsfile`
 
----
-
-**마지막 수정**: 2025-10-27
