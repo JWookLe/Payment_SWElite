@@ -1,16 +1,27 @@
 ﻿# Payment_SWElite
 
 ## 주차별 목표
-- **1주차**
-  - React 목업 스토어와 Spring Boot 기반 결제 API(승인/정산/환불)로 E2E 흐름 구현
-  - Kafka, Redis, MariaDB, Jenkins가 포함된 Docker Compose 로컬 환경 구축
-- **2주차**
-  - [x] Redis 기반 rate limit 및 멱등 캐시 고도화
-  - [x] Prometheus + Grafana 지표 수집 및 시각화 파이프라인 구성
-  - [x] k6 부하/스트레스 테스트 시나리오 작성 및 200 RPS 목표 달성
-  - [x] GitHub Webhook + Jenkins 자동 빌드 파이프라인 구성
-  - [ ] Settlement/Reconciliation 대비 비동기 처리 보강
-  - [x] payment.dlq 토픽 재전송 기반 Consumer 예외 처리 보강
+
+### 1주차
+- React 목업 스토어와 Spring Boot 기반 결제 API(승인/정산/환불)로 E2E 흐름 구현
+- Kafka, Redis, MariaDB, Jenkins가 포함된 Docker Compose 로컬 환경 구축
+
+### 2주차
+- [x] Redis 기반 rate limit 및 멱등 캐시 고도화
+- [x] Prometheus + Grafana 지표 수집 및 시각화 파이프라인 구성
+- [x] k6 부하/스트레스 테스트 시나리오 작성 및 200 RPS 목표 달성
+- [x] GitHub Webhook + Jenkins 자동 빌드 파이프라인 구성
+- [ ] Settlement/Reconciliation 대비 비동기 처리 보강
+- [x] payment.dlq 토픽 재전송 기반 Consumer 예외 처리 보강
+
+### 3주차 (현재)
+- [x] Resilience4j 기반 Circuit Breaker 구현 (Kafka Publisher 보호)
+- [x] Circuit Breaker 자동 테스트 및 모니터링 (9단계 시나리오)
+- [x] Grafana에 Circuit Breaker 패널 추가 (4개 패널)
+- [x] Jenkins 파이프라인에 Circuit Breaker Test 단계 통합
+- [x] Circuit Breaker 완벽 가이드 문서화 (한국어)
+- [ ] API Gateway 도입 (Spring Cloud Gateway)
+- [ ] Service Mesh 검토 (Istio 또는 Linkerd)
 
 ## 서비스 구성 요소
 | 구성 | 설명 |
@@ -45,8 +56,8 @@
 - `payment.dlq`
 
 ## Redis 기반 보호 기능
-- 승인 API 응답을 Redis TTL 캐시에 저장하여 멱등성을 보장합니다. 기본 TTL은 600초 (`APP_IDEMPOTENCY_CACHE_TTL_SECONDS`로 조정 가능).
-- 가맹점(`merchantId`)별 승인·정산·환불 API에 Rate Limit이 적용됩니다. `APP_RATE_LIMIT_*` 환경 변수로 조정 가능하며, Redis 장애 시 fail-open 전략을 사용합니다.
+- 승인 API 응답을 Redis TTL 캐시에 저장해서 멱등성을 보장함. 기본 TTL은 600초 (`APP_IDEMPOTENCY_CACHE_TTL_SECONDS`로 조정 가능).
+- 가맹점(`merchantId`)별 승인·정산·환불 API에 Rate Limit이 적용됨. `APP_RATE_LIMIT_*` 환경 변수로 조정 가능하고, Redis 장애 시 fail-open 전략을 사용함.
 
 ### 성능 목표별 Rate Limit 설정
 | 환경 | 목표 RPS | Rate Limit (분) | 비고 |
@@ -58,7 +69,7 @@
 ## Observability (Prometheus & Grafana)
 
 ### 설정 및 접속
-- `docker compose up -d` 시 Prometheus(9090)와 Grafana(3000)가 함께 기동됩니다.
+- `docker compose up -d` 시 Prometheus(9090)와 Grafana(3000)가 함께 기동됨.
 - **Prometheus**: http://localhost:9090
   - Status → Targets에서 ingest-service, consumer-worker 메트릭 수집 상태 확인
 - **Grafana**: http://localhost:3000
@@ -67,7 +78,7 @@
 
 ### 구성 방식
 - **Prometheus**: 커스텀 이미지 빌드 (`monitoring/prometheus/Dockerfile`)
-  - 설정 파일을 이미지에 포함하여 볼륨 마운트 문제 해결
+  - 설정 파일을 이미지에 포함해서 볼륨 마운트 문제 해결
 - **Grafana**: 커스텀 이미지 빌드 (`monitoring/grafana/Dockerfile`)
   - Datasource, Dashboard provisioning 설정을 이미지에 포함
   - Payment Service Overview 대시보드 자동 로드
@@ -75,7 +86,7 @@
 ## Load Testing (k6)
 
 ### 테스트 시나리오
-`loadtest/k6/payment-scenario.js`는 승인 → 정산 → (선택적) 환불 흐름을 검증하며, 환경 변수로 각 단계를 토글할 수 있습니다.
+`loadtest/k6/payment-scenario.js`는 승인 → 정산 → (선택적) 환불 흐름을 검증함. 환경 변수로 각 단계를 토글할 수 있음.
 
 **현재 설정** (200 RPS 목표):
 - Warm-up: 50 RPS (30초)
@@ -113,7 +124,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
 
 ## 로컬 실행 방법
 1. `docker compose up --build`
-   - MariaDB, Redis, Kafka, ingest-service, consumer-worker, frontend, Prometheus, Grafana 기동
+   - MariaDB, Redis, Kafka, ingest-service, consumer-worker, frontend, Prometheus, Grafana를 기동함
 2. 프런트엔드 접속: http://localhost:5173
 3. API 확인 예시:
    ```bash
@@ -130,7 +141,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
 
 ## Circuit Breaker (Resilience4j)
 
-Kafka 발행 실패로부터 시스템을 보호하는 프로덕션 수준의 Circuit Breaker 구현입니다.
+Kafka 발행 실패로부터 시스템을 보호하는 프로덕션 수준의 Circuit Breaker 구현임.
 
 ### 개요
 - **프레임워크**: Resilience4j 2.1.0
@@ -199,7 +210,7 @@ bash scripts/test-circuit-breaker.sh
 ## 성능 최적화 내역
 
 ### 데이터베이스 튜닝 (MariaDB)
-`docker-compose.yml`에서 고부하 처리를 위한 설정 적용:
+`docker-compose.yml`에서 고부하 처리를 위한 설정을 적용함:
 ```yaml
 mariadb:
   command:
@@ -210,7 +221,7 @@ mariadb:
 ```
 
 ### 커넥션 풀 최적화 (ingest-service)
-HikariCP 설정 조정으로 200 RPS 처리:
+HikariCP 설정을 조정해서 200 RPS를 처리함:
 ```yaml
 SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 100  # 기본 10 → 100
 SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 20        # 기본 10 → 20
@@ -218,7 +229,7 @@ SERVER_TOMCAT_THREADS_MAX: 400                   # 기본 200 → 400
 ```
 
 ### Rate Limit 단계별 설정
-부하 테스트를 위해 Rate Limit을 단계적으로 설정:
+부하 테스트를 위해 Rate Limit을 단계적으로 설정함:
 - **개발 환경**: 1,000/1,000/500 (분당, authorize/capture/refund)
 - **부하 테스트**: 15,000/15,000/7,500 (200 RPS 목표 + 25% 여유분)
 - **운영 목표**: 70,000/70,000/35,000 (1,000 TPS 목표)
@@ -234,7 +245,7 @@ cannot create subdirectories... not a directory
 
 **원인**: Jenkins workspace에서 단일 파일을 컨테이너에 마운트할 때 디렉토리로 인식되는 Docker 버그
 
-**해결**: 커스텀 Dockerfile로 설정 파일을 이미지에 직접 포함
+**해결**: 커스텀 Dockerfile로 설정 파일을 이미지에 직접 포함함
 ```dockerfile
 FROM prom/prometheus:v2.54.1
 COPY prometheus.yml /etc/prometheus/prometheus.yml
@@ -256,7 +267,7 @@ prometheus:
 
 **원인**: 볼륨 마운트로 전달된 provisioning 디렉토리와 대시보드 파일이 컨테이너 내부에서 빈 디렉토리로 생성됨
 
-**해결**: 커스텀 Dockerfile로 모든 설정 파일을 이미지에 포함
+**해결**: 커스텀 Dockerfile로 모든 설정 파일을 이미지에 포함함
 ```dockerfile
 FROM grafana/grafana:10.4.3
 COPY provisioning/datasources /etc/grafana/provisioning/datasources
@@ -278,9 +289,9 @@ EXPOSE 3000
 2. **목표 설정**: 현재 200 RPS, 최종 1,000 TPS 처리
 3. **균형잡힌 접근**:
    - Rate Limit: 15,000/min (250 RPS, 25% 여유분)
-   - DB 연결 풀 증가
-   - MariaDB 성능 튜닝
-   - k6 시나리오를 점진적 ramp-up으로 수정
+   - DB 연결 풀을 증가함
+   - MariaDB 성능을 튜닝함
+   - k6 시나리오를 점진적 ramp-up으로 수정함
 
 **k6 시나리오 개선**:
 ```javascript
@@ -370,9 +381,9 @@ docker exec pay-kafka kafka-console-consumer \
 ## GitHub Webhook 자동 빌드
 
 ### 개요
-GitHub에 Push 시 Jenkins가 자동으로 빌드를 시작하도록 설정되었습니다.
+GitHub에 Push 시 Jenkins가 자동으로 빌드를 시작하도록 설정함.
 
 ### 구성 요소
-1. **ngrok 터널**: 로컬 Jenkins를 외부에서 접근 가능하도록 설정
-2. **GitHub Webhook**: Push 이벤트 발생 시 Jenkins로 알림 전송
-3. **Jenkins 설정**: GitHub hook trigger 활성화
+1. **ngrok 터널**: 로컬 Jenkins를 외부에서 접근 가능하도록 설정함
+2. **GitHub Webhook**: Push 이벤트 발생 시 Jenkins로 알림을 전송함
+3. **Jenkins 설정**: GitHub hook trigger를 활성화함
