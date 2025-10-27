@@ -1,4 +1,4 @@
-﻿# Payment_SWElite
+﻿# Payment_SWElite.
 
 ## 주차별 목표
 
