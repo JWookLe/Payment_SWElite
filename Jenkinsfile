@@ -118,13 +118,13 @@ pipeline {
           echo "Container ID: $CONTAINER_ID"
 
           # 컨테이너 내부에서 /scripts 디렉토리 생성
-          docker exec -T $CONTAINER_ID mkdir -p /scripts
+          docker exec $CONTAINER_ID mkdir -p /scripts
 
           # docker cp로 스크립트 복사
           docker cp scripts/test-circuit-breaker.sh $CONTAINER_ID:/scripts/test-circuit-breaker.sh
 
           # 컨테이너 내부에서 실행
-          docker exec -T $CONTAINER_ID bash /scripts/test-circuit-breaker.sh
+          docker exec $CONTAINER_ID bash /scripts/test-circuit-breaker.sh
 
           TEST_RESULT=$?
 
