@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\ndocs: README.md에 3주차 추가 및 전체 톤 개선\n\n- 3주차 섹션 추가 (Circuit Breaker 구현 항목들)\n- ''했습니다/입니다'' → ''함/임'' 형식으로 톤 개선\n- Jenkins, 성능 최적화, 트러블슈팅 등 모든 섹션 통일\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
