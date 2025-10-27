@@ -107,7 +107,11 @@ pipeline {
           chmod +x scripts/test-circuit-breaker.sh
 
           # Circuit Breaker 자동 테스트를 ingest-service 컨테이너 내부에서 실행
-          docker compose exec -T ingest-service bash /scripts/test-circuit-breaker.sh
+          # 스크립트를 먼저 컨테이너로 복사
+          docker compose cp scripts/test-circuit-breaker.sh payment-swelite-pipeline-ingest-service-1:/scripts/test-circuit-breaker.sh
+
+          # 컨테이너 내부에서 실행
+          docker compose exec -T payment-swelite-pipeline-ingest-service-1 bash /scripts/test-circuit-breaker.sh
 
           TEST_RESULT=$?
 
