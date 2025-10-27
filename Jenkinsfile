@@ -95,6 +95,10 @@ pipeline {
           echo "=========================================="
           echo ""
 
+          # ingest-service 안정화를 위해 추가 대기
+          echo "ingest-service 안정화 대기 중 (5초)..."
+          sleep 5
+
           # 스크립트 실행 권한 부여
           chmod +x scripts/test-circuit-breaker.sh
 
