@@ -82,6 +82,8 @@ services:
         condition: service_started
     ports:
       - "8080:8080"
+    volumes:
+      - ./scripts:/scripts:ro
 
   consumer-worker:
     build:

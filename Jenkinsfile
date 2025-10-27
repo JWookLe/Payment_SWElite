@@ -106,8 +106,8 @@ pipeline {
           # 스크립트 실행 권한 부여
           chmod +x scripts/test-circuit-breaker.sh
 
-          # Circuit Breaker 자동 테스트 실행
-          bash scripts/test-circuit-breaker.sh
+          # Circuit Breaker 자동 테스트를 ingest-service 컨테이너 내부에서 실행
+          docker compose exec -T ingest-service bash /scripts/test-circuit-breaker.sh
 
           TEST_RESULT=$?
 
