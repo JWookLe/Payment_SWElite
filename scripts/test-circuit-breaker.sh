@@ -34,10 +34,7 @@ log_error() {
 }
 
 # 설정
-# Jenkins가 docker compose 내에서 실행될 때는 ingest-service 서비스명으로 접근
-# 로컬 개발환경에서는 localhost:8080으로 접근
-# 기본값: docker compose 네트워크 내 서비스명 사용
-API_BASE_URL="${API_BASE_URL:-http://ingest-service:8080}"
+API_BASE_URL="${API_BASE_URL:-http://localhost:8080}"
 CIRCUIT_BREAKER_ENDPOINT="${API_BASE_URL}/circuit-breaker/kafka-publisher"
 MAX_RETRIES=5
 RETRY_DELAY=2
