@@ -107,7 +107,8 @@ pipeline {
           chmod +x scripts/test-circuit-breaker.sh
 
           # Jenkins 호스트에서 직접 스크립트 실행
-          # API는 docker compose의 ingest-service 서비스 이름으로 접근 가능
+          # API_BASE_URL을 ingest-service로 설정 (docker compose 네트워크 내 서비스명)
+          export API_BASE_URL="http://ingest-service:8080"
           bash scripts/test-circuit-breaker.sh
 
           TEST_RESULT=$?
