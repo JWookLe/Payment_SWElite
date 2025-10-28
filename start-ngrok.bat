@@ -5,7 +5,15 @@ rem ---------------------------------------------------------------------------
 rem  Dynamically detect the docker-compose network and expose Jenkins via ngrok
 rem ---------------------------------------------------------------------------
 
-set "NGROK_AUTHTOKEN="
+for /f "tokens=*" %%A in ('powershell -NoProfile -Command "(Get-Item env:NGROK_AUTHTOKEN).Value" 2^>nul') do set "NGROK_AUTHTOKEN=%%A"
+if "%NGROK_AUTHTOKEN%"=="" (
+    echo [ERROR] NGROK_AUTHTOKEN environment variable is not set.
+    echo Set it before running this script.
+    echo.
+    pause
+    exit /b 1
+)
+
 set "NETWORK_NAME="
 
 for /f "usebackq tokens=*" %%N in (`docker network ls --format "{{.Name}}"`) do (
