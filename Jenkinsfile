@@ -1,11 +1,11 @@
-pipeline {
+﻿pipeline {
   agent any
 
   parameters {
     booleanParam(
       name: 'AUTO_CLEANUP',
       defaultValue: false,
-      description: '빌드 완료 후 자동으로 서비스 중지 (체크하면 docker compose down 실행)'
+      description: 'Stop stack automatically after build (runs docker compose down when checked)'
     )
   }
 
@@ -47,7 +47,7 @@ pipeline {
     stage('Docker Build & Compose') {
       steps {
         sh '''
-          # Docker 빌드 컨텍스트 확인
+          # Inspect Docker build context
           pwd
           ls -la monitoring/prometheus/
 
@@ -64,7 +64,7 @@ pipeline {
         script {
           echo 'Waiting for ingest-service to be ready...'
           sh '''
-            # Health check with retry (최대 60초)
+            # Health check with retry (max 60s)
             for i in $(seq 1 30); do
               if docker compose exec -T ingest-service curl -f http://localhost:8080/actuator/health 2>/dev/null; then
                 echo "ingest-service is ready!"
@@ -95,29 +95,15 @@ pipeline {
         sh '''
           echo ""
           echo "=========================================="
-          echo "Circuit Breaker 자동 테스트 시작"
+          echo "Circuit Breaker automated test start"
           echo "=========================================="
           echo ""
 
-          # ingest-service 안정화를 위해 추가 대기
-          echo "ingest-service 안정화 대기 중 (5초)..."
+          echo "Waiting 5s for ingest-service to settle..."
           sleep 5
 
-          # 스크립트 실행 권한 부여
           chmod +x scripts/test-circuit-breaker.sh
-
-          # docker compose 네트워크 내에서 스크립트 실행
-          # ingest-service 컨테이너의 네트워크 네임스페이스 사용
-          docker compose exec -T ingest-service bash -c "cd /workspace && bash /dev/stdin" < scripts/test-circuit-breaker.sh
-
-          TEST_RESULT=$?
-
-          echo ""
-          if [ $TEST_RESULT -eq 0 ]; then
-            echo "✅ Circuit Breaker 테스트 통과"
-          else
-            echo "⚠️ Circuit Breaker 테스트 경고 (상세 로그 확인 필요)"
-          fi
+          API_BASE_URL=http://localhost:8080 bash scripts/test-circuit-breaker.sh
         '''
       }
     }
@@ -142,3 +128,9 @@ pipeline {
     }
   }
 }
+
+
+
+
+
+
