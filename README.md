@@ -380,12 +380,25 @@ docker exec pay-kafka kafka-console-consumer \
 - 추가 대시보드/알람 구성 및 운영 안정화
 - 1,000 TPS 목표를 위한 추가 스케일링 및 최적화
 
-## GitHub Webhook 자동 빌드
+## GitHub Webhook Automation
 
-### 개요
-GitHub에 Push 시 Jenkins가 자동으로 빌드를 시작하도록 설정함.
+### Overview
+Expose the local Jenkins instance so that GitHub can reach the /github-webhook/ endpoint and trigger pipelines on every push.
 
-### 구성 요소
-1. **ngrok 터널**: 로컬 Jenkins를 외부에서 접근 가능하도록 설정함
-2. **GitHub Webhook**: Push 이벤트 발생 시 Jenkins로 알림을 전송함
-3. **Jenkins 설정**: GitHub hook trigger를 활성화함
+### Steps
+1. **Provide your ngrok token**
+   - PowerShell: `setx NGROK_AUTHTOKEN "<your-token>"`
+   - CMD (current session): `set NGROK_AUTHTOKEN=<your-token>`
+   - Or create a non-committed `.env` file with `NGROK_AUTHTOKEN=<your-token>` (the repo's `.gitignore` already excludes it).
+2. **Start Jenkins with the ngrok profile**
+   ```bash
+   docker compose --profile ngrok up -d jenkins ngrok
+   ```
+   The ngrok container forwards traffic from GitHub to `pay-jenkins:8080` and exposes the local inspector UI on `http://localhost:4040`.
+3. **Configure GitHub Webhook**
+   - Open `http://localhost:4040` and copy the HTTPS forwarding URL (e.g. `https://abcd1234.ngrok.io`).
+   - Set the GitHub repository webhook URL to `https://abcd1234.ngrok.io/github-webhook/` and choose the "Just the push event" option.
+4. **Jenkins pipeline trigger**
+   - `Jenkinsfile` already contains `githubPush()` so every push arriving through ngrok will start the pipeline automatically.
+
+> **Security note**: never commit your ngrok authtoken. Use environment variables or a local `.env` file and keep it out of version control. When you are done, you can stop the tunnel with `docker compose down ngrok` or shut down the entire stack.

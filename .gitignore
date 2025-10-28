@@ -38,3 +38,8 @@ backend/ingest-service/bin/
 # Load testing artifacts
 loadtest/k6/*.json
 
+# Local environment secrets
+.env
+.env.*
+*.env.local
+
