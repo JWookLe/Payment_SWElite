@@ -5,7 +5,7 @@ rem ---------------------------------------------------------------------------
 rem  Dynamically detect the docker-compose network and expose Jenkins via ngrok
 rem ---------------------------------------------------------------------------
 
-set "NGROK_AUTHTOKEN=34M5vY8iv8P7NhWgPmpDOEelB9d_21gVDQm65VosxYPd69bY7"
+set "NGROK_AUTHTOKEN="
 set "NETWORK_NAME="
 
 for /f "usebackq tokens=*" %%N in (`docker network ls --format "{{.Name}}"`) do (
