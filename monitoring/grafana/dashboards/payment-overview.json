@@ -200,37 +200,6 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "CLOSED",
-                  "color": "green"
-                },
-                "1": {
-                  "text": "OPEN",
-                  "color": "red"
-                },
-                "2": {
-                  "text": "HALF_OPEN",
-                  "color": "yellow"
-                },
-                "3": {
-                  "text": "DISABLED",
-                  "color": "blue"
-                },
-                "4": {
-                  "text": "FORCED_OPEN",
-                  "color": "purple"
-                },
-                "5": {
-                  "text": "FORCED_HALF_OPEN",
-                  "color": "orange"
-                }
-              }
-            }
-          ],
           "color": {
             "mode": "thresholds"
           },
@@ -238,24 +207,50 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "rgba(128,128,128,0.35)",
                 "value": null
               },
               {
-                "color": "red",
-                "value": 1
+                "color": "#73BF69",
+                "value": 0.5
               }
             ]
           }
         },
         "overrides": []
       },
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "state=\"closed\"": "CLOSED",
+              "state=\"open\"": "OPEN",
+              "state=\"half_open\"": "HALF_OPEN",
+              "state=\"disabled\"": "DISABLED",
+              "state=\"forced_open\"": "FORCED_OPEN",
+              "state=\"forced_half_open\"": "FORCED_HALF_OPEN"
+            }
+          }
+        }
+      ],
       "options": {
-        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "name",
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
-        "orientation": "auto"
+        "orientation": "horizontal"
       },
       "gridPos": {
         "h": 4,
