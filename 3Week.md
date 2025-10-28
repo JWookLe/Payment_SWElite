@@ -14,12 +14,42 @@
 
 임계값을 튜닝했으므로 느린 호출(>5초) 또는 실패율 ≥50%일 때 Circuit Breaker가 빠르게 열리지만, 정상 트래픽은 수동 개입 없이 다시 닫힘.
 
-## 구현 세부사항
+## Circuit Breaker 구현 세부사항
 
 - `Resilience4jConfig` 추가 및 `PaymentEventPublisher` 업데이트: Kafka 발행을 `CircuitBreaker.decorateRunnable`로 감쌈. Circuit Breaker가 OPEN 상태일 때 Kafka 발행을 스킵하지만 outbox 레코드는 유지하여 나중에 재발행 가능.
 - `backend/ingest-service/src/main/resources/application.yml`에서 resilience 속성 설정 (실패율 임계값, 느린 호출 지속 시간, 최소 호출 수, 대기 시간, HALF_OPEN 호출 제한).
-- **Service Discovery 도입**: ackend/eureka-server 모듈을 추가해 Spring Cloud Netflix Eureka 서버를 분리 배포하고, ingest-service/consumer-worker를 클라이언트로 등록하도록 구성했습니다.
 - `CIRCUIT_BREAKER_GUIDE.md`에 상태 전이, 트러블슈팅 단계, Prometheus/Grafana 쿼리 문서화.
+- Circuit Breaker 상태를 Eureka Health Indicator로 노출하여 서비스 레지스트리에서 상태 추적 가능.
+
+## Service Discovery (Spring Cloud Eureka) 도입
+
+마이크로서비스 아키텍처를 위한 중앙 집중식 서비스 레지스트리 구현:
+
+### Eureka Server 구현
+- 새로운 모듈 `backend/eureka-server` 추가 (Spring Cloud Netflix Eureka Server 4.1.1)
+- `EurekaServerApplication`에 `@EnableEurekaServer` 적용
+- Self-preservation 비활성화 (개발 환경) 및 Health/Metrics 엔드포인트 노출
+- Docker Compose에서 포트 8761로 실행
+
+### Eureka Client 설정
+- **ingest-service**: Eureka에 자동 등록 (IP 기반 선호)
+  - `eureka.client.register-with-eureka: true`
+  - `eureka.client.fetch-registry: true`
+  - `eureka.instance.prefer-ip-address: true`
+- **consumer-worker**: 동일한 Eureka Client 설정으로 등록
+- docker-compose.yml에서 `EUREKA_SERVER_URL` 환경 변수로 Eureka 서버 주소 전달
+
+### 모니터링 및 관리
+- Eureka 대시보드: http://localhost:8761
+- 등록된 서비스: `/eureka/apps` API로 조회 가능
+- 서비스 상태: Healthy/Down 상태 실시간 추적
+- Prometheus 메트릭 노출 (Health Indicator와 함께 작동)
+
+### Phase 5 확장성
+- Server 1 (API Layer): ingest-service 등록 → Eureka 조회로 downstream 서비스 발견
+- Server 2 (Data Layer): consumer-worker 등록
+- Server 3 (Infra): eureka-server 중앙 운영 → 3개 서버 간 느슨한 결합
+- API Gateway 도입 시 Eureka를 통해 동적 라우팅 가능
 
 ## 자동화 및 테스트
 
@@ -32,19 +62,21 @@
 
 - `monitoring/grafana/dashboards/payment-overview.json` 업데이트: **Circuit Breaker State** 패널이 6개 타일 렌더링 (CLOSED, OPEN, HALF_OPEN, DISABLED, FORCED_OPEN, FORCED_HALF_OPEN). 각 타일은 단일 메트릭 표시. 활성 상태 = 값 `1` (녹색 배경), 비활성 상태 = 회색. *Grafana JSON 변경 후 provisioning이 새 레이아웃을 적용하도록 Grafana 재배포 필요 (`docker compose up -d grafana --force-recreate`).*
 - 느린 호출율, 실패율, 불허 메트릭이 Prometheus (`resilience4j_*` 시리즈)를 통해 노출되고 대시보드에 플롯됨을 검증.
+- Eureka 서버도 메트릭 노출하여 Prometheus에서 서비스 레지스트리 상태 추적 가능.
 
 ## 문서화
 
-- README 업데이트: Circuit Breaker 대시보드 사용법 및 ngrok + GitHub 웹훅 자동화 흐름 추가.
-- `3Week.md` 추가: 향후 작업이 명확한 주간 변경 로그를 유지하도록 함.
+- README 업데이트: Circuit Breaker와 Eureka Service Discovery 사용법 및 ngrok + GitHub 웹훅 자동화 흐름 추가.
+- `3Week.md` 업데이트: 주간 변경 로그로 Circuit Breaker와 Eureka 도입 상황 정리.
 
 ## 성능 및 안정성 개선 현황
 
 ### 달성한 목표
 - ✅ Circuit Breaker 프로덕션 수준 구현 (Resilience4j 2.1.0)
-- ✅ 자동 테스트 및 모니터링 통합
+- ✅ 자동 테스트 및 모니터링 통합 (9단계 시나리오)
 - ✅ Grafana 대시보드 6가지 상태 시각화
 - ✅ GitHub 웹훅 자동화 (ngrok)
+- ✅ Spring Cloud Eureka Service Discovery 도입
 - ✅ 200 RPS 안정적 처리 달성
 
 ### 현재 상태 확인 (로컬)
@@ -52,8 +84,14 @@
 # 서비스 상태 확인
 docker compose ps
 
+# Eureka 대시보드 (서비스 레지스트리)
+http://localhost:8761
+
 # Circuit Breaker 상태 조회
 curl http://localhost:8080/circuit-breaker/kafka-publisher
+
+# 등록된 서비스 확인
+curl http://localhost:8761/eureka/apps
 
 # Prometheus 메트릭 확인
 curl http://localhost:9090/api/v1/query?query=resilience4j_circuitbreaker_state
@@ -64,10 +102,16 @@ http://localhost:3000 (admin/admin)
 
 ## 다음 집중 영역
 
-### Phase 2: 기능 확장 (계획 중)
-- **Settlement / Reconciliation**: 정산 및 회계 검증 배치 로직 구현
-- **API Gateway**: Spring Cloud Gateway 도입 검토
-- **Service Mesh**: Istio vs Linkerd 비교 평가 및 롤아웃 준비
+### Phase 4: API Gateway & Load Balancing (계획 중)
+- **Spring Cloud Gateway**: 마이크로서비스 라우팅 및 필터링
+- **Eureka 기반 동적 라우팅**: 서비스 인스턴스 자동 발견
+- **Load Balancer (Ribbon/Spring Cloud LoadBalancer)**: 클라이언트 사이드 로드 밸런싱
+
+### Phase 5: Service Mesh (계획 중)
+- **Istio vs Linkerd**: 비교 평가 및 선택
+- **트래픽 관리**: Virtual Service, Destination Rule
+- **보안**: mTLS, Authorization Policy
+- **모니터링**: 분산 추적 (Jaeger), 메트릭 수집 (Kiali)
 
 ### Phase 3-5: 성능 확장 (ArchitecturePlan.md 참고)
 - Phase 3: 성능 최적화 (DB 인덱싱, Kafka 배치 처리)
@@ -76,9 +120,10 @@ http://localhost:3000 (admin/admin)
 
 ### 모니터링 강화
 - 알림 규칙 설정 (Alertmanager)
-- 느린 호출 비율 > 30% 시 알림
 - Circuit Breaker OPEN 상태 지속 시간 추적
-- Kafka 소비 Lag 모니터링
+- Eureka 서비스 등록/해제 모니터링
+- Kafka 소비 Lag 및 처리량 모니터링
+- 느린 호출 비율 > 30% 시 알림
 
 ## 주의사항
 
@@ -97,6 +142,11 @@ spring.kafka.producer:
   retries: 1                  # 실패 시 1회 재시도
 ```
 
+### Eureka Client 배포 팁
+- Eureka Server가 먼저 시작되어야 클라이언트가 등록 가능
+- docker-compose.yml에서 `depends_on` 사용하여 시작 순서 보장
+- Eureka Server 비정상: 클라이언트는 로컬 캐시된 레지스트리 사용 (자가 보호)
+
 ## 테스트 체크리스트
 
 ### 자동 테스트
@@ -106,7 +156,7 @@ bash scripts/test-circuit-breaker.sh
 # 예상 결과: 모든 단계 완료, 종료 코드 0
 ```
 
-### 수동 검증
+### 수동 검증 - Circuit Breaker
 - [ ] 서비스 시작: `docker compose up -d`
 - [ ] 초기 상태 확인: Circuit Breaker state = CLOSED
 - [ ] 정상 요청 5개 전송
@@ -116,14 +166,34 @@ bash scripts/test-circuit-breaker.sh
 - [ ] 복구 요청 전송 (1-2초 응답 시간)
 - [ ] 최종 상태 = CLOSED 확인
 
+### 수동 검증 - Eureka
+- [ ] Eureka 대시보드 접속: http://localhost:8761
+- [ ] ingest-service 등록 확인 (UP 상태)
+- [ ] consumer-worker 등록 확인 (UP 상태)
+- [ ] 서비스 내려보기 (`docker compose stop ingest-service`)
+- [ ] Eureka에서 DOWN 상태 변경 확인 (30초 이내)
+- [ ] 서비스 올려보기 (`docker compose start ingest-service`)
+- [ ] Eureka에서 UP 상태 복구 확인
+
 ### Jenkins 파이프라인 검증
 - [ ] GitHub push → Jenkins 자동 빌드 (ngrok 통해)
 - [ ] 모든 단계 통과: Frontend 빌드 → Backend 빌드 → Docker Compose 배포 → Health Check → Smoke Test → Circuit Breaker Test
 - [ ] Circuit Breaker Test 단계에서 script 정상 종료 (exit code 0)
+- [ ] Eureka Server 시작 확인 (docker compose logs pay-eureka)
 
 ## 참고 자료
 
 - 완전한 가이드: [CIRCUIT_BREAKER_GUIDE.md](CIRCUIT_BREAKER_GUIDE.md)
+- Eureka 설정: `backend/eureka-server/src/main/resources/application.yml`
 - 아키텍처 플랜: [ArchitecturePlan.md](ArchitecturePlan.md)
 - Circuit Breaker 모니터링: http://localhost:3000 (Grafana)
+- Eureka 대시보드: http://localhost:8761
 - Prometheus 쿼리: http://localhost:9090
+
+## 용어 정리
+
+- **Service Discovery**: 마이크로서비스가 서로의 위치(IP, 포트)를 자동 발견
+- **Eureka Server**: 서비스 등록소 (중앙 레지스트리)
+- **Eureka Client**: 서비스 자신을 Eureka에 등록하고 다른 서비스 조회
+- **Health Check**: 주기적 heartbeat로 서비스 상태 모니터링
+- **Self-Preservation**: Eureka Server가 인스턴스 손실 감지 시 보호 모드 (프로덕션)

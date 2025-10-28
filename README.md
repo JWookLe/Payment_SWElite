@@ -19,20 +19,22 @@
 - [x] Grafana에 Circuit Breaker 패널 추가 (4개 패널)
 - [x] Jenkins 파이프라인에 Circuit Breaker Test 단계 통합
 - [x] Circuit Breaker 완벽 가이드 문서화 (한국어)
+- [x] Spring Cloud Eureka 기반 Service Discovery 구현
 - [ ] API Gateway 도입 (Spring Cloud Gateway)
 - [ ] Service Mesh 검토 (Istio 또는 Linkerd)
 
 ## 서비스 구성 요소
 | 구성 | 설명 |
 | --- | --- |
+| **eureka-server** | Spring Cloud Eureka 기반 Service Discovery 서버. ingest-service와 consumer-worker의 서비스 등록/조회 담당 (포트 8761). |
 | **frontend** | React + Vite로 작성된 목업 스토어 UI. iPhone / Galaxy 등 주요 단말 결제 시나리오 제공. |
-| **ingest-service** | Spring Boot(Java 21) 기반 결제 API. 승인/정산/환불 처리와 outbox 이벤트 발행 담당. |
-| **consumer-worker** | Kafka Consumer. 결제 이벤트를 ledger 엔트리로 반영하고 DLQ 처리 로직 포함. |
+| **ingest-service** | Spring Boot(Java 21) 기반 결제 API. 승인/정산/환불 처리와 outbox 이벤트 발행 담당. Eureka에 자동 등록. |
+| **consumer-worker** | Kafka Consumer. 결제 이벤트를 ledger 엔트리로 반영하고 DLQ 처리 로직 포함. Eureka에 자동 등록. |
 | **mariadb** | paydb 스키마 운영. payment, ledger_entry, outbox_event, idem_response_cache 테이블 관리. |
 | **kafka & zookeeper** | 결제 이벤트 토픽(`payment.authorized`, `payment.captured`, `payment.refunded`)을 호스팅. |
 | **redis** | rate limit 카운터 및 결제 승인 응답 멱등 캐시 저장. |
 | **jenkins** | CI 서버. Gradle/NPM 빌드, Docker Compose 배포, k6 부하 테스트 자동화. |
-| **prometheus/grafana** | 애플리케이션 메트릭 수집 및 대시보드 제공. |
+| **prometheus/grafana** | 애플리케이션 메트릭 수집 및 대시보드 제공. Eureka 서버 메트릭도 포함. |
 
 ## 주요 데이터베이스 DDL
 `backend/ingest-service/src/main/resources/schema.sql` 참고
@@ -138,15 +140,64 @@ MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
    ```
 4. 종료: `docker compose down`
 
+## Service Discovery (Spring Cloud Eureka)
+
+Eureka는 마이크로서비스 아키텍처에서 서비스 등록/조회의 중앙 집중식 관리를 제공함.
+
+### 개요
+- **서버**: Eureka Server (포트 8761)
+  - Self-preservation 비활성화 (개발 환경)
+  - 헬스 체크 및 메트릭 노출 (Prometheus 호환)
+- **클라이언트**: ingest-service, consumer-worker
+  - 자동 서비스 등록 (IP 주소 기반)
+  - 레지스트리 주기적 갱신 (30초 기본값)
+  - 다운 시 자동 제거
+
+### 설정 및 접속
+```bash
+# Eureka 대시보드 (실시간 서비스 상태 모니터링)
+http://localhost:8761
+
+# 등록된 서비스 확인
+curl http://localhost:8761/eureka/apps
+
+# ingest-service 상세 정보
+curl http://localhost:8761/eureka/apps/ingest-service
+
+# consumer-worker 상세 정보
+curl http://localhost:8761/eureka/apps/consumer-worker
+```
+
+### 환경 변수
+```yaml
+EUREKA_SERVER_URL: http://eureka-server:8761/eureka/  # Eureka 서버 주소
+```
+
+### 주요 파일
+- `backend/eureka-server/src/main/java/com/example/eureka/EurekaServerApplication.java`: Eureka Server 구현
+- `backend/eureka-server/src/main/resources/application.yml`: Eureka 설정
+- `backend/ingest-service/src/main/resources/application.yml` (L106-114): Eureka Client 설정
+- `backend/consumer-worker/src/main/resources/application.yml` (L48-55): Eureka Client 설정
+
+### Phase 5 스케일링 활용
+Eureka는 3개 서버 구조에서 다음과 같이 활용됨:
+- Server 1 (API): ingest-service → Eureka에 등록
+- Server 2 (Data): consumer-worker → Eureka에 등록
+- Server 3 (Infra): eureka-server → 중앙 레지스트리 운영
+- API Gateway (추후): Eureka를 통해 서비스 동적 라우팅 가능
+
+---
+
 ## Circuit Breaker (Resilience4j)
 
-Kafka 발행 실패로부터 시스템을 보호하는 프로덕션 수준의 Circuit Breaker 구현임.
+Kafka 발행 실패로부터 시스템을 보호하는 프로덕션 수준의 Circuit Breaker 구현임. Eureka Service Discovery와 함께 작동하여 서비스 레질리언스 강화.
 
 ### 개요
 - **프레임워크**: Resilience4j 2.1.0
 - **보호 대상**: Kafka Publisher (ingest-service)
 - **상태 관리**: CLOSED → OPEN → HALF_OPEN → CLOSED
 - **자동 복구**: 의존성 회복 시 자동으로 서비스 복구
+- **Eureka 통합**: Circuit Breaker 상태를 Eureka Health Indicator로 노출하여 서비스 상태 모니터링 가능
 
 ### 모니터링
 ```
