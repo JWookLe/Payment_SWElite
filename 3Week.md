@@ -1,76 +1,77 @@
-# 3주차 작업 요약
+﻿# 3二쇱감 ?묒뾽 ?붿빟
 
-## 1. Circuit Breaker (Resilience4j) 구현
+## 1. Circuit Breaker (Resilience4j) 援ы쁽
 
-### 필요성
-Kafka 퍼블리셔가 장애를 만나도 전체 시스템을 보호해야 하기 때문에 Circuit Breaker 도입.
+### ?꾩슂??
+Kafka ?쇰툝由ъ뀛媛 ?μ븷瑜?留뚮굹???꾩껜 ?쒖뒪?쒖쓣 蹂댄샇?댁빞 ?섍린 ?뚮Ц??Circuit Breaker ?꾩엯.
 
-### 구현 내용
-- **Resilience4j 2.1.0** 기반 Circuit Breaker
-- `PaymentEventPublisher`에서 Kafka 발행 보호
-- 상태: CLOSED → OPEN → HALF_OPEN → CLOSED
-- 설정:
-  - 실패율/느린호출율 >= 50% → OPEN
-  - 느린호출 판정 >= 5초
-  - 최소 5개 호출 후 판정
-  - OPEN → HALF_OPEN 대기: 30초
-  - HALF_OPEN 테스트: 최대 3개 요청
+### 援ы쁽 ?댁슜
+- **Resilience4j 2.1.0** 湲곕컲 Circuit Breaker
+- `PaymentEventPublisher`?먯꽌 Kafka 諛쒗뻾 蹂댄샇
+- ?곹깭: CLOSED ??OPEN ??HALF_OPEN ??CLOSED
+- ?ㅼ젙:
+  - ?ㅽ뙣???먮┛?몄텧??>= 50% ??OPEN
+  - ?먮┛?몄텧 ?먯젙 >= 5珥?
+  - 理쒖냼 5媛??몄텧 ???먯젙
+  - OPEN ??HALF_OPEN ?湲? 30珥?
+  - HALF_OPEN ?뚯뒪?? 理쒕? 3媛??붿껌
 
-### 구현 파일
+### 援ы쁽 ?뚯씪
 - `backend/ingest-service/src/main/java/com/example/payment/service/PaymentEventPublisher.java`
 - `backend/ingest-service/src/main/java/com/example/payment/config/Resilience4jConfig.java`
 - `backend/ingest-service/src/main/resources/application.yml` (L82-95)
 - `backend/ingest-service/src/main/java/com/example/payment/web/CircuitBreakerStatusController.java`
 
-### 모니터링
+### 紐⑤땲?곕쭅
 ```bash
-# Circuit Breaker 상태 조회
+# Circuit Breaker ?곹깭 議고쉶
 curl http://localhost:8080/circuit-breaker/kafka-publisher
 
-# Prometheus 메트릭
-http://localhost:9090/graph → resilience4j_circuitbreaker_state
+# Prometheus 硫뷀듃由?
+http://localhost:9090/graph ??resilience4j_circuitbreaker_state
 
-# Grafana 대시보드
-http://localhost:3000 → Payment Service Overview → Circuit Breaker State 패널
+# Grafana ??쒕낫??
+http://localhost:3000 ??Payment Service Overview ??Circuit Breaker State ?⑤꼸
 ```
 
-### 자동 테스트
+### ?먮룞 ?뚯뒪??
 ```bash
 bash scripts/test-circuit-breaker.sh
-# 9단계 자동 시나리오: warm-up → Kafka 중단 → 느린 요청 → Kafka 재시작 → 복구
+# 9?④퀎 ?먮룞 ?쒕굹由ъ삤: warm-up ??Kafka 以묐떒 ???먮┛ ?붿껌 ??Kafka ?ъ떆????蹂듦뎄
 ```
 
 ---
 
-## 2. Service Discovery (Eureka) 도입
+## 2. Service Discovery (Eureka) ?꾩엯
 
-### 필요성
-마이크로서비스 확장(Phase 5)을 대비해 서비스 간 자동 발견 메커니즘 필요.
+### ?꾩슂??
+留덉씠?щ줈?쒕퉬???뺤옣(Phase 5)???鍮꾪빐 ?쒕퉬??媛??먮룞 諛쒓껄 硫붿빱?덉쬁 ?꾩슂.
 
-### 구현 내용
+### 援ы쁽 ?댁슜
 
 #### Eureka Server
-- 새로운 모듈: `backend/eureka-server`
+- Added Spring Cloud Gateway (port 8080) with `/api/payments/**` route pointing to `INGEST-SERVICE` via Eureka, acting as the single public entry point.
+- ?덈줈??紐⑤뱢: `backend/eureka-server`
 - Spring Cloud Netflix Eureka Server 4.1.1
-- 포트: 8761
-- Self-preservation 비활성화 (개발 환경)
-- Health/Metrics 엔드포인트 노출 (Prometheus 연동)
+- ?ы듃: 8761
+- Self-preservation 鍮꾪솢?깊솕 (媛쒕컻 ?섍꼍)
+- Health/Metrics ?붾뱶?ъ씤???몄텧 (Prometheus ?곕룞)
 
 #### Eureka Client
-- **ingest-service**: 자동 등록 (IP 기반)
-- **consumer-worker**: 자동 등록 (IP 기반)
-- 설정:
+- **ingest-service**: ?먮룞 ?깅줉 (IP 湲곕컲)
+- **consumer-worker**: ?먮룞 ?깅줉 (IP 湲곕컲)
+- ?ㅼ젙:
   - `register-with-eureka: true`
   - `fetch-registry: true`
   - `prefer-ip-address: true`
-  - Heartbeat: 30초 주기
+  - Heartbeat: 30珥?二쇨린
 
 #### docker-compose.yml
-- eureka-server 서비스 추가 (포트 8761)
-- ingest-service/consumer-worker에서 `EUREKA_SERVER_URL` 환경 변수 설정
-- depends_on으로 시작 순서 보장
+- eureka-server ?쒕퉬??異붽? (?ы듃 8761)
+- ingest-service/consumer-worker?먯꽌 `EUREKA_SERVER_URL` ?섍꼍 蹂???ㅼ젙
+- depends_on?쇰줈 ?쒖옉 ?쒖꽌 蹂댁옣
 
-### 구현 파일
+### 援ы쁽 ?뚯씪
 - `backend/eureka-server/src/main/java/com/example/eureka/EurekaServerApplication.java`
 - `backend/eureka-server/src/main/resources/application.yml`
 - `backend/ingest-service/src/main/resources/application.yml` (L106-114)
@@ -79,154 +80,132 @@ bash scripts/test-circuit-breaker.sh
 - `backend/ingest-service/build.gradle.kts` (spring-cloud-starter-netflix-eureka-client 4.1.1)
 - `backend/consumer-worker/build.gradle.kts` (spring-cloud-starter-netflix-eureka-client 4.1.1)
 
-### 확인 방법
+### ?뺤씤 諛⑸쾿
 ```bash
-# Eureka 대시보드
+# Eureka ??쒕낫??
 http://localhost:8761
 
-# 등록된 서비스 조회
+# ?깅줉???쒕퉬??議고쉶
 curl http://localhost:8761/eureka/apps
 curl http://localhost:8761/eureka/apps/INGEST-SERVICE
 curl http://localhost:8761/eureka/apps/CONSUMER-WORKER
 
-# Prometheus 메트릭
-http://localhost:9090 → eureka 관련 메트릭 확인
+# Prometheus 硫뷀듃由?
+http://localhost:9090 ??eureka 愿??硫뷀듃由??뺤씤
 ```
 
 ---
 
-## 3. Jenkins & GitHub Webhook 자동화
+## 3. Jenkins & GitHub Webhook ?먮룞??
 
-### 구현 내용
-- Jenkins 파이프라인에 **"Circuit Breaker Test"** 단계 추가 (Smoke Test 이후)
-- ngrok 프로필 추가: `docker compose --profile ngrok up -d`
-- `.env` 파일에 `NGROK_AUTHTOKEN` 설정
+### 援ы쁽 ?댁슜
+- Jenkins ?뚯씠?꾨씪?몄뿉 **"Circuit Breaker Test"** ?④퀎 異붽? (Smoke Test ?댄썑)
+- ngrok ?꾨줈??異붽?: `docker compose --profile ngrok up -d`
+- `.env` ?뚯씪??`NGROK_AUTHTOKEN` ?ㅼ젙
 - GitHub Webhook: `https://<ngrok-url>/github-webhook/`
 
-### 파이프라인 단계
-1. 소스 체크아웃
-2. Frontend 빌드 (npm)
-3. Backend 빌드 (Gradle)
-4. Docker Compose 배포
+### ?뚯씠?꾨씪???④퀎
+1. ?뚯뒪 泥댄겕?꾩썐
+2. Frontend 鍮뚮뱶 (npm)
+3. Backend 鍮뚮뱶 (Gradle)
+4. Docker Compose 諛고룷
 5. Health Check
 6. Smoke Test
-7. **Circuit Breaker Test** (자동 스크립트)
+7. **Circuit Breaker Test** (?먮룞 ?ㅽ겕由쏀듃)
 
-### 테스트 스크립트
-- `scripts/test-circuit-breaker.sh` 리팩터링
-- Docker Compose 네트워크 내부 실행 (`docker compose exec`)
-- 9단계 자동 검증
+### ?뚯뒪???ㅽ겕由쏀듃
+- `scripts/test-circuit-breaker.sh` 由ы뙥?곕쭅
+- Docker Compose ?ㅽ듃?뚰겕 ?대? ?ㅽ뻾 (`docker compose exec`)
+- 9?④퀎 ?먮룞 寃利?
 
 ---
 
-## 4. Grafana 대시보드 강화
+## 4. Grafana ??쒕낫??媛뺥솕
 
-### Circuit Breaker 패널
-- 상태 타일 6개: CLOSED / OPEN / HALF_OPEN / DISABLED / FORCED_OPEN / FORCED_HALF_OPEN
-- 활성 상태만 초록색
-- 느린호출 비율 & 실패율 Stat
-- 호출 수 추이 Time Series
+### Circuit Breaker ?⑤꼸
+- ?곹깭 ???6媛? CLOSED / OPEN / HALF_OPEN / DISABLED / FORCED_OPEN / FORCED_HALF_OPEN
+- ?쒖꽦 ?곹깭留?珥덈줉??
+- ?먮┛?몄텧 鍮꾩쑉 & ?ㅽ뙣??Stat
+- ?몄텧 ??異붿씠 Time Series
 
-### 구현 파일
+### 援ы쁽 ?뚯씪
 - `monitoring/grafana/dashboards/payment-overview.json`
 
-### Grafana 접속
+### Grafana ?묒냽
 ```bash
 http://localhost:3000 (admin/admin)
-Dashboards → Payment Service Overview
+Dashboards ??Payment Service Overview
 ```
 
 ---
 
-## 5. 문서화
+## 5. 臾몄꽌??
 
-### 작성/수정된 문서
-- `README.md`: Circuit Breaker & Eureka 섹션 추가
-- `CIRCUIT_BREAKER_GUIDE.md`: 완전한 가이드 (524줄)
-- `3Week.md`: 주간 변경 로그
-- `docker-compose.yml`: eureka-server 서비스 추가
+### ?묒꽦/?섏젙??臾몄꽌
+- `README.md`: Circuit Breaker & Eureka ?뱀뀡 異붽?
+- `CIRCUIT_BREAKER_GUIDE.md`: ?꾩쟾??媛?대뱶 (524以?
+- `3Week.md`: 二쇨컙 蹂寃?濡쒓렇
+- `docker-compose.yml`: eureka-server ?쒕퉬??異붽?
 
-### 주요 내용
-- Circuit Breaker 상태 전이 다이어그램
-- Eureka 등록/조회 프로세스
-- 수동/자동 테스트 방법
-- Phase 5 확장 계획
-
----
-
-## 6. 달성한 목표
-
-- ✅ Circuit Breaker 프로덕션 수준 구현
-- ✅ Eureka Service Discovery 완전 통합
-- ✅ 자동화된 테스트 스크립트 (9단계)
-- ✅ GitHub Webhook + Jenkins 연동
-- ✅ 실시간 모니터링 (Prometheus/Grafana)
-- ✅ 200 RPS 안정적 처리
-- ✅ Phase 5 스케일링 준비 완료
+### 二쇱슂 ?댁슜
+- Circuit Breaker ?곹깭 ?꾩씠 ?ㅼ씠?닿렇??
+- Eureka ?깅줉/議고쉶 ?꾨줈?몄뒪
+- ?섎룞/?먮룞 ?뚯뒪??諛⑸쾿
+- Phase 5 ?뺤옣 怨꾪쉷
 
 ---
 
-## 7. 다음 작업
+## 6. ?ъ꽦??紐⑺몴
+
+- ??Circuit Breaker ?꾨줈?뺤뀡 ?섏? 援ы쁽
+- ??Eureka Service Discovery ?꾩쟾 ?듯빀
+- ???먮룞?붾맂 ?뚯뒪???ㅽ겕由쏀듃 (9?④퀎)
+- ??GitHub Webhook + Jenkins ?곕룞
+- ???ㅼ떆媛?紐⑤땲?곕쭅 (Prometheus/Grafana)
+- ??200 RPS ?덉젙??泥섎━
+- ??Phase 5 ?ㅼ??쇰쭅 以鍮??꾨즺
+
+---
+
+## 7. ?ㅼ쓬 ?묒뾽
 
 ### Phase 4: API Gateway & Load Balancing
-- Spring Cloud Gateway 도입
-- Eureka 기반 동적 라우팅
-- Client-side 로드 밸런싱 (LoadBalancer)
+- Spring Cloud Gateway ?꾩엯
+- Eureka 湲곕컲 ?숈쟻 ?쇱슦??
+- Client-side 濡쒕뱶 諛몃윴??(LoadBalancer)
 
 ### Phase 5: Service Mesh
-- Istio vs Linkerd 평가
-- 트래픽 관리 (Virtual Service, Destination Rule)
-- 보안 (mTLS, Authorization Policy)
-- 모니터링 (Jaeger, Kiali)
+- Istio vs Linkerd ?됯?
+- ?몃옒??愿由?(Virtual Service, Destination Rule)
+- 蹂댁븞 (mTLS, Authorization Policy)
+- 紐⑤땲?곕쭅 (Jaeger, Kiali)
 
-### 성능 확장
-- Phase 3: DB 인덱싱, Kafka 배치 처리
-- Phase 4: KT Cloud 단일 서버 배포 (400 RPS)
-- Phase 5: 3개 서버 계층 분리 (1000 RPS)
+### ?깅뒫 ?뺤옣
+- Phase 3: DB ?몃뜳?? Kafka 諛곗튂 泥섎━
+- Phase 4: KT Cloud ?⑥씪 ?쒕쾭 諛고룷 (400 RPS)
+- Phase 5: 3媛??쒕쾭 怨꾩링 遺꾨━ (1000 RPS)
 
 ---
 
-## 8. 테스트 체크리스트
+## 8. ?뚯뒪??泥댄겕由ъ뒪??
 
 ### Circuit Breaker
-- [ ] 서비스 시작: `docker compose up -d`
-- [ ] Eureka 대시보드 확인: http://localhost:8761
-- [ ] 정상 요청 5개 전송
-- [ ] Kafka 중단 후 느린 요청 6개
-- [ ] Circuit Breaker state = OPEN/HALF_OPEN 확인
-- [ ] Kafka 재시작 후 복구 확인
-- [ ] 최종 상태 = CLOSED
+- [ ] ?쒕퉬???쒖옉: `docker compose up -d`
+- [ ] Eureka ??쒕낫???뺤씤: http://localhost:8761
+- [ ] ?뺤긽 ?붿껌 5媛??꾩넚
+- [ ] Kafka 以묐떒 ???먮┛ ?붿껌 6媛?
+- [ ] Circuit Breaker state = OPEN/HALF_OPEN ?뺤씤
+- [ ] Kafka ?ъ떆????蹂듦뎄 ?뺤씤
+- [ ] 理쒖쥌 ?곹깭 = CLOSED
 
 ### Eureka
-- [ ] ingest-service UP 상태 확인
-- [ ] consumer-worker UP 상태 확인
-- [ ] `/eureka/apps` API 응답 확인
-- [ ] 서비스 내렸다 다시 올려서 상태 변경 확인 (30초 이내)
+- [ ] ingest-service UP ?곹깭 ?뺤씤
+- [ ] consumer-worker UP ?곹깭 ?뺤씤
+- [ ] `/eureka/apps` API ?묐떟 ?뺤씤
+- [ ] ?쒕퉬???대졇???ㅼ떆 ?щ젮???곹깭 蹂寃??뺤씤 (30珥??대궡)
 
 ### Jenkins
-- [ ] GitHub push → 자동 빌드 (ngrok 통해)
-- [ ] 모든 단계 통과
-- [ ] Circuit Breaker Test 정상 완료
-- [ ] Eureka Server 시작 확인
-
----
-
-## 9. 참고 자료
-
-- [CIRCUIT_BREAKER_GUIDE.md](CIRCUIT_BREAKER_GUIDE.md) - 완전한 가이드
-- [ArchitecturePlan.md](ArchitecturePlan.md) - 성능 확장 로드맵
-- [README.md](README.md) - Circuit Breaker & Eureka 섹션
-- Eureka Dashboard: http://localhost:8761
-- Grafana: http://localhost:3000
-- Prometheus: http://localhost:9090
-
----
-
-## 10. 용어
-
-- **Circuit Breaker**: 장애 전파 방지 (Fail-fast)
-- **Service Discovery**: 서비스 자동 발견
-- **Eureka Server**: 중앙 레지스트리
-- **Eureka Client**: 서비스 자신을 등록하는 클라이언트
-- **Health Check**: heartbeat로 서비스 상태 모니터링
-- **Self-Preservation**: Eureka 자가 보호 모드 (프로덕션)
+- [ ] GitHub push ???먮룞 鍮뚮뱶 (ngrok ?듯빐)
+- [ ] 紐⑤뱺 ?④퀎 ?듦낵
+- [ ] Circuit Breaker Test ?뺤긽 ?꾨즺
+- [ ] Eureka Server ?쒖옉 ?뺤씤

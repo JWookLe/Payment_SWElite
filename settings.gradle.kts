@@ -13,4 +13,5 @@ rootProject.name = "payment-platform"
 include(":backend")
 include(":backend:ingest-service")
 include(":backend:consumer-worker")
+include(":backend:gateway")
 include(":backend:eureka-server")
