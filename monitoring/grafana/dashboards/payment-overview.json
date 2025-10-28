@@ -193,9 +193,28 @@
       },
       "targets": [
         {
-          "refId": "A",
-          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\"}",
-          "legendFormat": "State"
+          "refId": "CLOSED",
+          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"closed\"}"
+        },
+        {
+          "refId": "OPEN",
+          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"open\"}"
+        },
+        {
+          "refId": "HALF_OPEN",
+          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"half_open\"}"
+        },
+        {
+          "refId": "DISABLED",
+          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"disabled\"}"
+        },
+        {
+          "refId": "FORCED_OPEN",
+          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"forced_open\"}"
+        },
+        {
+          "refId": "FORCED_HALF_OPEN",
+          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"forced_half_open\"}"
         }
       ],
       "fieldConfig": {
@@ -217,27 +236,82 @@
             ]
           }
         },
-        "overrides": []
-      },
-      "transformations": [
-        {
-          "id": "labelsToFields",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "renameByName": {
-              "state=\"closed\"": "CLOSED",
-              "state=\"open\"": "OPEN",
-              "state=\"half_open\"": "HALF_OPEN",
-              "state=\"disabled\"": "DISABLED",
-              "state=\"forced_open\"": "FORCED_OPEN",
-              "state=\"forced_half_open\"": "FORCED_HALF_OPEN"
-            }
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRefId",
+              "options": "CLOSED"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CLOSED"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRefId",
+              "options": "OPEN"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OPEN"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRefId",
+              "options": "HALF_OPEN"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HALF_OPEN"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRefId",
+              "options": "DISABLED"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "DISABLED"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRefId",
+              "options": "FORCED_OPEN"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "FORCED_OPEN"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRefId",
+              "options": "FORCED_HALF_OPEN"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "FORCED_HALF_OPEN"
+              }
+            ]
           }
-        }
-      ],
+        ]
+      },
+      "transformations": [],
       "options": {
         "reduceOptions": {
           "calcs": [
@@ -246,7 +320,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "name",
+        "textMode": "auto",
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
