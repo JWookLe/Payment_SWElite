@@ -1,31 +1,38 @@
-﻿# 3주차 진행 요약
+# Week 3 Summary
 
-## 개요
-- Kafka 퍼블리셔를 보호하기 위한 Resilience4j 기반 Circuit Breaker를 도입하고 Jenkins 파이프라인에도 자동 검증 절차를 편입했습니다.
-- 관측성을 높이기 위해 Grafana 대시보드를 보강하고, 상태 패널이 즉시 식별 가능하도록 JSON 정의를 수정했습니다.
-- 관련 개발/운영 문서를 정리해 팀원 누구나 회로 차단기 동작과 테스트 방법을 빠르게 파악할 수 있도록 했습니다.
+## Why Circuit Breaker
+The kafka publisher inside `backend/ingest-service` must survive downstream outages. A circuit breaker wraps the publishing call and moves through these six states:
 
-## 구현 상세
-- **Circuit Breaker 적용**: ackend/ingest-service 모듈에서 PaymentEventPublisher에 Resilience4j Circuit Breaker를 삽입하고, 실패/지연 조건을 감지하도록 구성했습니다. (CIRCUIT_BREAKER_GUIDE.md 참고)
-- **환경 설정**: pplication.yml 및 Resilience4jConfig에 임계치, 대기 시간, HALF_OPEN 허용 호출 수 등을 정의해 장애 발생 시 빠른 차단과 자동 복구가 가능하게 했습니다.
-- **에러 처리 플로우**: Circuit Breaker가 OPEN 상태일 때 Outbox 이벤트는 DB에 남겨 재시도하며, NotPermitted 예외를 로깅하여 운영자가 즉시 상태를 확인할 수 있도록 했습니다.
+| State | Trigger | Behaviour |
+| --- | --- | --- |
+| **CLOSED** | Normal operation | all calls pass through. Metrics record success/failure counts. |
+| **OPEN** | Failure rate or slow-call rate exceeds the configured threshold | new calls fail fast with `CallNotPermittedException`, protecting Kafka and the application thread pool. |
+| **HALF_OPEN** | Wait duration in OPEN expires | only a small number of trial calls are allowed; success moves the breaker to CLOSED, failure moves it back to OPEN. |
+| **DISABLED** | Breaker monitoring is turned off (rarely used in prod) | traffic flows but metrics keep accumulating. |
+| **FORCED_OPEN / FORCED_HALF_OPEN** | Operator overrides | used to investigate or to keep the breaker open while debugging. |
 
-## 자동화 & 테스트
-- **자동 시나리오 스크립트**: scripts/test-circuit-breaker.sh에서 Kafka 중단 → 느린 요청 → 재기동 → 복구 요청까지 9단계 시나리오를 자동 실행하며, 내부 curl 호출도 Docker Compose 네트워크에서 수행하도록 개선했습니다.
-- **Jenkins 파이프라인 연동**: Jenkinsfile에 “Circuit Breaker Test” 스테이지를 추가해, 빌드 시마다 스크립트가 실행되고 결과에 따라 빌드 성공/실패가 결정되도록 했습니다.
-- **ngrok 연동 자동화**: docker-compose.yml에 
-grok 서비스를 프로필로 추가하고 .env에서 토큰을 읽어, GitHub Webhook → Jenkins 파이프라인 트리거가 자동으로 이어지도록 구성했습니다.
+We tuned the thresholds so that slow calls (>5s) or failure rate ≥50% open the breaker quickly, but healthy traffic closes it again without manual intervention.
 
-## 관측성 보강
-- **Grafana 패널**: monitoring/grafana/dashboards/payment-overview.json을 수정해 Circuit Breaker State 패널이 CLOSED/OPEN/HALF_OPEN/DISABLED/FORCED_OPEN/FORCED_HALF_OPEN 여섯 상태를 각각의 타일로 보여 주고, 활성 상태만 초록색으로 표시되도록 했습니다.
-- **지표 점검**: Failure Rate, Slow Call Rate 등 관련 패널이 Resilience4j 메트릭(Prometheus)을 정확하게 노출하는지 확인했습니다.
+## Implementation Details
+- Added `Resilience4jConfig` and updated `PaymentEventPublisher` so that Kafka publishing is wrapped with `CircuitBreaker.decorateRunnable`. When the breaker is OPEN we skip Kafka but retain outbox records for later replay.
+- Configured resilience properties in `backend/ingest-service/src/main/resources/application.yml` (failure-rate threshold, slow-call duration, minimum-number-of-calls, wait duration, half-open call limit).
+- Documented the behaviour in `CIRCUIT_BREAKER_GUIDE.md` with state transitions, troubleshooting steps, and Prometheus/Grafana queries.
 
-## 문서화
-- CIRCUIT_BREAKER_GUIDE.md를 최신 구현 내용에 맞춰 보강하고, 회로 차단기 상태 및 테스트 절차를 상세 기록했습니다.
-- README에 Grafana 패널 사용법과 ngrok 기반 Webhook 자동화를 정리했습니다.
-- 3주차 작업을 별도 문서로 분리해 히스토리를 추적하기 쉽게 만들었습니다.
+## Automation & Testing
+- Refactored `scripts/test-circuit-breaker.sh` to run *inside* the Docker Compose network (`docker compose exec`) so health checks and API calls always target `ingest-service` even when Jenkins is remote.
+- Script steps: warm-up (healthy traffic) → stop Kafka → send slow/failed requests → restart Kafka → send recovery calls. The script exits non‑zero if any phase behaves unexpectedly.
+- Jenkinsfile gained a **“Circuit Breaker Test”** stage that runs the script after smoke tests. Builds now fail if the breaker does not trip and recover as expected.
+- `docker-compose.yml` exposes an optional `ngrok` service (profile) which reads `NGROK_AUTHTOKEN` from `.env`. This allows GitHub Webhooks to reach local Jenkins automatically.
 
-## 남은 과제
-- Settlement/Reconciliation 백엔드 로직 설계 및 구현
-- API Gateway(SCG) 도입 여부 결정 및 PoC
-- Istio 또는 Linkerd 기반 Service Mesh 도입 검토
+## Observability Enhancements
+- Updated `monitoring/grafana/dashboards/payment-overview.json` so the **Circuit Breaker State** panel renders six tiles (CLOSED, OPEN, HALF_OPEN, DISABLED, FORCED_OPEN, FORCED_HALF_OPEN). Each tile shows a single metric; active state = value `1` with a green background, inactive states stay grey. *Remember to redeploy Grafana (`docker compose up -d grafana --force-recreate`) after changing the JSON so the provisioning pick ups the new layout.*
+- Verified slow-call rate, failure rate, and not-permitted metrics are exposed through Prometheus (`resilience4j_*` series) and plotted on the dashboard.
+
+## Documentation
+- Updated README with notes on using the Circuit Breaker dashboard and the ngrok + GitHub Webhook automation flow.
+- Added this `3Week.md` so future work retains a clear weekly changelog.
+
+## Next Focus Areas
+- Settlement / Reconciliation batch logic for financial postings.
+- Evaluate Spring Cloud Gateway as API gateway front door.
+- Compare Istio vs Linkerd for eventual service-mesh rollout.
