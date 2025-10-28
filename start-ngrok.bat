@@ -19,6 +19,11 @@ for /f "usebackq tokens=*" %%N in (`docker network ls --format "{{.Name}}"`) do 
 :FOUND_NETWORK
 if "%NETWORK_NAME%"=="" (
     echo [ERROR] Could not find docker-compose network that matches payment[-_]...default 1>&2
+    echo.
+    echo Available Docker networks:
+    docker network ls
+    echo.
+    pause
     exit /b 1
 )
 
