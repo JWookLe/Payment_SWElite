@@ -246,6 +246,60 @@ bash scripts/test-circuit-breaker.sh
 
 ---
 
+## Service Discovery (Eureka)
+
+마이크로서비스 아키텍처에서 서비스들이 자동으로 서로를 찾을 수 있도록 하는 중앙 레지스트리.
+
+### 개요
+- **서버**: Eureka Server (포트 8761)
+  - Spring Cloud Netflix Eureka Server 4.1.1
+  - 서비스 등록/조회 담당
+  - Self-preservation 비활성화 (개발 환경)
+
+- **클라이언트**: ingest-service, consumer-worker
+  - 자동 서비스 등록 (IP 기반)
+  - 30초 주기 heartbeat
+  - 다운 시 자동 제거
+
+### 접속 및 확인
+```bash
+# Eureka 대시보드 (실시간 서비스 상태)
+http://localhost:8761
+
+# 등록된 전체 서비스 조회
+curl http://localhost:8761/eureka/apps
+
+# ingest-service 상세 정보
+curl http://localhost:8761/eureka/apps/INGEST-SERVICE
+
+# consumer-worker 상세 정보
+curl http://localhost:8761/eureka/apps/CONSUMER-WORKER
+```
+
+### 설정
+```yaml
+# docker-compose.yml 환경 변수
+EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+
+# application.yml (클라이언트 설정)
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+    register-with-eureka: true    # 자신을 레지스트리에 등록
+    fetch-registry: true           # 레지스트리 주기적 갱신
+  instance:
+    prefer-ip-address: true        # IP 주소 기반 등록
+```
+
+### Phase 5 스케일링 활용
+- **Server 1 (API)**: ingest-service 등록 → Eureka 조회로 downstream 발견
+- **Server 2 (Data)**: consumer-worker 등록
+- **Server 3 (Infra)**: eureka-server 중앙 운영
+- **API Gateway (추후)**: Eureka 기반 동적 라우팅 가능
+
+---
+
 ## Jenkins 파이프라인 개요
 1. 소스 체크아웃
 2. 프런트엔드 빌드 (npm install + vite build)
