@@ -20,21 +20,22 @@
 - [x] Jenkins 파이프라인에 Circuit Breaker Test 단계 통합
 - [x] Circuit Breaker 완벽 가이드 문서화 (한국어)
 - [x] Spring Cloud Eureka 기반 Service Discovery 구현
-- [ ] API Gateway 도입 (Spring Cloud Gateway)
+- [x] API Gateway 도입 (Spring Cloud Gateway) - Eureka 기반 동적 라우팅
 - [ ] Service Mesh 검토 (Istio 또는 Linkerd)
 
 ## 서비스 구성 요소
 | 구성 | 설명 |
 | --- | --- |
-| **eureka-server** | Spring Cloud Eureka 기반 Service Discovery 서버. ingest-service와 consumer-worker의 서비스 등록/조회 담당 (포트 8761). |
-| **frontend** | React + Vite로 작성된 목업 스토어 UI. iPhone / Galaxy 등 주요 단말 결제 시나리오 제공. |
-| **ingest-service** | Spring Boot(Java 21) 기반 결제 API. 승인/정산/환불 처리와 outbox 이벤트 발행 담당. Eureka에 자동 등록. |
+| **api-gateway** | Spring Cloud Gateway 기반 API Gateway. Eureka를 통해 ingest-service 동적 라우팅. 모든 클라이언트 요청의 진입점 (포트 8080). |
+| **eureka-server** | Spring Cloud Eureka 기반 Service Discovery 서버. ingest-service, consumer-worker, api-gateway의 서비스 등록/조회 담당 (포트 8761). |
+| **frontend** | React + Vite로 작성된 목업 스토어 UI. iPhone / Galaxy 등 주요 단말 결제 시나리오 제공. Gateway를 통해 API 호출. |
+| **ingest-service** | Spring Boot(Java 21) 기반 결제 API. 승인/정산/환불 처리와 outbox 이벤트 발행 담당. Eureka에 자동 등록. Gateway에 의해 라우팅됨. |
 | **consumer-worker** | Kafka Consumer. 결제 이벤트를 ledger 엔트리로 반영하고 DLQ 처리 로직 포함. Eureka에 자동 등록. |
 | **mariadb** | paydb 스키마 운영. payment, ledger_entry, outbox_event, idem_response_cache 테이블 관리. |
 | **kafka & zookeeper** | 결제 이벤트 토픽(`payment.authorized`, `payment.captured`, `payment.refunded`)을 호스팅. |
 | **redis** | rate limit 카운터 및 결제 승인 응답 멱등 캐시 저장. |
 | **jenkins** | CI 서버. Gradle/NPM 빌드, Docker Compose 배포, k6 부하 테스트 자동화. |
-| **prometheus/grafana** | 애플리케이션 메트릭 수집 및 대시보드 제공. Eureka 서버 메트릭도 포함. |
+| **prometheus/grafana** | 애플리케이션 메트릭 수집 및 대시보드 제공. Eureka 서버 및 Gateway 메트릭도 포함. |
 
 ## 주요 데이터베이스 DDL
 `backend/ingest-service/src/main/resources/schema.sql` 참고
@@ -46,9 +47,9 @@
 ## REST API 요약
 | Method | Path | 설명 |
 | --- | --- | --- |
-| `POST` | `/payments/authorize` | 멱등 키 기반 결제 승인 처리 및 outbox 기록 |
-| `POST` | `/payments/capture/{paymentId}` | 승인된 결제 정산 처리, ledger 기록, 이벤트 발행 |
-| `POST` | `/payments/refund/{paymentId}` | 정산 완료 결제 환불 처리, ledger 기록, 이벤트 발행 |
+| `POST` | `/api/payments/authorize` | 멱등 키 기반 결제 승인 처리 및 outbox 기록 (Gateway를 통해 ingest-service로 라우팅) |
+| `POST` | `/api/payments/capture/{paymentId}` | 승인된 결제 정산 처리, ledger 기록, 이벤트 발행 (Gateway를 통해 라우팅) |
+| `POST` | `/api/payments/refund/{paymentId}` | 정산 완료 결제 환불 처리, ledger 기록, 이벤트 발행 (Gateway를 통해 라우팅) |
 
 ## Kafka 토픽
 - `payment.authorized`
@@ -125,11 +126,11 @@ MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
 
 ## 로컬 실행 방법
 1. `docker compose up --build`
-   - MariaDB, Redis, Kafka, ingest-service, consumer-worker, frontend, Prometheus, Grafana를 기동함
+   - MariaDB, Redis, Kafka, eureka-server, api-gateway, ingest-service, consumer-worker, frontend, Prometheus, Grafana를 기동함
 2. 프런트엔드 접속: http://localhost:5173
-3. API 확인 예시:
+3. API 확인 예시 (Gateway를 통한 호출):
    ```bash
-   curl -X POST http://localhost:8080/payments/authorize \
+   curl -X POST http://localhost:8080/api/payments/authorize \
      -H 'Content-Type: application/json' \
      -d '{
        "merchantId":"M123",
@@ -296,7 +297,80 @@ eureka:
 - **Server 1 (API)**: ingest-service 등록 → Eureka 조회로 downstream 발견
 - **Server 2 (Data)**: consumer-worker 등록
 - **Server 3 (Infra)**: eureka-server 중앙 운영
-- **API Gateway (추후)**: Eureka 기반 동적 라우팅 가능
+- **API Gateway**: Eureka 기반 동적 라우팅 가능
+
+---
+
+## API Gateway (Spring Cloud Gateway)
+
+모든 클라이언트 요청을 단일 진입점으로 관리하고, Eureka를 통해 백엔드 서비스로 동적 라우팅함.
+
+### 개요
+- **프레임워크**: Spring Cloud Gateway 4.1.1
+- **라우팅**: Eureka 기반 동적 라우팅
+- **경로 패턴**: `/api/payments/**` → `lb://INGEST-SERVICE`
+- **포트**: 8080 (기본값)
+- **필터**: StripPrefix=1 (경로에서 `/api` 제거 후 인게스트 서비스로 전달)
+
+### 설정
+```yaml
+# application.yml
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true              # Eureka 기반 자동 라우팅 활성화
+          lower-case-service-id: true
+      routes:
+        - id: ingest-service
+          uri: lb://INGEST-SERVICE  # 로드 밸런싱 활성화
+          predicates:
+            - Path=/api/payments/**
+          filters:
+            - StripPrefix=1          # /api 경로 제거
+```
+
+### 요청 흐름
+```
+Client 요청: POST /api/payments/authorize
+     ↓
+API Gateway (포트 8080, 경로 기반 라우팅)
+     ↓
+StripPrefix 필터 (경로에서 /api 제거)
+     ↓
+Eureka 조회 (INGEST-SERVICE 발견)
+     ↓
+ingest-service (포트 8080 내부, /payments/authorize 매핑)
+```
+
+### 접속 및 확인
+```bash
+# Gateway 헬스 체크
+curl http://localhost:8080/actuator/health
+
+# Gateway 메트릭 확인
+curl http://localhost:8080/actuator/prometheus
+
+# 클라이언트 API 호출 (Gateway를 통함)
+curl -X POST http://localhost:8080/api/payments/authorize \
+  -H 'Content-Type: application/json' \
+  -d '{"merchantId":"M123","amount":10000,"currency":"KRW","idempotencyKey":"abc-123"}'
+```
+
+### 주요 파일
+- `backend/gateway/src/main/java/com/example/gateway/GatewayApplication.java`: Gateway 애플리케이션
+- `backend/gateway/src/main/resources/application.yml`: 라우팅 및 Eureka 설정
+- `backend/gateway/build.gradle.kts`: 의존성 관리
+
+### 모니터링
+- **Prometheus**: http://localhost:9090 → `gateway_requests_total` 등 메트릭 수집
+- **Grafana**: http://localhost:3000 → "Payment Service Overview" 대시보드에서 Gateway 요청 현황 확인
+
+### Phase 5 확장 시 활용
+- **다중 인스턴스**: `lb://INGEST-SERVICE`로 여러 ingest-service 인스턴스에 자동 분산
+- **라우트 추가**: 다른 마이크로서비스 추가 시 routes 섹션에 새로운 경로 규칙 추가 가능
+- **필터 확장**: rate limiting, 인증, 요청 변환 등 필터 추가 가능
 
 ---
 
