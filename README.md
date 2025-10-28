@@ -380,25 +380,24 @@ docker exec pay-kafka kafka-console-consumer \
 - 추가 대시보드/알람 구성 및 운영 안정화
 - 1,000 TPS 목표를 위한 추가 스케일링 및 최적화
 
-## GitHub Webhook Automation
+## GitHub 웹훅 자동화
 
-### Overview
-Expose the local Jenkins instance so that GitHub can reach the /github-webhook/ endpoint and trigger pipelines on every push.
+### 개요
+로컬 Jenkins 인스턴스를 외부에 노출하여 GitHub에서 /github-webhook/ 엔드포인트에 접근할 수 있도록 하고, 모든 푸시에서 파이프라인을 트리거함.
 
-### Steps
-1. **Provide your ngrok token**
-   - PowerShell: `setx NGROK_AUTHTOKEN "<your-token>"`
-   - CMD (current session): `set NGROK_AUTHTOKEN=<your-token>`
-   - Or create a non-committed `.env` file with `NGROK_AUTHTOKEN=<your-token>` (the repo's `.gitignore` already excludes it).
-2. **Start Jenkins with the ngrok profile**
+### 단계별 설정
+1. **ngrok 토큰 설정**
+   - 프로젝트 루트에 `.env` 파일 생성: `NGROK_AUTHTOKEN=<your-token>`
+   - 저장소의 `.gitignore`에 이미 `.env`가 제외되어 있으므로 안전함
+2. **ngrok 프로필로 Jenkins 시작**
    ```bash
    docker compose --profile ngrok up -d jenkins ngrok
    ```
-   The ngrok container forwards traffic from GitHub to `pay-jenkins:8080` and exposes the local inspector UI on `http://localhost:4040`.
-3. **Configure GitHub Webhook**
-   - Open `http://localhost:4040` and copy the HTTPS forwarding URL (e.g. `https://abcd1234.ngrok.io`).
-   - Set the GitHub repository webhook URL to `https://abcd1234.ngrok.io/github-webhook/` and choose the "Just the push event" option.
-4. **Jenkins pipeline trigger**
-   - `Jenkinsfile` already contains `githubPush()` so every push arriving through ngrok will start the pipeline automatically.
+   ngrok 컨테이너는 GitHub의 트래픽을 `pay-jenkins:8080`으로 전달하고 로컬 검사기 UI를 `http://localhost:4040`에 노출함.
+3. **GitHub 웹훅 설정**
+   - `http://localhost:4040` 열고 HTTPS 포워딩 URL 복사 (예: `https://abcd1234.ngrok.io`)
+   - GitHub 저장소 웹훅 URL을 `https://abcd1234.ngrok.io/github-webhook/`로 설정하고 "Push 이벤트만" 옵션 선택
+4. **Jenkins 파이프라인 트리거**
+   - `Jenkinsfile`에 이미 `githubPush()` 포함되어 있으므로 ngrok을 통해 들어오는 모든 푸시가 자동으로 파이프라인 시작함.
 
-> **Security note**: never commit your ngrok authtoken. Use environment variables or a local `.env` file and keep it out of version control. When you are done, you can stop the tunnel with `docker compose down ngrok` or shut down the entire stack.
+> **보안 주의**: `.env` 파일은 `.gitignore`에 이미 제외되어 있으므로 안전함. 작업 완료 후 `docker compose down ngrok`으로 ngrok 컨테이너 종료 또는 전체 스택 중단.
