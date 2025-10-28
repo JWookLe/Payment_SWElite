@@ -11,6 +11,7 @@ dependencies {
     implementation("org.springframework.kafka:spring-kafka")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("org.springframework.cloud:spring-cloud-starter-netflix-eureka-client:4.1.1")
 
     runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
 

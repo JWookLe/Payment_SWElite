@@ -12,6 +12,7 @@ dependencies {
     implementation("org.springframework.kafka:spring-kafka")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("org.springframework.cloud:spring-cloud-starter-netflix-eureka-client:4.1.1")
 
     // Resilience4j for Circuit Breaker
     implementation("io.github.resilience4j:resilience4j-spring-boot3:2.1.0")

@@ -53,6 +53,17 @@ services:
     ports:
       - "9092:9092"
 
+  eureka-server:
+    build:
+      context: .
+      dockerfile: backend/eureka-server/Dockerfile
+    image: eureka-server:local
+    container_name: pay-eureka
+    environment:
+      SERVER_PORT: 8761
+    ports:
+      - "8761:8761"
+
   ingest-service:
     build:
       context: .
@@ -66,7 +77,8 @@ services:
       PAYMENT_DB_PASSWORD: paypass
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       REDIS_HOST: redis
-      # Phase 1: 200 RPS 목표 (분당 12,000건 + 25% 여유분)
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      # Rate limit capacity defaults (Phase 1 baseline)
       APP_RATE_LIMIT_AUTHORIZE_CAPACITY: 15000
       APP_RATE_LIMIT_CAPTURE_CAPACITY: 15000
       APP_RATE_LIMIT_REFUND_CAPACITY: 7500
@@ -79,6 +91,8 @@ services:
       kafka:
         condition: service_started
       redis:
+        condition: service_started
+      eureka-server:
         condition: service_started
     ports:
       - "8080:8080"
@@ -95,10 +109,13 @@ services:
       PAYMENT_DB_USER: payuser
       PAYMENT_DB_PASSWORD: paypass
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
     depends_on:
       mariadb:
         condition: service_healthy
       kafka:
+        condition: service_started
+      eureka-server:
         condition: service_started
 
   prometheus:

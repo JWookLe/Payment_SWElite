@@ -18,6 +18,7 @@
 
 - `Resilience4jConfig` 추가 및 `PaymentEventPublisher` 업데이트: Kafka 발행을 `CircuitBreaker.decorateRunnable`로 감쌈. Circuit Breaker가 OPEN 상태일 때 Kafka 발행을 스킵하지만 outbox 레코드는 유지하여 나중에 재발행 가능.
 - `backend/ingest-service/src/main/resources/application.yml`에서 resilience 속성 설정 (실패율 임계값, 느린 호출 지속 시간, 최소 호출 수, 대기 시간, HALF_OPEN 호출 제한).
+- **Service Discovery 도입**: ackend/eureka-server 모듈을 추가해 Spring Cloud Netflix Eureka 서버를 분리 배포하고, ingest-service/consumer-worker를 클라이언트로 등록하도록 구성했습니다.
 - `CIRCUIT_BREAKER_GUIDE.md`에 상태 전이, 트러블슈팅 단계, Prometheus/Grafana 쿼리 문서화.
 
 ## 자동화 및 테스트
