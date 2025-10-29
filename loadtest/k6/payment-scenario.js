@@ -2,7 +2,7 @@ import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { Trend, Rate } from "k6/metrics";
 
-const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
+const BASE_URL = __ENV.BASE_URL || "http://localhost:8080/api";
 const MERCHANT_ID = __ENV.MERCHANT_ID || "K6-MERCHANT";
 const ENABLE_CAPTURE = ((__ENV.ENABLE_CAPTURE || "false").toLowerCase() === "true");
 const ENABLE_REFUND = ((__ENV.ENABLE_REFUND || "false").toLowerCase() === "true");

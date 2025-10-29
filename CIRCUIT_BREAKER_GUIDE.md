@@ -287,7 +287,7 @@ curl http://localhost:8080/circuit-breaker/kafka-publisher
 
 ```bash
 for i in {1..5}; do
-  curl -s -X POST http://localhost:8080/payments/authorize \
+  curl -s -X POST http://localhost:8080/api/payments/authorize \
     -H "Content-Type: application/json" \
     -d "{\"merchantId\":\"TEST_$i\",\"amount\":50000,\"currency\":\"KRW\",\"idempotencyKey\":\"test-$i-$(date +%s)\"}"
   sleep 1
@@ -310,7 +310,7 @@ docker compose stop kafka
 sleep 5
 
 for i in {1..6}; do
-  timeout 15 curl -s -X POST http://localhost:8080/payments/authorize \
+  timeout 15 curl -s -X POST http://localhost:8080/api/payments/authorize \
     -H "Content-Type: application/json" \
     -d "{\"merchantId\":\"SLOW_$i\",\"amount\":50000,\"currency\":\"KRW\",\"idempotencyKey\":\"slow-$i-$(date +%s)\"}" > /dev/null 2>&1 &
   sleep 1
@@ -342,7 +342,7 @@ curl -s http://localhost:8080/circuit-breaker/kafka-publisher
 docker compose start kafka
 sleep 15
 
-curl -s -X POST http://localhost:8080/payments/authorize \
+curl -s -X POST http://localhost:8080/api/payments/authorize \
   -H "Content-Type: application/json" \
   -d "{\"merchantId\":\"RECOVERY\",\"amount\":50000,\"currency\":\"KRW\",\"idempotencyKey\":\"recovery-$(date +%s)\"}"
 ```

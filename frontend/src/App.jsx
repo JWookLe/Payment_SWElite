@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE ?? ''
+  baseURL: import.meta.env.VITE_API_BASE ?? '/api'
 });
 
 const CATEGORIES = [

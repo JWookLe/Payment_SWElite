@@ -124,7 +124,7 @@ docker compose down -v
 
 ```bash
 # Authorize payment
-curl -X POST http://localhost:8080/payments/authorize \
+curl -X POST http://localhost:8080/api/payments/authorize \
   -H 'Content-Type: application/json' \
   -d '{
     "merchantId": "TEST_MERCHANT",
@@ -134,10 +134,10 @@ curl -X POST http://localhost:8080/payments/authorize \
   }'
 
 # Capture payment (replace {paymentId})
-curl -X POST http://localhost:8080/payments/capture/{paymentId}
+curl -X POST http://localhost:8080/api/payments/capture/{paymentId}
 
 # Refund payment (replace {paymentId})
-curl -X POST http://localhost:8080/payments/refund/{paymentId} \
+curl -X POST http://localhost:8080/api/payments/refund/{paymentId} \
   -H 'Content-Type: application/json' \
   -d '{"reason": "Customer request"}'
 ```
@@ -327,7 +327,7 @@ Tests use JUnit 5 (`useJUnitPlatform()` configured in build.gradle.kts).
 
 The smoke test in Jenkins pipeline verifies E2E flow:
 ```bash
-curl -X POST http://localhost:8080/payments/authorize \
+curl -X POST http://localhost:8080/api/payments/authorize \
   -H 'Content-Type: application/json' \
   -d '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"jenkins-1"}'
 ```

@@ -162,10 +162,10 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        VITE_API_BASE: http://localhost:8080
+        VITE_API_BASE: /api
     image: mock-frontend:local
     environment:
-      VITE_API_BASE: http://localhost:8080
+      VITE_API_BASE: /api
     depends_on:
       - gateway
       - ingest-service

@@ -17,6 +17,7 @@ log_warn() { printf "%b[WARN]%b %s\n" "${YELLOW}" "${NC}" "$1"; }
 log_error() { printf "%b[ERR]%b  %s\n" "${RED}" "${NC}" "$1"; }
 
 API_BASE_URL="${API_BASE_URL:-http://localhost:8080}"
+GATEWAY_BASE_URL="${GATEWAY_BASE_URL:-http://localhost:8080/api}"
 CIRCUIT_BREAKER_ENDPOINT="${CIRCUIT_BREAKER_ENDPOINT:-${API_BASE_URL}/circuit-breaker/kafka-publisher}"
 MAX_RETRIES=5
 RETRY_DELAY=2
@@ -84,7 +85,7 @@ send_payment_request() {
   local merchant_id=$1
   local timeout_seconds=${2:-15}
 
-  timeout "${timeout_seconds}" docker compose exec -T ingest-service curl -s -X POST "${API_BASE_URL}/payments/authorize" \
+  timeout "${timeout_seconds}" curl -s -X POST "${GATEWAY_BASE_URL}/payments/authorize" \
     -H "Content-Type: application/json" \
     -d "{\"merchantId\":\"${merchant_id}\",\"amount\":50000,\"currency\":\"KRW\",\"idempotencyKey\":\"${merchant_id}-$(date +%s%N)\"}" \
     >/dev/null 2>&1

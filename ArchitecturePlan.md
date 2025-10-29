@@ -353,7 +353,7 @@ ssh -i your-key.pem user@PUBLIC_IP
 bash deploy-single-server.sh
 
 # 외부에서 테스트
-curl -X POST http://PUBLIC_IP:8080/payments/authorize \
+curl -X POST http://PUBLIC_IP:8080/api/payments/authorize \
   -H 'Content-Type: application/json' \
   -d '{"merchantId":"TEST","amount":10000,"currency":"KRW","idempotencyKey":"test-1"}'
 
@@ -528,7 +528,7 @@ services:
 ```nginx
 server {
   listen 80;
-  location /payments {
+  location /api/payments {
     proxy_pass http://server1:8080;
   }
 }
@@ -582,7 +582,7 @@ docker logs -f consumer-worker
 **Step 4: 통합 테스트**
 ```bash
 # API 요청 (Nginx 경유)
-curl -X POST http://<SERVER1_IP>/payments/authorize \
+curl -X POST http://<SERVER1_IP>/api/payments/authorize \
   -H 'Content-Type: application/json' \
   -d '{"merchantId":"TEST","amount":10000,"currency":"KRW","idempotencyKey":"test-1"}'
 

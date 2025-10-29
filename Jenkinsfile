@@ -82,9 +82,9 @@ pipeline {
       steps {
         sh '''
           echo "Running smoke test..."
-          docker compose exec -T ingest-service curl -X POST -H 'Content-Type: application/json' \
+          curl -X POST -H 'Content-Type: application/json' \
             -d '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"smoke-test-'$(date +%s)'"}' \
-            http://localhost:8080/payments/authorize
+            http://localhost:8080/api/payments/authorize
           echo "Smoke test completed successfully"
         '''
       }
@@ -103,7 +103,7 @@ pipeline {
           sleep 5
 
           chmod +x scripts/test-circuit-breaker.sh
-          API_BASE_URL=http://localhost:8080 bash scripts/test-circuit-breaker.sh
+          API_BASE_URL=http://localhost:8080 GATEWAY_BASE_URL=http://localhost:8080/api bash scripts/test-circuit-breaker.sh
         '''
       }
     }

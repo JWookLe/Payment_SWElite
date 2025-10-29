@@ -5,15 +5,14 @@ spring:
     gateway:
       discovery:
         locator:
-          enabled: true
-          lower-case-service-id: true
+          enabled: false
       routes:
-        - id: ingest-service
+        - id: payments-api
           uri: lb://INGEST-SERVICE
           predicates:
             - Path=/api/payments/**
           filters:
-            - StripPrefix=1
+            - RewritePath=/api/payments/?(?<segment>.*), /payments/${segment}
 
 server:
   port: ${SERVER_PORT:8080}
