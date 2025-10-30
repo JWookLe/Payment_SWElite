@@ -13,15 +13,17 @@
 - [ ] Settlement/Reconciliation 대비 비동기 처리 보강
 - [x] payment.dlq 토픽 재전송 기반 Consumer 예외 처리 보강
 
-### 3주차 (현재)
+### 3주차 현재
 - [x] Resilience4j 기반 Circuit Breaker 구현 (Kafka Publisher 보호)
 - [x] Circuit Breaker 자동 테스트 및 모니터링 (9단계 시나리오)
 - [x] Grafana에 Circuit Breaker 패널 추가 (4개 패널)
-- [x] Jenkins 파이프라인에 Circuit Breaker Test 단계 통합
-- [x] Circuit Breaker 완벽 가이드 문서화 (한국어)
+- [x] Jenkins 파이프라인에 Circuit Breaker Test 스테이지 추가
+- [x] Circuit Breaker 백서 가이드 문서화(한글)
 - [x] Spring Cloud Eureka 기반 Service Discovery 구현
-- [x] API Gateway 도입 (Spring Cloud Gateway) - Eureka 기반 동적 라우팅
-- [ ] Service Mesh 검토 (Istio 또는 Linkerd)
+- [x] API Gateway 도입 (Spring Cloud Gateway) - Eureka 기반 라우팅
+- [x] MCP 서버 3종(서킷 브레이커/Database/Redis) 구축 및 Claude 연동
+- [x] Rate Limit 24,000/24,000/24,000 상향 및 k6 400 RPS 시나리오 확정
+- [ ] Service Mesh 검토(Istio 또는 Linkerd)
 
 ## 서비스 구성 요소
 | 구성 | 설명 |

@@ -57,23 +57,23 @@ docker run --rm \
 
 ## 기본 부하 패턴
 
-스크립트의 기본 옵션은 8분 동안 200 RPS까지 ramp-up 하는 구조입니다.  
+스크립트의 기본 옵션은 8분 동안 400 RPS까지 ramp-up 하는 구조입니다.  
 `options.scenarios.authorize_flow.stages`를 수정하면 목표 RPS나 지속 시간을 조정할 수 있습니다.
 
 예시:
 
 ```javascript
 stages: [
-  { duration: '30s', target: 50 },   // 워밍업
-  { duration: '1m',  target: 100 },  // 1단계 램프업
-  { duration: '2m',  target: 150 },  // 2단계 램프업
-  { duration: '2m',  target: 200 },  // 목표 구간
-  { duration: '2m',  target: 200 },  // 유지
+  { duration: '30s', target: 100 },  // 워밍업
+  { duration: '1m',  target: 200 },  // 1단계 램프업
+  { duration: '2m',  target: 300 },  // 2단계 램프업
+  { duration: '2m',  target: 400 },  // 목표 구간
+  { duration: '2m',  target: 400 },  // 유지
   { duration: '30s', target: 0 },    // 쿨다운
 ],
 ```
 
-400 RPS 이상을 목표로 할 때는 단계별 `target` 값을 늘리고, 백엔드 설정(레이트 리밋, Kafka 파티션 등)이 대응하도록 먼저 조정해 주세요.
+400 RPS 이상을 목표로 할 때는 단계별 `target` 값을 더 늘리고, 백엔드 설정(레이트 리밋, Kafka 파티션 등)이 대응하도록 먼저 조정해 주세요.
 
 ## 성능 목표 예시
 

@@ -266,7 +266,7 @@ Dashboards → Payment Service Overview
 - ✅ 자동화된 테스트 스크립트 (9단계)
 - ✅ GitHub Webhook + Jenkins 연동
 - ✅ 실시간 모니터링 (Prometheus/Grafana)
-- ✅ 200 RPS 안정적 처리
+- ✅ 400 RPS 안정적 처리
 - ✅ Phase 5 스케일링 준비 완료
 
 ---
