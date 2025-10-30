@@ -106,8 +106,20 @@ pipeline {
           echo "Running smoke test..."
           TS=$(date +%s)
           payload=$(printf '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"smoke-test-%s"}' "$TS")
-          docker compose exec -T gateway sh -c "curl -sSf -X POST -H 'Content-Type: application/json' -d '$payload' http://localhost:8080/api/payments/authorize >/dev/null"
-          echo "Smoke test completed successfully"
+          success=0
+          for i in $(seq 1 5); do
+            if docker compose exec -T gateway sh -c "curl -sSf -X POST -H 'Content-Type: application/json' -d '$payload' http://localhost:8080/api/payments/authorize >/dev/null"; then
+              success=1
+              break
+            fi
+            echo \"Smoke test retry $i/5 - gateway not ready yet, waiting...\"
+            sleep 3
+          done
+          if [ \"$success\" -ne 1 ]; then
+            echo \"Smoke test failed after retries\"
+            exit 1
+          fi
+          echo \"Smoke test completed successfully\"
         '''
       }
     }
