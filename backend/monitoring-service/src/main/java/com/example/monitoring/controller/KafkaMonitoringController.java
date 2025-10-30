@@ -130,11 +130,13 @@ public class KafkaMonitoringController {
             Collection<ConsumerGroupListing> groups = admin.listConsumerGroups().all().get();
 
             List<Map<String, Object>> groupList = groups.stream()
-                    .map(g -> Map.of(
-                            "groupId", g.groupId(),
-                            "isSimpleConsumerGroup", g.isSimpleConsumerGroup(),
-                            "state", g.state().map(Enum::name).orElse("UNKNOWN")
-                    ))
+                    .map(g -> {
+                        Map<String, Object> group = new java.util.HashMap<>();
+                        group.put("groupId", g.groupId());
+                        group.put("isSimpleConsumerGroup", g.isSimpleConsumerGroup());
+                        group.put("state", g.state().map(Enum::name).orElse("UNKNOWN"));
+                        return group;
+                    })
                     .collect(Collectors.toList());
 
             return Map.of(

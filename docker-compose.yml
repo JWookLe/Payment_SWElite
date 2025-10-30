@@ -130,6 +130,7 @@ services:
       PAYMENT_DB_PASSWORD: paypass
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       INGEST_SERVICE_URL: http://ingest-service:8080
       PROMETHEUS_URL: http://prometheus:9090
       EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
@@ -137,6 +138,8 @@ services:
       mariadb:
         condition: service_healthy
       redis:
+        condition: service_started
+      kafka:
         condition: service_started
       eureka-server:
         condition: service_started
