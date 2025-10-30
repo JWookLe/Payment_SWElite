@@ -140,7 +140,7 @@ public class LoadTestMonitoringController {
             command.add("run");
             command.add("--rm");
             command.add("--network");
-            command.add("payment-swelite-pipeline_default");
+            command.add("payment_swelite_default");
             command.add("-v");
             command.add(new File(K6_RESULTS_DIR).getAbsolutePath() + ":/k6");
             command.add("-e");
