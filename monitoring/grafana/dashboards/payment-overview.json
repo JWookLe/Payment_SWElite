@@ -194,27 +194,27 @@
       "targets": [
         {
           "refId": "CLOSED",
-          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"closed\"}"
+          "expr": "max(resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"closed\"}) or on() vector(0)"
         },
         {
           "refId": "OPEN",
-          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"open\"}"
+          "expr": "max(resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"open\"}) or on() vector(0)"
         },
         {
           "refId": "HALF_OPEN",
-          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"half_open\"}"
+          "expr": "max(resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"half_open\"}) or on() vector(0)"
         },
         {
           "refId": "DISABLED",
-          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"disabled\"}"
+          "expr": "max(resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"disabled\"}) or on() vector(0)"
         },
         {
           "refId": "FORCED_OPEN",
-          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"forced_open\"}"
+          "expr": "max(resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"forced_open\"}) or on() vector(0)"
         },
         {
           "refId": "FORCED_HALF_OPEN",
-          "expr": "resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"forced_half_open\"}"
+          "expr": "max(resilience4j_circuitbreaker_state{name=\"kafka-publisher\",state=\"forced_half_open\"}) or on() vector(0)"
         }
       ],
       "fieldConfig": {
@@ -239,7 +239,7 @@
         "overrides": [
           {
             "matcher": {
-              "id": "byRefId",
+              "id": "byFrameRefID",
               "options": "CLOSED"
             },
             "properties": [
@@ -251,7 +251,7 @@
           },
           {
             "matcher": {
-              "id": "byRefId",
+              "id": "byFrameRefID",
               "options": "OPEN"
             },
             "properties": [
@@ -263,7 +263,7 @@
           },
           {
             "matcher": {
-              "id": "byRefId",
+              "id": "byFrameRefID",
               "options": "HALF_OPEN"
             },
             "properties": [
@@ -275,7 +275,7 @@
           },
           {
             "matcher": {
-              "id": "byRefId",
+              "id": "byFrameRefID",
               "options": "DISABLED"
             },
             "properties": [
@@ -287,7 +287,7 @@
           },
           {
             "matcher": {
-              "id": "byRefId",
+              "id": "byFrameRefID",
               "options": "FORCED_OPEN"
             },
             "properties": [
@@ -299,7 +299,7 @@
           },
           {
             "matcher": {
-              "id": "byRefId",
+              "id": "byFrameRefID",
               "options": "FORCED_HALF_OPEN"
             },
             "properties": [
@@ -311,20 +311,19 @@
           }
         ]
       },
-      "transformations": [],
       "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
         "textMode": "auto",
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
-        "orientation": "horizontal"
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "fields": "",
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
       },
       "gridPos": {
         "h": 4,

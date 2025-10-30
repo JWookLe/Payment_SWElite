@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "payment-circuit-breaker": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\flwls\\Payment_SWElite\\Payment_SWElite\\mcp-servers\\circuit-breaker-mcp\\dist\\index.js"
+      ],
+      "env": {
+        "API_BASE_URL": "http://localhost:8080",
+        "PROMETHEUS_URL": "http://localhost:9090"
+      }
+    },
+    "payment-database": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\flwls\\Payment_SWElite\\Payment_SWElite\\mcp-servers\\database-query-mcp\\dist\\index.js"
+      ],
+      "env": {
+        "PAYMENT_DB_HOST": "localhost",
+        "PAYMENT_DB_PORT": "3306",
+        "PAYMENT_DB_USER": "payuser",
+        "PAYMENT_DB_PASSWORD": "paypass",
+        "PAYMENT_DB_NAME": "paydb"
+      }
+    },
+    "payment-redis": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\flwls\\Payment_SWElite\\Payment_SWElite\\mcp-servers\\redis-cache-mcp\\dist\\index.js"
+      ],
+      "env": {
+        "REDIS_URL": "redis://localhost:6379"
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-# Payment_SWElite
+﻿# Payment_SWElite
 ## 주차별 목표
 
 ### 1주차
@@ -19,24 +19,20 @@
 - [x] Grafana에 Circuit Breaker 패널 추가 (4개 패널)
 - [x] Jenkins 파이프라인에 Circuit Breaker Test 단계 통합
 - [x] Circuit Breaker 완벽 가이드 문서화 (한국어)
-- [x] Spring Cloud Eureka 기반 Service Discovery 구현
-- [x] API Gateway 도입 (Spring Cloud Gateway) - Eureka 기반 동적 라우팅
+- [ ] API Gateway 도입 (Spring Cloud Gateway)
 - [ ] Service Mesh 검토 (Istio 또는 Linkerd)
 
 ## 서비스 구성 요소
 | 구성 | 설명 |
 | --- | --- |
-| **api-gateway** | Spring Cloud Gateway 기반 API Gateway. Eureka를 통해 ingest-service 동적 라우팅. 모든 클라이언트 요청의 진입점 (포트 8080). |
-| **eureka-server** | Spring Cloud Eureka 기반 Service Discovery 서버. ingest-service, consumer-worker, api-gateway의 서비스 등록/조회 담당 (포트 8761). |
-| **frontend** | React + Vite로 작성된 목업 스토어 UI. iPhone / Galaxy 등 주요 단말 결제 시나리오 제공. Gateway를 통해 API 호출. |
-| **ingest-service** | Spring Boot(Java 21) 기반 결제 API. 승인/정산/환불 처리와 outbox 이벤트 발행 담당. Eureka에 자동 등록. Gateway에 의해 라우팅됨. |
-| **consumer-worker** | Kafka Consumer. 결제 이벤트를 ledger 엔트리로 반영하고 DLQ 처리 로직 포함. Eureka에 자동 등록. |
-| **monitoring-service** | Spring Boot 기반 모니터링 REST API. Circuit Breaker 상태, 데이터베이스 쿼리, Redis 캐시 통계 제공 (포트 8082). |
+| **frontend** | React + Vite로 작성된 목업 스토어 UI. iPhone / Galaxy 등 주요 단말 결제 시나리오 제공. |
+| **ingest-service** | Spring Boot(Java 21) 기반 결제 API. 승인/정산/환불 처리와 outbox 이벤트 발행 담당. |
+| **consumer-worker** | Kafka Consumer. 결제 이벤트를 ledger 엔트리로 반영하고 DLQ 처리 로직 포함. |
 | **mariadb** | paydb 스키마 운영. payment, ledger_entry, outbox_event, idem_response_cache 테이블 관리. |
 | **kafka & zookeeper** | 결제 이벤트 토픽(`payment.authorized`, `payment.captured`, `payment.refunded`)을 호스팅. |
 | **redis** | rate limit 카운터 및 결제 승인 응답 멱등 캐시 저장. |
 | **jenkins** | CI 서버. Gradle/NPM 빌드, Docker Compose 배포, k6 부하 테스트 자동화. |
-| **prometheus/grafana** | 애플리케이션 메트릭 수집 및 대시보드 제공. Eureka 서버 및 Gateway 메트릭도 포함. |
+| **prometheus/grafana** | 애플리케이션 메트릭 수집 및 대시보드 제공. |
 
 ## 주요 데이터베이스 DDL
 `backend/ingest-service/src/main/resources/schema.sql` 참고
@@ -48,9 +44,9 @@
 ## REST API 요약
 | Method | Path | 설명 |
 | --- | --- | --- |
-| `POST` | `/api/payments/authorize` | 멱등 키 기반 결제 승인 처리 및 outbox 기록 (Gateway를 통해 ingest-service로 라우팅) |
-| `POST` | `/api/payments/capture/{paymentId}` | 승인된 결제 정산 처리, ledger 기록, 이벤트 발행 (Gateway를 통해 라우팅) |
-| `POST` | `/api/payments/refund/{paymentId}` | 정산 완료 결제 환불 처리, ledger 기록, 이벤트 발행 (Gateway를 통해 라우팅) |
+| `POST` | `/api/payments/authorize` | 멱등 키 기반 결제 승인 처리 및 outbox 기록 |
+| `POST` | `/api/payments/capture/{paymentId}` | 승인된 결제 정산 처리, ledger 기록, 이벤트 발행 |
+| `POST` | `/api/payments/refund/{paymentId}` | 정산 완료 결제 환불 처리, ledger 기록, 이벤트 발행 |
 
 ## Kafka 토픽
 - `payment.authorized`
@@ -127,9 +123,9 @@ MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
 
 ## 로컬 실행 방법
 1. `docker compose up --build`
-   - MariaDB, Redis, Kafka, eureka-server, api-gateway, ingest-service, consumer-worker, frontend, Prometheus, Grafana를 기동함
+   - MariaDB, Redis, Kafka, ingest-service, consumer-worker, frontend, Prometheus, Grafana를 기동함
 2. 프런트엔드 접속: http://localhost:5173
-3. API 확인 예시 (Gateway를 통한 호출):
+3. API 확인 예시:
    ```bash
    curl -X POST http://localhost:8080/api/payments/authorize \
      -H 'Content-Type: application/json' \
@@ -142,64 +138,15 @@ MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
    ```
 4. 종료: `docker compose down`
 
-## Service Discovery (Spring Cloud Eureka)
-
-Eureka는 마이크로서비스 아키텍처에서 서비스 등록/조회의 중앙 집중식 관리를 제공함.
-
-### 개요
-- **서버**: Eureka Server (포트 8761)
-  - Self-preservation 비활성화 (개발 환경)
-  - 헬스 체크 및 메트릭 노출 (Prometheus 호환)
-- **클라이언트**: ingest-service, consumer-worker
-  - 자동 서비스 등록 (IP 주소 기반)
-  - 레지스트리 주기적 갱신 (30초 기본값)
-  - 다운 시 자동 제거
-
-### 설정 및 접속
-```bash
-# Eureka 대시보드 (실시간 서비스 상태 모니터링)
-http://localhost:8761
-
-# 등록된 서비스 확인
-curl http://localhost:8761/eureka/apps
-
-# ingest-service 상세 정보
-curl http://localhost:8761/eureka/apps/ingest-service
-
-# consumer-worker 상세 정보
-curl http://localhost:8761/eureka/apps/consumer-worker
-```
-
-### 환경 변수
-```yaml
-EUREKA_SERVER_URL: http://eureka-server:8761/eureka/  # Eureka 서버 주소
-```
-
-### 주요 파일
-- `backend/eureka-server/src/main/java/com/example/eureka/EurekaServerApplication.java`: Eureka Server 구현
-- `backend/eureka-server/src/main/resources/application.yml`: Eureka 설정
-- `backend/ingest-service/src/main/resources/application.yml` (L106-114): Eureka Client 설정
-- `backend/consumer-worker/src/main/resources/application.yml` (L48-55): Eureka Client 설정
-
-### Phase 5 스케일링 활용
-Eureka는 3개 서버 구조에서 다음과 같이 활용됨:
-- Server 1 (API): ingest-service → Eureka에 등록
-- Server 2 (Data): consumer-worker → Eureka에 등록
-- Server 3 (Infra): eureka-server → 중앙 레지스트리 운영
-- API Gateway (추후): Eureka를 통해 서비스 동적 라우팅 가능
-
----
-
 ## Circuit Breaker (Resilience4j)
 
-Kafka 발행 실패로부터 시스템을 보호하는 프로덕션 수준의 Circuit Breaker 구현임. Eureka Service Discovery와 함께 작동하여 서비스 레질리언스 강화.
+Kafka 발행 실패로부터 시스템을 보호하는 프로덕션 수준의 Circuit Breaker 구현임.
 
 ### 개요
 - **프레임워크**: Resilience4j 2.1.0
 - **보호 대상**: Kafka Publisher (ingest-service)
 - **상태 관리**: CLOSED → OPEN → HALF_OPEN → CLOSED
 - **자동 복구**: 의존성 회복 시 자동으로 서비스 복구
-- **Eureka 통합**: Circuit Breaker 상태를 Eureka Health Indicator로 노출하여 서비스 상태 모니터링 가능
 
 ### 모니터링
 ```
@@ -245,133 +192,6 @@ bash scripts/test-circuit-breaker.sh
   - 수동 테스트 방법
   - 모니터링 설정
   - 트러블슈팅
-
----
-
-## Service Discovery (Eureka)
-
-마이크로서비스 아키텍처에서 서비스들이 자동으로 서로를 찾을 수 있도록 하는 중앙 레지스트리.
-
-### 개요
-- **서버**: Eureka Server (포트 8761)
-  - Spring Cloud Netflix Eureka Server 4.1.1
-  - 서비스 등록/조회 담당
-  - Self-preservation 비활성화 (개발 환경)
-
-- **클라이언트**: ingest-service, consumer-worker
-  - 자동 서비스 등록 (IP 기반)
-  - 30초 주기 heartbeat
-  - 다운 시 자동 제거
-
-### 접속 및 확인
-```bash
-# Eureka 대시보드 (실시간 서비스 상태)
-http://localhost:8761
-
-# 등록된 전체 서비스 조회
-curl http://localhost:8761/eureka/apps
-
-# ingest-service 상세 정보
-curl http://localhost:8761/eureka/apps/INGEST-SERVICE
-
-# consumer-worker 상세 정보
-curl http://localhost:8761/eureka/apps/CONSUMER-WORKER
-```
-
-### 설정
-```yaml
-# docker-compose.yml 환경 변수
-EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
-
-# application.yml (클라이언트 설정)
-eureka:
-  client:
-    service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
-    register-with-eureka: true    # 자신을 레지스트리에 등록
-    fetch-registry: true           # 레지스트리 주기적 갱신
-  instance:
-    prefer-ip-address: true        # IP 주소 기반 등록
-```
-
-### Phase 5 스케일링 활용
-- **Server 1 (API)**: ingest-service 등록 → Eureka 조회로 downstream 발견
-- **Server 2 (Data)**: consumer-worker 등록
-- **Server 3 (Infra)**: eureka-server 중앙 운영
-- **API Gateway**: Eureka 기반 동적 라우팅 가능
-
----
-
-## API Gateway (Spring Cloud Gateway)
-
-모든 클라이언트 요청을 단일 진입점으로 관리하고, Eureka를 통해 백엔드 서비스로 동적 라우팅함.
-
-### 개요
-- **프레임워크**: Spring Cloud Gateway 4.1.1
-- **라우팅**: Eureka 기반 동적 라우팅
-- **경로 패턴**: `/api/payments/**` → `lb://INGEST-SERVICE`
-- **포트**: 8080 (기본값)
-- **필터**: StripPrefix=1 (경로에서 `/api` 제거 후 인게스트 서비스로 전달)
-
-### 설정
-```yaml
-# application.yml
-spring:
-  cloud:
-    gateway:
-      discovery:
-        locator:
-          enabled: true              # Eureka 기반 자동 라우팅 활성화
-          lower-case-service-id: true
-      routes:
-        - id: ingest-service
-          uri: lb://INGEST-SERVICE  # 로드 밸런싱 활성화
-          predicates:
-            - Path=/api/payments/**
-          filters:
-            - StripPrefix=1          # /api 경로 제거
-```
-
-### 요청 흐름
-```
-Client 요청: POST /api/payments/authorize
-     ↓
-API Gateway (포트 8080, 경로 기반 라우팅)
-     ↓
-StripPrefix 필터 (경로에서 /api 제거)
-     ↓
-Eureka 조회 (INGEST-SERVICE 발견)
-     ↓
-ingest-service (포트 8080 내부, /payments/authorize 매핑)
-```
-
-### 접속 및 확인
-```bash
-# Gateway 헬스 체크
-curl http://localhost:8080/actuator/health
-
-# Gateway 메트릭 확인
-curl http://localhost:8080/actuator/prometheus
-
-# 클라이언트 API 호출 (Gateway를 통함)
-curl -X POST http://localhost:8080/api/payments/authorize \
-  -H 'Content-Type: application/json' \
-  -d '{"merchantId":"M123","amount":10000,"currency":"KRW","idempotencyKey":"abc-123"}'
-```
-
-### 주요 파일
-- `backend/gateway/src/main/java/com/example/gateway/GatewayApplication.java`: Gateway 애플리케이션
-- `backend/gateway/src/main/resources/application.yml`: 라우팅 및 Eureka 설정
-- `backend/gateway/build.gradle.kts`: 의존성 관리
-
-### 모니터링
-- **Prometheus**: http://localhost:9090 → `gateway_requests_total` 등 메트릭 수집
-- **Grafana**: http://localhost:3000 → "Payment Service Overview" 대시보드에서 Gateway 요청 현황 확인
-
-### Phase 5 확장 시 활용
-- **다중 인스턴스**: `lb://INGEST-SERVICE`로 여러 ingest-service 인스턴스에 자동 분산
-- **라우트 추가**: 다른 마이크로서비스 추가 시 routes 섹션에 새로운 경로 규칙 추가 가능
-- **필터 확장**: rate limiting, 인증, 요청 변환 등 필터 추가 가능
 
 ---
 
@@ -581,173 +401,3 @@ docker exec pay-kafka kafka-console-consumer \
    - `Jenkinsfile`에 이미 `githubPush()` 포함되어 있으므로 ngrok을 통해 들어오는 모든 푸시가 자동으로 파이프라인 시작함.
 
 > **보안 주의**: `.env` 파일은 `.gitignore`에 이미 제외되어 있으므로 안전함. 작업 완료 후 `docker compose down ngrok`으로 ngrok 컨테이너 종료 또는 전체 스택 중단.
-
----
-
-## MCP 서버 (Model Context Protocol)
-
-AI 기반 시스템 모니터링 및 디버깅을 위한 Claude Desktop 통합 MCP 서버를 제공합니다.
-
-### 개요
-
-MCP(Model Context Protocol)는 AI 모델이 외부 시스템과 상호작용할 수 있게 하는 표준 프로토콜입니다. 이 프로젝트는 3개의 MCP 서버를 포함하여 Claude가 자연어로 결제 시스템을 모니터링하고 디버깅할 수 있습니다.
-
-### MCP 서버 목록
-
-#### 1. Circuit Breaker MCP
-**위치**: `mcp-servers/circuit-breaker-mcp`
-
-**기능**:
-- Circuit Breaker 상태 조회 (CLOSED/OPEN/HALF_OPEN)
-- Kafka 헬스 체크
-- 실패 패턴 분석
-- 장애 진단 및 권장사항 제공
-
-**사용 예시**:
-```
-사용자: "서킷 브레이커 상태 확인해줘"
-Claude: ✅ CLOSED - 정상 작동 중, 실패율 0.5%
-```
-
-#### 2. Database Query MCP
-**위치**: `mcp-servers/database-query-mcp`
-
-**기능**:
-- 결제 내역 자연어 쿼리
-- 원장 엔트리 조회
-- 미발행 이벤트 탐지
-- 복식부기 검증
-- 결제 통계 생성
-
-**사용 예시**:
-```
-사용자: "지난 1시간 실패한 결제 보여줘"
-Claude: 📊 3개 발견: #123 (10,000원), #456 (25,000원), #789 (50,000원)
-```
-
-#### 3. Redis Cache MCP
-**위치**: `mcp-servers/redis-cache-mcp`
-
-**기능**:
-- Rate Limit 상태 확인
-- 멱등성 키 조회
-- Redis 통계 (메모리, Hit Rate)
-- Rate Limit 초기화
-- TTL 분석
-
-**사용 예시**:
-```
-사용자: "MERCHANT_X의 Rate Limit 확인"
-Claude: ✅ OK - 250/1000 사용 (25%), 리셋까지 45초
-```
-
-### 설치 및 설정
-
-#### 1. MCP 서버 빌드
-```bash
-# 각 MCP 서버 디렉토리에서
-cd mcp-servers/circuit-breaker-mcp
-npm install && npm run build
-
-cd ../database-query-mcp
-npm install && npm run build
-
-cd ../redis-cache-mcp
-npm install && npm run build
-```
-
-#### 2. Claude Desktop 설정
-`claude_desktop_config.json` 파일에 MCP 서버 추가:
-
-```json
-{
-  "mcpServers": {
-    "payment-circuit-breaker": {
-      "command": "node",
-      "args": ["<절대경로>/mcp-servers/circuit-breaker-mcp/dist/index.js"],
-      "env": {
-        "API_BASE_URL": "http://localhost:8082"
-      }
-    },
-    "payment-database": {
-      "command": "node",
-      "args": ["<절대경로>/mcp-servers/database-query-mcp/dist/index.js"],
-      "env": {
-        "API_BASE_URL": "http://localhost:8082"
-      }
-    },
-    "payment-redis": {
-      "command": "node",
-      "args": ["<절대경로>/mcp-servers/redis-cache-mcp/dist/index.js"],
-      "env": {
-        "API_BASE_URL": "http://localhost:8082"
-      }
-    }
-  }
-}
-```
-
-> **주의**: MCP 서버들은 monitoring-service API를 통해 동작합니다. Docker Compose로 시스템을 실행한 후 사용하세요.
-
-#### 3. Claude Desktop 재시작
-설정 파일 수정 후 Claude Desktop을 완전히 재시작하면 MCP 서버들이 자동으로 로드됩니다.
-
-### 사용 시나리오
-
-#### 시나리오 1: 결제 트러블슈팅
-**문제**: "결제가 완료 안 됐는데 왜 그래?"
-
-**Claude의 MCP 활용**:
-1. Database MCP로 결제 상태 확인
-2. Outbox 이벤트 발행 여부 확인
-3. Circuit Breaker MCP로 Kafka 장애 확인
-4. 결론: "오후 2시 Kafka 다운으로 이벤트 미발행"
-
-#### 시나리오 2: 성능 저하 분석
-**문제**: "API가 느린데 뭐가 문제야?"
-
-**Claude의 MCP 활용**:
-1. Circuit Breaker MCP로 Kafka 정상 확인
-2. Redis MCP로 캐시 Hit Rate 확인 (30%, 평소 90%)
-3. Database MCP로 트래픽 급증 확인
-4. 결론: "Redis 캐시 만료로 DB 쿼리 증가"
-
-#### 시나리오 3: Rate Limit 모니터링
-**문제**: "특정 머천트가 429 에러를 받는다는데?"
-
-**Claude의 MCP 활용**:
-1. Redis MCP로 해당 머천트 Rate Limit 확인 (980/1000)
-2. 다른 머천트들도 임계치 근접 확인
-3. 권장: "정상 패턴, Rate Limit 증가 또는 재시도 로직 안내"
-
-### MCP vs REST API
-
-| 용도 | MCP 서버 | monitoring-service REST API |
-|------|----------|----------------------------|
-| **AI 디버깅** | ✅ Claude Desktop 자연어 상호작용 | ❌ |
-| **로컬 개발** | ✅ 빠른 피드백 | ✅ curl/Postman |
-| **팀 공유** | ❌ 개인 환경 | ✅ URL 공유 |
-| **CI/CD** | ❌ | ✅ Jenkins/GitHub Actions |
-| **Grafana** | ❌ | ✅ 메트릭 연동 |
-
-**권장**:
-- 로컬 디버깅 → MCP 서버 사용
-- 운영 모니터링 → REST API 사용
-
-### 트러블슈팅
-
-#### MCP 서버가 Claude에 안 나타나요
-1. `npm run build` 실행 확인
-2. 절대 경로 확인 (상대 경로 사용 금지)
-3. Claude Desktop 완전 재시작
-4. 로그 확인: `%APPDATA%\Claude\logs\mcp*.log`
-
-#### 연결 오류
-1. Docker Compose 실행 확인: `docker compose ps`
-2. monitoring-service 정상 확인: `curl http://localhost:8082/actuator/health`
-3. 환경 변수 확인: `API_BASE_URL=http://localhost:8082`
-
-### 관련 문서
-- MCP 서버 상세 가이드: [mcp-servers/README.md](mcp-servers/README.md)
-- monitoring-service API 문서: [backend/monitoring-service/README.md](backend/monitoring-service/README.md)
-- MCP 공식 문서: https://modelcontextprotocol.io/

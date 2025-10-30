@@ -115,6 +115,36 @@ services:
       eureka-server:
         condition: service_started
 
+  monitoring-service:
+    build:
+      context: .
+      dockerfile: backend/monitoring-service/Dockerfile
+    image: monitoring-service:local
+    container_name: pay-monitoring
+    environment:
+      SERVER_PORT: 8082
+      PAYMENT_DB_HOST: mariadb
+      PAYMENT_DB_PORT: 3306
+      PAYMENT_DB_NAME: paydb
+      PAYMENT_DB_USER: payuser
+      PAYMENT_DB_PASSWORD: paypass
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      INGEST_SERVICE_URL: http://ingest-service:8080
+      PROMETHEUS_URL: http://prometheus:9090
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+      ingest-service:
+        condition: service_started
+    ports:
+      - "8082:8082"
+
   gateway:
     build:
       context: .
@@ -127,6 +157,8 @@ services:
       eureka-server:
         condition: service_started
       ingest-service:
+        condition: service_started
+      monitoring-service:
         condition: service_started
     ports:
       - "8080:8080"
