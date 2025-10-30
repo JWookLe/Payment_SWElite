@@ -92,8 +92,3 @@ stages: [
    ```
 3. Claude MCP를 사용 중이라면 `payment-database-mcp`나 `payment-redis-mcp`로 부하 이후 상태를 바로 점검할 수 있습니다.
 
-## 주의 사항
-
-- 테스트 전에 `docker compose up -d`로 결제 시스템과 모니터링 스택이 모두 올라와 있어야 합니다.
-- `summary.json`은 매 실행마다 덮어쓰기 됩니다. 결과를 보관하려면 다른 파일명으로 복사해 두세요.
-- 대규모 부하(400 RPS 이상)를 줄 때는 Redis 레이트 리밋, Kafka 파티션/컨슈머 수, DB 커넥션 풀 등 관련 설정을 먼저 확장한 후 진행하세요.
