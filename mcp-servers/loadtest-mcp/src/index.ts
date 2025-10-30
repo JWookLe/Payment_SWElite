@@ -52,8 +52,6 @@ class LoadTestMcpServer {
 
       try {
         switch (name) {
-          case "run_load_test":
-            return await this.runLoadTest(args);
           case "get_latest_result":
             return await this.getLatestResult();
           case "analyze_performance":
@@ -80,24 +78,6 @@ class LoadTestMcpServer {
 
   private getTools(): Tool[] {
     return [
-      {
-        name: "run_load_test",
-        description:
-          "k6 부하 테스트를 실행합니다 (200 RPS 시나리오, 백그라운드 실행)",
-        inputSchema: {
-          type: "object",
-          properties: {
-            enable_capture: {
-              type: "boolean",
-              description: "결제 승인 후 정산(capture)도 함께 테스트 (기본: false)",
-            },
-            enable_refund: {
-              type: "boolean",
-              description: "환불(refund)도 함께 테스트 (기본: false)",
-            },
-          },
-        },
-      },
       {
         name: "get_latest_result",
         description: "가장 최근 실행한 k6 테스트 결과를 조회합니다",
@@ -142,60 +122,6 @@ class LoadTestMcpServer {
     ];
   }
 
-  private async runLoadTest(args: any) {
-    const enableCapture = args.enable_capture || false;
-    const enableRefund = args.enable_refund || false;
-
-    const response = await axios.post(
-      `${API_BASE_URL}/monitoring/loadtest/run`,
-      null,
-      {
-        params: {
-          enableCapture,
-          enableRefund,
-        },
-      }
-    );
-    const data = response.data;
-
-    if (data.error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `❌ 테스트 시작 실패\n\n오류: ${data.message}`,
-          },
-        ],
-      };
-    }
-
-    const scenario = enableRefund
-      ? "전체 플로우 (승인 → 정산 → 환불)"
-      : enableCapture
-        ? "승인 + 정산"
-        : "승인만";
-
-    const result = `
-🚀 k6 부하 테스트 시작됨
-
-시나리오: ${scenario}
-프로세스 ID: ${data.pid}
-상태: 백그라운드 실행 중
-
-💡 테스트가 완료되면 (약 8분 소요):
-   - get_latest_result로 결과 확인
-   - analyze_performance로 성능 분석
-
-📊 실시간 모니터링:
-   - Grafana: http://localhost:3000
-   - Prometheus: http://localhost:9090
-    `.trim();
-
-    return {
-      content: [{ type: "text", text: result }],
-    };
-  }
-
   private async getLatestResult() {
     const response = await axios.get(
       `${API_BASE_URL}/monitoring/loadtest/latest-result`
@@ -207,7 +133,7 @@ class LoadTestMcpServer {
         content: [
           {
             type: "text",
-            text: `📭 테스트 결과 없음\n\n아직 k6 테스트를 실행하지 않았거나, 결과 파일이 생성되지 않았습니다.\n\n💡 run_load_test로 테스트를 먼저 실행하세요.`,
+            text: `📭 테스트 결과 없음\n\n아직 k6 테스트를 실행하지 않았거나, 결과 파일이 생성되지 않았습니다.\n\n💡 scripts/run-k6-test.sh를 사용해서 테스트를 먼저 실행하세요.`,
           },
         ],
       };
@@ -260,7 +186,7 @@ class LoadTestMcpServer {
         content: [
           {
             type: "text",
-            text: `📭 분석할 테스트 결과가 없습니다.\n\n💡 run_load_test로 테스트를 먼저 실행하세요.`,
+            text: `📭 분석할 테스트 결과가 없습니다.\n\n💡 scripts/run-k6-test.sh를 사용해서 테스트를 먼저 실행하세요.`,
           },
         ],
       };
@@ -311,7 +237,8 @@ class LoadTestMcpServer {
       result += `  ${scenario.description}\n\n`;
     }
 
-    result += `💡 run_load_test의 파라미터로 시나리오를 선택하세요.`;
+    result += `💡 scripts/run-k6-test.sh를 사용해서 시나리오를 실행하세요.\n`;
+    result += `   예: ./scripts/run-k6-test.sh authorize-only`;
 
     return {
       content: [{ type: "text", text: result }],

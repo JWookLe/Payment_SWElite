@@ -127,59 +127,24 @@ public class LoadTestMonitoringController {
     }
 
     /**
-     * k6 테스트 실행 (비동기)
+     * k6 테스트 실행 엔드포인트 (읽기 전용 - 보안상 제거됨)
+     *
+     * 현업 패턴: 테스트 실행은 CI/CD 파이프라인이나 별도 스크립트로 수행
+     * 이 API는 결과 조회만 제공합니다.
+     *
+     * 테스트 실행 방법:
+     * - 호스트에서 scripts/run-k6-test.sh 스크립트 사용
+     * - Jenkins/GitLab CI 등 파이프라인에서 실행
      */
     @PostMapping("/run")
     public Map<String, Object> runLoadTest(
             @RequestParam(defaultValue = "false") boolean enableCapture,
             @RequestParam(defaultValue = "false") boolean enableRefund) {
-        try {
-            // Docker 환경에서 k6 실행
-            List<String> command = new ArrayList<>();
-            command.add("docker");
-            command.add("run");
-            command.add("--rm");
-            command.add("--network");
-            command.add("payment_swelite_default");
-            command.add("-v");
-            command.add(new File(K6_RESULTS_DIR).getAbsolutePath() + ":/k6");
-            command.add("-e");
-            command.add("BASE_URL=http://ingest-service:8080");
-            command.add("-e");
-            command.add("MERCHANT_ID=K6TEST");
-
-            if (enableCapture) {
-                command.add("-e");
-                command.add("ENABLE_CAPTURE=true");
-            }
-            if (enableRefund) {
-                command.add("-e");
-                command.add("ENABLE_REFUND=true");
-            }
-
-            command.add("grafana/k6:0.49.0");
-            command.add("run");
-            command.add("/k6/payment-scenario.js");
-            command.add("--summary-export=/k6/summary.json");
-
-            ProcessBuilder pb = new ProcessBuilder(command);
-            pb.redirectErrorStream(true);
-
-            // 백그라운드로 실행
-            Process process = pb.start();
-
-            return Map.of(
-                    "started", true,
-                    "pid", process.pid(),
-                    "message", "k6 load test started in background",
-                    "note", "Use /monitoring/loadtest/latest-result to check results when complete"
-            );
-        } catch (Exception e) {
-            return Map.of(
-                    "error", true,
-                    "message", "Failed to start load test: " + e.getMessage()
-            );
-        }
+        return Map.of(
+                "error", true,
+                "message", "Direct test execution is disabled for security reasons. Please use scripts/run-k6-test.sh to run tests from the host machine.",
+                "documentation", "See loadtest/k6/README.md for instructions"
+        );
     }
 
     /**
