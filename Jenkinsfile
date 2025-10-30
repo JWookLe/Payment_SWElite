@@ -65,14 +65,36 @@ pipeline {
           echo 'Waiting for ingest-service to be ready...'
           sh '''
             # Health check with retry (max 60s)
+            ready=0
             for i in $(seq 1 30); do
               if docker compose exec -T ingest-service curl -f http://ingest-service:8080/actuator/health 2>/dev/null; then
                 echo "ingest-service is ready!"
+                ready=1
                 break
               fi
               echo "Waiting for ingest-service... attempt $i/30"
               sleep 2
             done
+            if [ "$ready" -ne 1 ]; then
+              echo "ingest-service failed to become ready within timeout."
+              exit 1
+            fi
+
+            echo "Waiting for gateway to be ready..."
+            ready=0
+            for i in $(seq 1 30); do
+              if docker compose exec -T gateway curl -f http://localhost:8080/actuator/health 2>/dev/null; then
+                echo "gateway is ready!"
+                ready=1
+                break
+              fi
+              echo "Waiting for gateway... attempt $i/30"
+              sleep 2
+            done
+            if [ "$ready" -ne 1 ]; then
+              echo "gateway failed to become ready within timeout."
+              exit 1
+            fi
           '''
         }
       }
@@ -83,10 +105,8 @@ pipeline {
         sh '''
           echo "Running smoke test..."
           TS=$(date +%s)
-          docker compose exec -T gateway curl -sSf -X POST \
-            -H 'Content-Type: application/json' \
-            -d "{\"merchantId\":\"JENKINS\",\"amount\":1000,\"currency\":\"KRW\",\"idempotencyKey\":\"smoke-test-${TS}\"}" \
-            http://localhost:8080/api/payments/authorize >/dev/null
+          payload=$(printf '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"smoke-test-%s"}' "$TS")
+          docker compose exec -T gateway sh -c "curl -sSf -X POST -H 'Content-Type: application/json' -d '$payload' http://localhost:8080/api/payments/authorize >/dev/null"
           echo "Smoke test completed successfully"
         '''
       }
