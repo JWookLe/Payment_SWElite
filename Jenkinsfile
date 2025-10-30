@@ -66,7 +66,7 @@ pipeline {
           sh '''
             # Health check with retry (max 60s)
             for i in $(seq 1 30); do
-              if docker compose exec -T ingest-service curl -f http://localhost:8080/actuator/health 2>/dev/null; then
+              if docker compose exec -T ingest-service curl -f http://ingest-service:8080/actuator/health 2>/dev/null; then
                 echo "ingest-service is ready!"
                 break
               fi
@@ -84,7 +84,7 @@ pipeline {
           echo "Running smoke test..."
           curl -X POST -H 'Content-Type: application/json' \
             -d '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"smoke-test-'$(date +%s)'"}' \
-            http://localhost:8080/api/payments/authorize
+            http://gateway:8080/api/payments/authorize
           echo "Smoke test completed successfully"
         '''
       }
@@ -103,7 +103,7 @@ pipeline {
           sleep 5
 
           chmod +x scripts/test-circuit-breaker.sh
-          API_BASE_URL=http://localhost:8080 GATEWAY_BASE_URL=http://localhost:8080/api bash scripts/test-circuit-breaker.sh
+          API_BASE_URL=http://ingest-service:8080 GATEWAY_BASE_URL=http://gateway:8080/api bash scripts/test-circuit-breaker.sh
         '''
       }
     }
