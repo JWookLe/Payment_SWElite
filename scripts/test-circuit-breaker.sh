@@ -85,7 +85,7 @@ send_payment_request() {
   local merchant_id=$1
   local timeout_seconds=${2:-15}
 
-  timeout "${timeout_seconds}" curl -s -X POST "${GATEWAY_BASE_URL}/payments/authorize" \
+  timeout "${timeout_seconds}" docker compose exec -T gateway curl -sSf -X POST "${GATEWAY_BASE_URL}/payments/authorize" \
     -H "Content-Type: application/json" \
     -d "{\"merchantId\":\"${merchant_id}\",\"amount\":50000,\"currency\":\"KRW\",\"idempotencyKey\":\"${merchant_id}-$(date +%s%N)\"}" \
     >/dev/null 2>&1

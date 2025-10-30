@@ -82,9 +82,11 @@ pipeline {
       steps {
         sh '''
           echo "Running smoke test..."
-          curl -X POST -H 'Content-Type: application/json' \
-            -d '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"smoke-test-'$(date +%s)'"}' \
-            http://gateway:8080/api/payments/authorize
+          TS=$(date +%s)
+          docker compose exec -T gateway curl -sSf -X POST \
+            -H 'Content-Type: application/json' \
+            -d "{\"merchantId\":\"JENKINS\",\"amount\":1000,\"currency\":\"KRW\",\"idempotencyKey\":\"smoke-test-${TS}\"}" \
+            http://localhost:8080/api/payments/authorize >/dev/null
           echo "Smoke test completed successfully"
         '''
       }
@@ -103,7 +105,7 @@ pipeline {
           sleep 5
 
           chmod +x scripts/test-circuit-breaker.sh
-          API_BASE_URL=http://ingest-service:8080 GATEWAY_BASE_URL=http://gateway:8080/api bash scripts/test-circuit-breaker.sh
+          API_BASE_URL=http://localhost:8080 GATEWAY_BASE_URL=http://localhost:8080/api bash scripts/test-circuit-breaker.sh
         '''
       }
     }
