@@ -4,7 +4,7 @@ AI-powered Model Context Protocol (MCP) servers for operating and debugging the 
 
 ## 개요
 
-이 디렉토리는 3개의 MCP 서버를 포함하고 있으며, Claude나 다른 AI 어시스턴트가 결제 시스템을 자연어로 관리하고 디버깅할 수 있게 해줍니다.
+이 디렉토리는 **6개의 MCP 서버**를 포함하고 있으며, Claude나 다른 AI 어시스턴트가 결제 시스템을 자연어로 관리하고 디버깅할 수 있게 해줍니다.
 
 ### MCP란?
 
@@ -106,6 +106,95 @@ AI: "Rate Limit 80% 이상 사용 중인 머천트 찾아줘"
 
 ---
 
+### 4. Kafka Operations MCP (`kafka-operations-mcp`) ⭐ NEW
+
+**목적**: Kafka 토픽, Consumer Lag, DLQ 관리
+
+**주요 기능**:
+- `list_topics` - Kafka 토픽 목록 조회
+- `get_topic_stats` - 토픽별 메시지 수 및 파티션 정보
+- `check_consumer_lag` - Consumer Group의 Lag 조회
+- `list_consumer_groups` - 활성 Consumer Group 목록
+- `get_dlq_messages` - Dead Letter Queue 메시지 조회
+- `check_kafka_health` - Kafka 클러스터 헬스 체크
+- `get_topic_details` - 토픽 상세 정보 (파티션, 레플리카 등)
+
+**사용 예시**:
+```
+AI: "payment.captured 토픽에 메시지 몇 개 있어?"
+→ get_topic_stats(topic="payment.captured")
+→ "📊 45개 메시지, 3개 파티션"
+
+AI: "Consumer Lag 확인해줘"
+→ check_consumer_lag(group_id="payment-consumer-group")
+→ "✅ Lag 0개 - 모두 처리 완료"
+
+AI: "DLQ에 뭐 있어?"
+→ get_dlq_messages(limit=10)
+→ "⚠️ 3개 메시지 (FK 제약조건 위반)"
+```
+
+---
+
+### 5. Load Test MCP (`loadtest-mcp`) ⭐ NEW
+
+**목적**: k6 부하 테스트 실행 및 결과 분석
+
+**주요 기능**:
+- `run_load_test` - k6 부하 테스트 실행 (200 RPS 시나리오)
+- `get_latest_result` - 최근 테스트 결과 조회
+- `analyze_performance` - 성능 분석 및 권장사항
+- `list_scenarios` - 사용 가능한 테스트 시나리오
+- `get_test_history` - 과거 테스트 히스토리
+
+**사용 예시**:
+```
+AI: "부하 테스트 돌려줘"
+→ run_load_test(enable_capture=true)
+→ "🚀 테스트 시작 (약 8분 소요)"
+
+AI: "테스트 결과 확인"
+→ analyze_performance()
+→ "🏆 EXCELLENT - p95: 85ms, 성공률 99.8%"
+
+AI: "지난주랑 비교해줘"
+→ get_test_history(limit=5)
+→ "📈 개선: p95 120ms → 85ms (-29%)"
+```
+
+---
+
+### 6. System Health MCP (`system-health-mcp`) ⭐ NEW
+
+**목적**: 전체 시스템 통합 모니터링
+
+**주요 기능**:
+- `check_all_services` - 모든 서비스 헬스 체크 (Circuit Breaker, Kafka, Redis, DB)
+- `get_system_overview` - 시스템 전체 개요 (주요 지표 요약)
+- `diagnose_issues` - 문제 자동 감지 및 진단
+
+**사용 예시**:
+```
+AI: "전체 시스템 상태 확인"
+→ check_all_services()
+→ "✅ Circuit Breaker: CLOSED
+   ✅ Kafka: 3개 브로커
+   ✅ Redis: 299개 키
+   ✅ Database: 복식부기 균형"
+
+AI: "시스템 개요 보여줘"
+→ get_system_overview()
+→ "📊 오늘 총 1,234건, 123,456,000원"
+
+AI: "문제 있는 거 찾아줘"
+→ diagnose_issues()
+→ "⚠️ 2개 문제:
+   • Consumer Lag 12개
+   • DLQ 3개 메시지"
+```
+
+---
+
 ## 설치 및 실행
 
 ### 사전 요구사항
@@ -115,94 +204,237 @@ AI: "Rate Limit 80% 이상 사용 중인 머천트 찾아줘"
 
 ### 1. 의존성 설치
 
-각 MCP 서버 디렉토리에서:
+모든 MCP 서버 빌드 (한 번에):
 
 ```bash
-cd circuit-breaker-mcp
-npm install
-
-cd ../database-query-mcp
-npm install
-
-cd ../redis-cache-mcp
-npm install
+cd mcp-servers
+cd circuit-breaker-mcp && npm install && npm run build && cd ..
+cd database-query-mcp && npm install && npm run build && cd ..
+cd redis-cache-mcp && npm install && npm run build && cd ..
+cd kafka-operations-mcp && npm install && npm run build && cd ..
+cd loadtest-mcp && npm install && npm run build && cd ..
+cd system-health-mcp && npm install && npm run build && cd ..
 ```
 
-### 2. 빌드
+또는 개별적으로:
 
 ```bash
-# 각 서버에서
-npm run build
+cd circuit-breaker-mcp && npm install && npm run build
+cd database-query-mcp && npm install && npm run build
+cd redis-cache-mcp && npm install && npm run build
+cd kafka-operations-mcp && npm install && npm run build
+cd loadtest-mcp && npm install && npm run build
+cd system-health-mcp && npm install && npm run build
 ```
 
-### 3. 환경 변수 설정
+### 2. 환경 변수 설정
 
-`.env` 파일 생성 (선택사항, 기본값은 localhost):
+**모든 새로운 MCP 서버는 monitoring-service API를 사용**하므로 환경 변수가 간단합니다:
 
 ```env
-# Circuit Breaker MCP
-API_BASE_URL=http://localhost:8080
-PROMETHEUS_URL=http://localhost:9090
-
-# Database Query MCP
-PAYMENT_DB_HOST=localhost
-PAYMENT_DB_PORT=3306
-PAYMENT_DB_USER=payuser
-PAYMENT_DB_PASSWORD=paypass
-PAYMENT_DB_NAME=paydb
-
-# Redis Cache MCP
-REDIS_URL=redis://localhost:6379
+# 모든 MCP 서버 공통
+API_BASE_URL=http://localhost:8082
 ```
 
-### 4. Claude Desktop 연동
+> **참고**: 기존 database-query-mcp와 redis-cache-mcp도 monitoring-service를 사용하도록 업데이트되었습니다.
 
-`claude_desktop_config.json`에 추가:
+### 3. Claude Desktop 연동
+
+`claude_desktop_config.json`에 **6개 MCP 서버 모두** 추가:
 
 ```json
 {
   "mcpServers": {
     "payment-circuit-breaker": {
       "command": "node",
-      "args": [
-        "C:\\Users\\flwls\\Payment_SWElite\\Payment_SWElite\\mcp-servers\\circuit-breaker-mcp\\dist\\index.js"
-      ],
+      "args": ["<절대경로>/mcp-servers/circuit-breaker-mcp/dist/index.js"],
       "env": {
-        "API_BASE_URL": "http://localhost:8080",
-        "PROMETHEUS_URL": "http://localhost:9090"
+        "API_BASE_URL": "http://localhost:8082"
       }
     },
     "payment-database": {
       "command": "node",
-      "args": [
-        "C:\\Users\\flwls\\Payment_SWElite\\Payment_SWElite\\mcp-servers\\database-query-mcp\\dist\\index.js"
-      ],
+      "args": ["<절대경로>/mcp-servers/database-query-mcp/dist/index.js"],
       "env": {
-        "PAYMENT_DB_HOST": "localhost",
-        "PAYMENT_DB_PORT": "3306",
-        "PAYMENT_DB_USER": "payuser",
-        "PAYMENT_DB_PASSWORD": "paypass",
-        "PAYMENT_DB_NAME": "paydb"
+        "API_BASE_URL": "http://localhost:8082"
       }
     },
     "payment-redis": {
       "command": "node",
-      "args": [
-        "C:\\Users\\flwls\\Payment_SWElite\\Payment_SWElite\\mcp-servers\\redis-cache-mcp\\dist\\index.js"
-      ],
+      "args": ["<절대경로>/mcp-servers/redis-cache-mcp/dist/index.js"],
       "env": {
-        "REDIS_URL": "redis://localhost:6379"
+        "API_BASE_URL": "http://localhost:8082"
+      }
+    },
+    "payment-kafka": {
+      "command": "node",
+      "args": ["<절대경로>/mcp-servers/kafka-operations-mcp/dist/index.js"],
+      "env": {
+        "API_BASE_URL": "http://localhost:8082"
+      }
+    },
+    "payment-loadtest": {
+      "command": "node",
+      "args": ["<절대경로>/mcp-servers/loadtest-mcp/dist/index.js"],
+      "env": {
+        "API_BASE_URL": "http://localhost:8082"
+      }
+    },
+    "payment-system-health": {
+      "command": "node",
+      "args": ["<절대경로>/mcp-servers/system-health-mcp/dist/index.js"],
+      "env": {
+        "API_BASE_URL": "http://localhost:8082"
       }
     }
   }
 }
 ```
 
+> **Windows 예시**: `<절대경로>` → `C:\\Users\\flwls\\Payment_SWElite\\Payment_SWElite`
+>
+> **macOS/Linux 예시**: `<절대경로>` → `/home/user/Payment_SWElite`
+
 **Claude Desktop 재시작 후 MCP 서버들이 자동으로 로드됩니다.**
 
 ---
 
-## 사용 시나리오
+## 사용 가이드
+
+### 기본 MCP 서버 (코어 기능)
+
+1. **circuit-breaker-mcp**: Circuit Breaker 상태 및 Kafka 헬스
+2. **database-query-mcp**: 결제 데이터 조회 및 복식부기
+3. **redis-cache-mcp**: Rate Limit 및 캐시 관리
+
+### 고급 MCP 서버 (운영 도구)
+
+4. **kafka-operations-mcp**: Kafka 토픽, Consumer Lag, DLQ 관리
+5. **loadtest-mcp**: k6 부하 테스트 자동화
+6. **system-health-mcp**: 전체 시스템 통합 모니터링
+
+### 추천 사용 워크플로
+
+#### 1. 일일 체크 (아침 시작 시)
+```
+Claude: "전체 시스템 상태 확인"
+→ system-health-mcp의 check_all_services 사용
+→ 모든 서비스 헬스 한눈에 확인
+```
+
+#### 2. 성능 모니터링 (주간)
+```
+Claude: "부하 테스트 돌리고 결과 분석해줘"
+→ loadtest-mcp로 테스트 실행
+→ 성능 추이 비교 및 권장사항 확인
+```
+
+#### 3. 장애 대응 (문제 발생 시)
+```
+Claude: "문제 진단해줘"
+→ system-health-mcp의 diagnose_issues로 자동 진단
+→ Circuit Breaker OPEN → kafka-operations-mcp로 DLQ 확인
+→ Consumer Lag → kafka-operations-mcp로 상세 조회
+```
+
+#### 4. 데이터 분석 (비즈니스)
+```
+Claude: "오늘 결제 통계 보여줘"
+→ database-query-mcp의 payment_statistics
+→ 매출, 거래량, 가맹점별 분석
+```
+
+---
+
+## MCP 서버 아키텍처
+
+```
+┌─────────────────┐
+│  Claude Desktop │
+└────────┬────────┘
+         │ MCP Protocol (stdio)
+         │
+    ┌────┴─────────────────────────────────────────────┐
+    │                                                   │
+┌───▼───────┐ ┌──────────┐ ┌────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+│ Circuit   │ │ Database │ │ Redis  │ │  Kafka   │ │ LoadTest │ │  System  │
+│ Breaker   │ │  Query   │ │ Cache  │ │Operations│ │          │ │  Health  │
+└───┬───────┘ └────┬─────┘ └───┬────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘
+    │              │            │           │            │            │
+    │ HTTP         │ HTTP       │ HTTP      │ HTTP       │ HTTP       │ HTTP
+    │              │            │           │            │            │
+┌───▼──────────────▼────────────▼───────────▼────────────▼────────────▼─────┐
+│                   monitoring-service (포트 8082)                           │
+│  - Circuit Breaker API      - Database API     - Redis API                │
+│  - Kafka API                - Load Test API                               │
+└───┬──────────────┬────────────┬───────────┬────────────┬────────────┬─────┘
+    │              │            │           │            │            │
+┌───▼──────┐  ┌───▼────┐  ┌───▼────┐  ┌───▼────┐  ┌───▼────┐  ┌───▼────┐
+│ Ingest   │  │MariaDB │  │ Redis  │  │ Kafka  │  │   k6   │  │Prometheus│
+│ Service  │  │        │  │        │  │        │  │        │  │          │
+└──────────┘  └────────┘  └────────┘  └────────┘  └────────┘  └──────────┘
+```
+
+---
+
+## 향후 계획
+
+### Phase 2 (예정)
+
+삭제됨 - 이미 구현 완료!
+
+### Phase 3 (검토 중)
+
+- **Prometheus Metrics MCP**: 자연어로 Prometheus 쿼리 실행
+  - "지난 1시간 HTTP 요청 수는?"
+  - "CPU 사용률 추이 보여줘"
+
+- **Jenkins Pipeline MCP**: Jenkins 빌드 및 배포 자동화
+  - "최근 빌드 상태 확인"
+  - "파이프라인 실행해줘"
+
+---
+
+**이제 Claude Desktop에서 6개 MCP 서버로 거의 모든 시스템 운영 작업을 자연어로 처리할 수 있습니다!**
+
+---
+
+## Phase 1 달성 완료 ✅
+
+- ✅ Circuit Breaker MCP
+- ✅ Database Query MCP
+- ✅ Redis Cache MCP
+- ✅ Kafka Operations MCP
+- ✅ Load Test (k6) MCP
+- ✅ System Health MCP
+
+---
+
+**Claude Desktop 재시작 후 사용 예시**:
+
+```
+사용자: "시스템 전체 상태 알려줘"
+Claude: [system-health-mcp 사용]
+       ✅ 모든 서비스 정상!
+
+사용자: "DLQ에 메시지 있어?"
+Claude: [kafka-operations-mcp 사용]
+       ✅ DLQ 비어있음
+
+사용자: "부하 테스트 결과는?"
+Claude: [loadtest-mcp 사용]
+       🏆 EXCELLENT - p95 85ms, 99.8% 성공
+
+사용자: "오늘 총 매출은?"
+Claude: [database-query-mcp 사용]
+       📊 총 1,234건, 123,456,000원
+```
+
+이제 **6개 MCP 서버**가 모든 운영 시나리오를 커버합니다! 🎉
+
+---
+
+## 사용 시나리오 (업데이트)
 
 ### 시나리오 1: 결제 트러블슈팅
 

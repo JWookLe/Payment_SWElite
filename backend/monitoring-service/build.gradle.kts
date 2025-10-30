@@ -23,6 +23,9 @@ dependencies {
     // MariaDB
     runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
 
+    // Kafka Admin Client
+    implementation("org.springframework.kafka:spring-kafka")
+
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 
