@@ -1,6 +1,5 @@
 package com.example.payment.service;
 
-import com.example.payment.domain.LedgerEntry;
 import com.example.payment.domain.Payment;
 import com.example.payment.domain.PaymentStatus;
 import com.example.payment.repository.LedgerEntryRepository;
@@ -27,7 +26,6 @@ public class PaymentService {
     private static final String AGGREGATE_TYPE = "payment";
 
     private final PaymentRepository paymentRepository;
-    private final LedgerEntryRepository ledgerEntryRepository;
     private final IdempotencyCacheService idempotencyCacheService;
     private final RedisRateLimiter rateLimiter;
     private final PaymentEventPublisher eventPublisher;
@@ -38,18 +36,28 @@ public class PaymentService {
                           RedisRateLimiter rateLimiter,
                           PaymentEventPublisher eventPublisher) {
         this.paymentRepository = paymentRepository;
-        this.ledgerEntryRepository = ledgerEntryRepository;
+        // ledgerEntryRepository는 consumer-worker에서 처리 (비동기)
         this.idempotencyCacheService = idempotencyCacheService;
         this.rateLimiter = rateLimiter;
         this.eventPublisher = eventPublisher;
     }
 
+    /**
+     * 결제 승인 (실제 PG사 구조)
+     * READY → AUTHORIZED 상태 전환
+     * 승인 성공 시 payment.capture-requested 이벤트 자동 발행
+     */
     @Transactional
     public PaymentResult authorize(AuthorizePaymentRequest request) {
         return idempotencyCacheService.findAuthorization(request.merchantId(), request.idempotencyKey())
                 .orElseGet(() -> createAuthorization(request));
     }
 
+    /**
+     * 정산 처리 (내부 사용)
+     * settlement-worker가 호출
+     * AUTHORIZED → CAPTURED 상태 전환
+     */
     @Transactional
     public PaymentResult capture(Long paymentId, CapturePaymentRequest request) {
         rateLimiter.verifyCaptureAllowed(request.merchantId());
@@ -57,22 +65,17 @@ public class PaymentService {
         Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant"));
 
-        if (payment.getStatus() != PaymentStatus.REQUESTED) {
+        if (payment.getStatus() != PaymentStatus.AUTHORIZED && payment.getStatus() != PaymentStatus.CAPTURE_REQUESTED) {
             PaymentResponse response = toResponse(payment, Collections.emptyList(),
-                    "Payment is not in REQUESTED status");
+                    "Payment is not in AUTHORIZED or CAPTURE_REQUESTED status");
             return new PaymentResult(response, true);
         }
 
-        payment.setStatus(PaymentStatus.COMPLETED);
+        // 정산 완료 상태로 변경
+        payment.setStatus(PaymentStatus.CAPTURED);
         paymentRepository.save(payment);
 
-        LedgerEntry entry = ledgerEntryRepository.save(new LedgerEntry(payment,
-                "merchant_receivable", "cash", payment.getAmount()));
-
-        PaymentResponse response = toResponse(payment,
-                List.of(toLedgerResponse(entry)),
-                "Payment captured successfully");
-
+        // payment.captured 이벤트 발행 (ledger 기록 트리거)
         publishEvent(payment, "PAYMENT_CAPTURED", Map.of(
                 "paymentId", payment.getId(),
                 "status", payment.getStatus().name(),
@@ -80,9 +83,17 @@ public class PaymentService {
                 "occurredAt", Instant.now().toString()
         ));
 
+        PaymentResponse response = toResponse(payment, Collections.emptyList(),
+                "Payment captured successfully");
+
         return new PaymentResult(response, false);
     }
 
+    /**
+     * 환불 요청 (실제 PG사 구조)
+     * CAPTURED → REFUND_REQUESTED 상태 전환
+     * 환불 요청 시 payment.refund-requested 이벤트 발행
+     */
     @Transactional
     public PaymentResult refund(Long paymentId, RefundPaymentRequest request) {
         rateLimiter.verifyRefundAllowed(request.merchantId());
@@ -90,29 +101,27 @@ public class PaymentService {
         Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant"));
 
-        if (payment.getStatus() != PaymentStatus.COMPLETED) {
+        if (payment.getStatus() != PaymentStatus.CAPTURED) {
             PaymentResponse response = toResponse(payment, Collections.emptyList(),
-                    "Only completed payments can be refunded");
+                    "Only captured payments can be refunded");
             return new PaymentResult(response, true);
         }
 
-        payment.setStatus(PaymentStatus.REFUNDED);
+        // 환불 요청 상태로 변경
+        payment.setStatus(PaymentStatus.REFUND_REQUESTED);
         paymentRepository.save(payment);
 
-        LedgerEntry entry = ledgerEntryRepository.save(new LedgerEntry(payment,
-                "cash", "merchant_receivable", payment.getAmount()));
-
-        PaymentResponse response = toResponse(payment,
-                List.of(toLedgerResponse(entry)),
-                "Payment refunded successfully");
-
-        publishEvent(payment, "PAYMENT_REFUNDED", Map.of(
+        // payment.refund-requested 이벤트 발행 (refund-worker 트리거)
+        publishEvent(payment, "PAYMENT_REFUND_REQUESTED", Map.of(
                 "paymentId", payment.getId(),
                 "status", payment.getStatus().name(),
                 "amount", payment.getAmount(),
                 "occurredAt", Instant.now().toString(),
                 "reason", request.reason()
         ));
+
+        PaymentResponse response = toResponse(payment, Collections.emptyList(),
+                "Refund requested successfully");
 
         return new PaymentResult(response, false);
     }
@@ -129,8 +138,9 @@ public class PaymentService {
         rateLimiter.verifyAuthorizeAllowed(request.merchantId());
 
         try {
+            // AUTHORIZED 상태로 즉시 저장 (승인 완료)
             Payment payment = new Payment(request.merchantId(), request.amount(),
-                    request.currency(), PaymentStatus.REQUESTED, request.idempotencyKey());
+                    request.currency(), PaymentStatus.AUTHORIZED, request.idempotencyKey());
             paymentRepository.save(payment);
 
             PaymentResponse response = toResponse(payment, Collections.emptyList(),
@@ -138,11 +148,13 @@ public class PaymentService {
 
             idempotencyCacheService.storeAuthorization(request.merchantId(), request.idempotencyKey(), 200, response);
 
-            publishEvent(payment, "PAYMENT_AUTHORIZED", Map.of(
+            // payment.capture-requested 이벤트 발행 (자동 정산 트리거)
+            publishEvent(payment, "PAYMENT_CAPTURE_REQUESTED", Map.of(
                     "paymentId", payment.getId(),
                     "status", payment.getStatus().name(),
                     "amount", payment.getAmount(),
-                    "currency", payment.getCurrency()
+                    "currency", payment.getCurrency(),
+                    "occurredAt", Instant.now().toString()
             ));
 
             return new PaymentResult(response, false);
@@ -174,7 +186,4 @@ public class PaymentService {
         );
     }
 
-    private LedgerEntryResponse toLedgerResponse(LedgerEntry entry) {
-        return new LedgerEntryResponse(entry.getDebitAccount(), entry.getCreditAccount(), entry.getAmount());
-    }
 }

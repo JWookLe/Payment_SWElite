@@ -1,4 +1,4 @@
-package com.example.payment.domain;
+package com.example.settlement.domain;
 
 /**
  * 결제 상태 (실제 PG사 구조 반영)

@@ -560,3 +560,316 @@ outbox:
 - **Batch Processing**: 여러 항목을 한 번에 처리하는 방식
 - **Fixed Delay**: 이전 작업 종료 후 일정 시간 대기
 - **Initial Delay**: 애플리케이션 시작 후 첫 실행까지 대기 시간
+
+---
+
+## 10. 승인/정산 분리 아키텍처 (settlement-worker)
+
+### 배경
+
+기존 시스템은 결제 승인과 정산을 하나의 API에서 처리했지만, 실제 PG사에서는 승인과 정산이 분리되어 있음:
+- **승인(Authorization)**: 즉시 처리 (카드사 승인)
+- **정산(Settlement)**: 비동기 처리 (실제 자금 이동)
+
+### 구현 목표
+
+현업 PG 구조를 따라 승인/정산 분리:
+- 결제 상태 모델 확장 (3단계 → 11단계)
+- settlement-worker 마이크로서비스 추가
+- 이벤트 기반 비동기 처리
+- PG API 호출 시뮬레이션
+
+### 구현 내용
+
+#### 1. PaymentStatus 확장
+
+**파일**: `backend/ingest-service/src/main/java/com/example/payment/domain/PaymentStatus.java`
+
+11단계 상태 모델:
+
+```java
+public enum PaymentStatus {
+    // 승인 단계
+    READY,              // 결제 준비
+    AUTHORIZED,         // 승인 완료
+    AUTH_FAILED,        // 승인 실패
+
+    // 정산 단계
+    CAPTURE_REQUESTED,  // 정산 요청됨
+    CAPTURED,           // 정산 완료
+    CAPTURE_FAILED,     // 정산 실패
+
+    // 환불 단계
+    REFUND_REQUESTED,   // 환불 요청됨
+    REFUNDED,           // 환불 완료
+    REFUND_FAILED,      // 환불 실패
+    PARTIAL_REFUNDED,   // 부분 환불
+
+    // 레거시 호환
+    @Deprecated REQUESTED,
+    @Deprecated COMPLETED,
+    @Deprecated CANCELLED
+}
+```
+
+#### 2. 데이터베이스 스키마
+
+**파일**: `backend/ingest-service/src/main/resources/schema.sql`
+
+새로운 테이블 추가:
+
+```sql
+-- payment 테이블 수정
+status VARCHAR(50) NOT NULL,  -- ENUM에서 VARCHAR로 변경
+
+-- settlement_request 테이블 (정산 추적)
+CREATE TABLE IF NOT EXISTS settlement_request (
+  id                      BIGINT PRIMARY KEY AUTO_INCREMENT,
+  payment_id              BIGINT          NOT NULL,
+  request_amount          DECIMAL(15,2)   NOT NULL,
+  status                  VARCHAR(50)     NOT NULL,
+  pg_transaction_id       VARCHAR(255),
+  pg_response_code        VARCHAR(50),
+  pg_response_message     TEXT,
+  retry_count             INT             NOT NULL DEFAULT 0,
+  last_retry_at           TIMESTAMP(3),
+  requested_at            TIMESTAMP(3)    NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  completed_at            TIMESTAMP(3),
+  CONSTRAINT fk_settlement_payment FOREIGN KEY (payment_id) REFERENCES payment(payment_id)
+);
+
+-- refund_request 테이블 (환불 추적)
+CREATE TABLE IF NOT EXISTS refund_request (
+  id                          BIGINT PRIMARY KEY AUTO_INCREMENT,
+  payment_id                  BIGINT          NOT NULL,
+  refund_amount               DECIMAL(15,2)   NOT NULL,
+  refund_reason               VARCHAR(500),
+  status                      VARCHAR(50)     NOT NULL,
+  pg_cancel_transaction_id    VARCHAR(255),
+  pg_response_code            VARCHAR(50),
+  pg_response_message         TEXT,
+  retry_count                 INT             NOT NULL DEFAULT 0,
+  last_retry_at               TIMESTAMP(3),
+  requested_at                TIMESTAMP(3)    NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  completed_at                TIMESTAMP(3),
+  CONSTRAINT fk_refund_payment FOREIGN KEY (payment_id) REFERENCES payment(payment_id)
+);
+```
+
+#### 3. settlement-worker 서비스
+
+**새로운 마이크로서비스 구조**:
+
+```
+backend/settlement-worker/
+├── src/main/java/com/example/settlement/
+│   ├── SettlementWorkerApplication.java  # @EnableKafka, @EnableScheduling
+│   ├── domain/
+│   │   ├── Payment.java
+│   │   ├── PaymentStatus.java
+│   │   ├── SettlementRequest.java
+│   │   └── SettlementStatus.java
+│   ├── repository/
+│   │   ├── PaymentRepository.java
+│   │   └── SettlementRequestRepository.java
+│   ├── service/
+│   │   └── SettlementService.java        # 정산 처리 로직
+│   ├── consumer/
+│   │   └── SettlementEventConsumer.java  # Kafka 구독
+│   ├── client/
+│   │   ├── MockPgApiClient.java          # PG API 시뮬레이션
+│   │   └── PgApiException.java
+│   └── config/
+│       └── KafkaConfig.java
+└── Dockerfile
+```
+
+**MockPgApiClient.java**: PG API 시뮬레이션
+
+```java
+@Component
+public class MockPgApiClient {
+    public SettlementResponse requestSettlement(Long paymentId, BigDecimal amount)
+            throws PgApiException {
+        // 1~3초 지연 시뮬레이션
+        int delay = ThreadLocalRandom.current().nextInt(1000, 3000);
+        Thread.sleep(delay);
+
+        // 5% 확률로 실패 시뮬레이션
+        if (Math.random() < 0.05) {
+            throw new PgApiException("PG_TIMEOUT", "정산 API 타임아웃");
+        }
+
+        String transactionId = "txn_" + UUID.randomUUID().toString().substring(0, 8);
+        return new SettlementResponse("SUCCESS", transactionId, "0000",
+                                      "정산 성공", amount, Instant.now());
+    }
+}
+```
+
+**SettlementService.java**: 정산 처리
+
+```java
+@Service
+public class SettlementService {
+    @Transactional
+    public void processSettlement(Long paymentId, Long amount) {
+        Payment payment = paymentRepository.findById(paymentId).orElseThrow();
+
+        SettlementRequest settlementRequest = new SettlementRequest(
+            paymentId, BigDecimal.valueOf(amount)
+        );
+        settlementRequestRepository.save(settlementRequest);
+
+        try {
+            // Mock PG API 호출
+            SettlementResponse response = pgApiClient.requestSettlement(
+                paymentId, BigDecimal.valueOf(amount)
+            );
+
+            settlementRequest.markSuccess(
+                response.getTransactionId(),
+                response.getResponseCode(),
+                response.getResponseMessage()
+            );
+            payment.setStatus(PaymentStatus.CAPTURED);
+
+            // payment.captured 이벤트 발행
+            publishCapturedEvent(payment);
+
+        } catch (PgApiException ex) {
+            settlementRequest.markFailed(ex.getErrorCode(), ex.getMessage());
+            payment.setStatus(PaymentStatus.CAPTURE_FAILED);
+        }
+    }
+}
+```
+
+**SettlementEventConsumer.java**: Kafka 이벤트 수신
+
+```java
+@Component
+public class SettlementEventConsumer {
+    @KafkaListener(
+        topics = "payment.capture-requested",
+        groupId = "settlement-worker-group"
+    )
+    public void handleCaptureRequested(@Payload String message) {
+        Map<String, Object> payload = objectMapper.readValue(message, Map.class);
+        Long paymentId = getLongValue(payload, "paymentId");
+        Long amount = getLongValue(payload, "amount");
+
+        settlementService.processSettlement(paymentId, amount);
+    }
+}
+```
+
+#### 4. 이벤트 플로우
+
+```
+1. 클라이언트: POST /api/payments/authorize
+   ↓
+2. ingest-service: Payment 생성 (status: AUTHORIZED)
+   ↓
+3. ingest-service: payment.capture-requested 이벤트 발행
+   ↓
+4. settlement-worker: Kafka 이벤트 수신
+   ↓
+5. settlement-worker: Mock PG API 호출 (1~3초 소요)
+   ↓
+6. settlement-worker: settlement_request 기록 생성
+   ↓
+7. settlement-worker: Payment 상태 업데이트 (CAPTURED)
+   ↓
+8. settlement-worker: payment.captured 이벤트 발행
+   ↓
+9. consumer-worker: 원장 기록 생성
+```
+
+### E2E 검증
+
+#### 테스트 실행
+
+```bash
+curl -X POST http://localhost:8080/api/payments/authorize \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "merchantId":"WEEK5_FINAL",
+    "amount":250000,
+    "currency":"KRW",
+    "idempotencyKey":"week5-final-e2e-003"
+  }'
+```
+
+#### 결과 확인
+
+**1. API 응답**:
+```json
+{
+  "paymentId": 68434,
+  "status": "AUTHORIZED",
+  "amount": 250000,
+  "currency": "KRW"
+}
+```
+
+**2. settlement-worker 로그**:
+```
+2025-11-03T05:01:05 Received capture-requested event: paymentId=68434
+2025-11-03T05:01:05 Requesting settlement to Mock PG: paymentId=68434
+2025-11-03T05:01:07 Mock PG settlement succeeded: txn_c0855358
+2025-11-03T05:01:07 Published payment.captured event: paymentId=68434
+```
+
+**3. payment 테이블**:
+```
+payment_id: 68434
+status: CAPTURED
+amount: 250000
+currency: KRW
+```
+
+**4. settlement_request 테이블**:
+```
+id: 3
+payment_id: 68434
+request_amount: 250000.00
+status: SUCCESS
+pg_transaction_id: txn_c0855358
+pg_response_code: 0000
+retry_count: 0
+```
+
+**5. ledger_entry 테이블**:
+```
+entry_id: 7
+payment_id: 68434
+debit_account: merchant_receivable
+credit_account: cash
+amount: 250000
+```
+
+### 달성한 목표
+
+- ✅ 결제 상태 모델 11단계 확장
+- ✅ settlement-worker 마이크로서비스 구현
+- ✅ Mock PG API 시뮬레이션 (1~3초 지연, 5% 실패율)
+- ✅ settlement_request / refund_request 테이블 추가
+- ✅ 이벤트 기반 비동기 처리 (Kafka)
+- ✅ E2E 플로우 검증 완료
+- ✅ Eureka 서비스 디스커버리 통합
+
+### 현업 패턴 적용
+
+1. **승인/정산 분리**: 실제 PG사 구조 반영
+2. **재시도 추적**: retry_count로 재시도 이력 관리
+3. **이력 보관**: PG 응답 전체 저장 (추적성)
+4. **분산 처리**: Kafka 기반 비동기 이벤트
+5. **장애 격리**: settlement-worker 독립 실행
+
+### 향후 개선 방향
+
+- 환불 워커 구현 (refund-worker)
+- 정산 배치 스케줄러 (일일 정산)
+- 재시도 실패 시 알림 연동
+- 정산 통계 대시보드

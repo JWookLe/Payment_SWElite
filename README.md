@@ -24,12 +24,14 @@
 - [x] MCP 서버 3종(서킷 브레이커/Database/Redis) 구축 및 Claude 연동
 - [x] Rate Limit 24,000/24,000/24,000 상향 및 k6 400 RPS 시나리오 확정
 
-### 4주차 현재
+### 4주차
 - [x] Outbox Pattern 장애 진단 (706개 미발행 이벤트 발견)
 - [x] 프로덕션 수준 Outbox 폴링 스케줄러 구현
 - [x] Circuit Breaker 통합 및 분산 환경 대응 (비관적 락)
 - [x] 지수 백오프 재시도 전략 및 Dead Letter 모니터링
-- [ ] Service Mesh 검토(Istio 또는 Linkerd)
+- [x] 승인/정산 분리 아키텍처 (settlement-worker 구현)
+- [x] 결제 상태 모델 확장 (3단계 → 11단계)
+- [x] Mock PG API 시뮬레이션 및 E2E 검증
 
 ## 서비스 구성 요소
 | 구성 | 설명 |
@@ -39,6 +41,7 @@
 | **frontend** | React + Vite로 작성된 목업 스토어 UI. iPhone / Galaxy 등 주요 단말 결제 시나리오 제공. Gateway를 통해 API 호출. |
 | **ingest-service** | Spring Boot(Java 21) 기반 결제 API. 승인/정산/환불 처리와 outbox 이벤트 발행 담당. Eureka에 자동 등록. Gateway에 의해 라우팅됨. |
 | **consumer-worker** | Kafka Consumer. 결제 이벤트를 ledger 엔트리로 반영하고 DLQ 처리 로직 포함. Eureka에 자동 등록. |
+| **settlement-worker** | 정산 전용 마이크로서비스. payment.capture-requested 이벤트 구독, Mock PG API 호출, settlement_request 추적 (포트 8084). |
 | **monitoring-service** | Spring Boot 기반 모니터링 REST API. Circuit Breaker 상태, 데이터베이스 쿼리, Redis 캐시 통계 제공 (포트 8082). |
 | **mariadb** | paydb 스키마 운영. payment, ledger_entry, outbox_event, idem_response_cache 테이블 관리. |
 | **kafka & zookeeper** | 결제 이벤트 토픽(`payment.authorized`, `payment.captured`, `payment.refunded`)을 호스팅. |
@@ -62,7 +65,9 @@
 
 ## Kafka 토픽
 - `payment.authorized`
+- `payment.capture-requested` (신규)
 - `payment.captured`
+- `payment.refund-requested` (신규)
 - `payment.refunded`
 - `payment.dlq`
 

@@ -151,7 +151,9 @@ public class PaymentEventPublisher {
     private String topicNameFor(String eventType) {
         return switch (eventType) {
             case "PAYMENT_AUTHORIZED" -> "payment.authorized";
+            case "PAYMENT_CAPTURE_REQUESTED" -> "payment.capture-requested";
             case "PAYMENT_CAPTURED" -> "payment.captured";
+            case "PAYMENT_REFUND_REQUESTED" -> "payment.refund-requested";
             case "PAYMENT_REFUNDED" -> "payment.refunded";
             default -> "payment.unknown";
         };
