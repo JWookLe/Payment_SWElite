@@ -38,6 +38,23 @@
 - [X] 결제 상태 모델 확장 (3단계 → 11단계)
 - [X] Mock PG API 시뮬레이션 및 E2E 검증
 
+### 5주차 (Week 6)
+
+- [X] refund-worker 마이크로서비스 구현
+- [X] Mock PG 환불 API (1~3초 지연, 5% 실패율)
+- [X] payment.refund-requested 이벤트 구독 및 환불 처리
+- [X] payment.refunded 이벤트 발행 및 Payment 상태 업데이트
+- [X] 전체 플로우 E2E 검증 (승인 → 정산 → 환불)
+
+### 6주차 (Week 7)
+
+- [X] settlement-worker 재시도 스케줄러 구현 (10초 주기, 최대 10회 재시도)
+- [X] refund-worker 재시도 스케줄러 구현 (지수 백오프 적용)
+- [X] 정산/환불 통계 REST API 구현 (monitoring-service)
+- [X] Grafana Settlement & Refund 대시보드 추가 (8개 패널)
+- [X] Dead Letter 자동 감지 및 모니터링 기능
+- [X] 부분 환불 기능 (금액 지정 환불)
+
 ## 서비스 구성 요소
 
 | 구성                         | 설명                                                                                                                               |
@@ -48,7 +65,8 @@
 | **ingest-service**     | Spring Boot(Java 21) 기반 결제 API. 승인/정산/환불 처리와 outbox 이벤트 발행 담당. Eureka에 자동 등록. Gateway에 의해 라우팅됨.    |
 | **consumer-worker**    | Kafka Consumer. 결제 이벤트를 ledger 엔트리로 반영하고 DLQ 처리 로직 포함. Eureka에 자동 등록.                                     |
 | **settlement-worker**  | 정산 전용 마이크로서비스. payment.capture-requested 이벤트 구독, Mock PG API 호출, settlement_request 추적 (포트 8084).            |
-| **monitoring-service** | Spring Boot 기반 모니터링 REST API. Circuit Breaker 상태, 데이터베이스 쿼리, Redis 캐시 통계 제공 (포트 8082).                     |
+| **refund-worker**      | 환불 전용 마이크로서비스. payment.refund-requested 이벤트 구독, Mock PG 환불 API 호출, refund_request 추적 (포트 8085).            |
+| **monitoring-service** | Spring Boot 기반 모니터링 REST API. Circuit Breaker 상태, 데이터베이스 쿼리, Redis 캐시 통계, 정산/환불 통계 제공 (포트 8082).      |
 | **mariadb**            | paydb 스키마 운영. payment, ledger_entry, outbox_event, idem_response_cache 테이블 관리.                                           |
 | **kafka & zookeeper**  | 결제 이벤트 토픽(`payment.authorized`, `payment.captured`, `payment.refunded`)을 호스팅.                                     |
 | **redis**              | rate limit 카운터 및 결제 승인 응답 멱등 캐시 저장.                                                                                |

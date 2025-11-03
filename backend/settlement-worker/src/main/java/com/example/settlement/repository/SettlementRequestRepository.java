@@ -34,4 +34,21 @@ public interface SettlementRequestRepository extends JpaRepository<SettlementReq
             @Param("maxRetries") int maxRetries,
             @Param("retryThreshold") Instant retryThreshold
     );
+
+    /**
+     * 상태와 재시도 횟수로 조회 (재시도 스케줄러용)
+     */
+    List<SettlementRequest> findByStatusAndRetryCountLessThanAndLastRetryAtBefore(
+            SettlementStatus status,
+            int retryCount,
+            Instant lastRetryAt
+    );
+
+    /**
+     * Dead Letter 조회 (최대 재시도 초과)
+     */
+    List<SettlementRequest> findByStatusAndRetryCountGreaterThanEqual(
+            SettlementStatus status,
+            int retryCount
+    );
 }

@@ -122,16 +122,23 @@ public class SettlementService {
     }
 
     /**
-     * payment.captured 이벤트 발행
+     * payment.captured 이벤트 발행 (public - 스케줄러에서 사용)
      */
-    private void publishCapturedEvent(Payment payment) {
+    public void publishCapturedEvent(Payment payment, Long amount) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("paymentId", payment.getId());
         payload.put("status", payment.getStatus().name());
-        payload.put("amount", payment.getAmount());
+        payload.put("amount", amount != null ? amount : payment.getAmount());
         payload.put("occurredAt", Instant.now().toString());
 
         kafkaTemplate.send("payment.captured", payment.getId().toString(), payload);
         log.info("Published payment.captured event: paymentId={}", payment.getId());
+    }
+
+    /**
+     * payment.captured 이벤트 발행 (private - 내부용)
+     */
+    private void publishCapturedEvent(Payment payment) {
+        publishCapturedEvent(payment, payment.getAmount());
     }
 }

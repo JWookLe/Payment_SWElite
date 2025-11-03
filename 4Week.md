@@ -852,7 +852,192 @@ amount: 250000
 
 ### 향후 개선 방향
 
-- 환불 워커 구현 (refund-worker)
-- 정산 배치 스케줄러 (일일 정산)
-- 재시도 실패 시 알림 연동
-- 정산 통계 대시보드
+- ~~환불 워커 구현 (refund-worker)~~ ✅ Week 6에서 완료
+- ~~정산 배치 스케줄러 (일일 정산)~~ ✅ Week 7에서 재시도 스케줄러로 완료
+- ~~재시도 실패 시 알림 연동~~ ✅ Week 7에서 Dead Letter 모니터링 완료
+- ~~정산 통계 대시보드~~ ✅ Week 7에서 완료
+
+---
+
+## 11. 환불 워커 구현 (refund-worker) - Week 6
+
+### 배경
+
+settlement-worker와 동일한 구조로 환불 처리를 독립 마이크로서비스로 분리
+
+### 구현 내용
+
+**RefundWorkerApplication**
+- payment.refund-requested 토픽 구독
+- Mock PG 환불 API 호출
+- payment.refunded 이벤트 발행
+
+**MockPgApiClient** (환불 API)
+```java
+public RefundResponse requestRefund(Long paymentId, BigDecimal amount, String reason) {
+    // 1~3초 지연 시뮬레이션
+    Thread.sleep(ThreadLocalRandom.current().nextInt(1000, 3000));
+
+    // 5% 확률로 실패
+    if (Math.random() < 0.05) {
+        throw new PgApiException("PG_TIMEOUT", "환불 API 타임아웃");
+    }
+
+    String cancelTxnId = "cancel_" + UUID.randomUUID().toString().substring(0, 8);
+    return new RefundResponse("SUCCESS", cancelTxnId, "0000", "환불 성공", amount, Instant.now());
+}
+```
+
+### E2E 검증 결과
+
+**1. 승인**
+```
+paymentId: 68435
+status: AUTHORIZED
+```
+
+**2. 정산 (자동)**
+```
+status: CAPTURED (약 2초 소요)
+settlement_request 기록 생성
+```
+
+**3. 환불**
+```
+POST /api/payments/refund/68435
+→ status: REFUND_REQUESTED
+→ refund-worker 처리 (약 2초 소요)
+→ status: REFUNDED
+→ refund_request: pg_cancel_transaction_id=cancel_3c1db2f9, retry_count=0
+```
+
+---
+
+## 12. 재시도 스케줄러 및 통계 대시보드 - Week 7
+
+### 배경
+
+실패한 정산/환불 요청을 자동으로 재시도하고, 운영 가시성을 위한 통계 대시보드 구축
+
+### 1. Settlement Retry Scheduler
+
+**파일**: `backend/settlement-worker/src/main/java/com/example/settlement/scheduler/SettlementRetryScheduler.java`
+
+**핵심 기능**:
+- 10초마다 실패한 정산 자동 재시도
+- 최소 30초 간격 (지수 백오프)
+- 최대 10회 재시도
+- Dead Letter 모니터링 (5분마다)
+
+```java
+@Scheduled(fixedDelayString = "${settlement.retry-scheduler.interval-ms:10000}",
+           initialDelayString = "${settlement.retry-scheduler.initial-delay-ms:30000}")
+@Transactional
+public void retryFailedSettlements() {
+    Instant retryThreshold = Instant.now().minus(retryIntervalSeconds, ChronoUnit.SECONDS);
+
+    List<SettlementRequest> failedRequests = settlementRequestRepository
+            .findByStatusAndRetryCountLessThanAndLastRetryAtBefore(
+                    SettlementStatus.FAILED,
+                    maxRetries,
+                    retryThreshold
+            );
+
+    // 각 실패 건 재시도...
+}
+```
+
+### 2. Refund Retry Scheduler
+
+**파일**: `backend/refund-worker/src/main/java/com/example/refund/scheduler/RefundRetryScheduler.java`
+
+동일한 패턴으로 환불 재시도 구현
+
+### 3. 정산/환불 통계 API
+
+**파일**: `backend/monitoring-service/src/main/java/com/example/monitoring/service/SettlementStatsService.java`
+
+**제공 API**:
+
+```bash
+# 정산 통계
+GET /api/stats/settlement
+{
+  "totalCount": 1234,
+  "successCount": 1200,
+  "failedCount": 30,
+  "pendingCount": 4,
+  "totalAmount": 150000000.00,
+  "deadLetterCount": 2,
+  "successRate": 97.24
+}
+
+# 환불 통계
+GET /api/stats/refund
+{
+  "totalCount": 56,
+  "successCount": 54,
+  "failedCount": 2,
+  "pendingCount": 0,
+  "totalAmount": 2800000.00,
+  "deadLetterCount": 0,
+  "successRate": 96.43
+}
+
+# 전체 통계
+GET /api/stats/overview
+{
+  "authorizedCount": 500,
+  "capturedCount": 480,
+  "refundedCount": 54,
+  "settlement": {...},
+  "refund": {...}
+}
+```
+
+### 4. Grafana 대시보드
+
+**파일**: `monitoring/grafana/dashboards/settlement-refund-stats.json`
+
+**패널 구성**:
+
+1. **Settlement Success Rate** (Stat 패널)
+   - 정산 성공률 (%)
+   - 임계값: 0% (빨강), 90% (노랑), 95% (초록)
+
+2. **Refund Success Rate** (Stat 패널)
+   - 환불 성공률 (%)
+
+3. **Settlement Dead Letters** (Stat 패널)
+   - 최대 재시도 초과 건수
+   - 임계값: 0 (초록), 1 (노랑), 10 (빨강)
+
+4. **Refund Dead Letters** (Stat 패널)
+   - 환불 Dead Letter 건수
+
+5. **Settlement Request Rate** (Time Series)
+   - 정산 요청 처리율 (req/s)
+
+6. **Refund Request Rate** (Time Series)
+   - 환불 요청 처리율 (req/s)
+
+7. **Settlement Status Distribution** (Pie Chart)
+   - SUCCESS / FAILED / PENDING 비율
+
+8. **Refund Status Distribution** (Pie Chart)
+   - SUCCESS / FAILED / PENDING 비율
+
+### 달성한 목표
+
+- ✅ settlement-worker 재시도 스케줄러 (10초 간격, 최대 10회)
+- ✅ refund-worker 재시도 스케줄러
+- ✅ Dead Letter 자동 감지 및 로그
+- ✅ 정산/환불 통계 REST API (monitoring-service)
+- ✅ Grafana 대시보드 (8개 패널)
+
+### 운영 효과
+
+1. **자동 복구**: PG API 일시 장애 시 자동 재시도로 정산/환불 성공률 향상
+2. **가시성**: Dead Letter 실시간 모니터링으로 빠른 대응 가능
+3. **분석**: 정산/환불 성공률, 처리량 추이 분석 가능
+4. **안정성**: 지수 백오프로 시스템 부하 최소화

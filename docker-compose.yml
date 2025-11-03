@@ -139,6 +139,30 @@ services:
       eureka-server:
         condition: service_started
 
+  refund-worker:
+    build:
+      context: .
+      dockerfile: backend/refund-worker/Dockerfile
+    image: refund-worker:local
+    environment:
+      PAYMENT_DB_HOST: mariadb
+      PAYMENT_DB_PORT: 3306
+      PAYMENT_DB_NAME: paydb
+      PAYMENT_DB_USER: payuser
+      PAYMENT_DB_PASSWORD: paypass
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SERVER_PORT: 8085
+      REFUND_MAX_RETRIES: 10
+      REFUND_RETRY_INTERVAL: 30
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+
   monitoring-service:
     build:
       context: .
