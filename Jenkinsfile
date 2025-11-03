@@ -29,6 +29,20 @@ pipeline {
       }
     }
 
+    stage('Skip CI Check') {
+      steps {
+        script {
+          String commitMessage = sh(script: "git log -1 --pretty=%B", returnStdout: true).trim()
+          boolean skipRequested = commitMessage ==~ /(?i).*(\[(skip ci|ci skip)\]|skip-ci).*/
+          if (skipRequested) {
+            echo "Commit message requests CI skip: '${commitMessage}'"
+            currentBuild.result = 'NOT_BUILT'
+            error("Build skipped by commit message directive")
+          }
+        }
+      }
+    }
+
     stage('Install Frontend Dependencies') {
       steps {
         dir(FRONTEND_DIR) {
