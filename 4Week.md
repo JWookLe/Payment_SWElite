@@ -1,5 +1,156 @@
 # 4주차 작업 요약
 
+## 전체 시스템 아키텍처
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                   Frontend                                   │
+│                            (React + Vite, Port 5173)                         │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │ HTTP
+                                 ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              API Gateway (8080)                              │
+│                         Spring Cloud Gateway + Eureka                        │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │ Load Balancing
+                                 ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          ingest-service (8080)                               │
+│                  ┌────────────────────────────────┐                          │
+│                  │  REST API (Authorize/Capture/  │                          │
+│                  │  Refund) + Circuit Breaker     │                          │
+│                  └──────────┬─────────────────────┘                          │
+│                             │                                                │
+│                  ┌──────────▼─────────────────────┐                          │
+│                  │   Outbox Pattern (DB 저장)     │                          │
+│                  └──────────┬─────────────────────┘                          │
+│                             │                                                │
+│                  ┌──────────▼─────────────────────┐                          │
+│                  │  Outbox Polling Scheduler      │                          │
+│                  │  (10초마다, 최대 10회 재시도)  │                          │
+│                  └──────────┬─────────────────────┘                          │
+└─────────────────────────────┼────────────────────────────────────────────────┘
+                              │ Kafka Publish
+                              ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Kafka + Zookeeper                               │
+│    Topics: payment.authorized, payment.capture-requested,                   │
+│            payment.captured, payment.refund-requested,                      │
+│            payment.refunded, payment.dlq                                    │
+└──────┬──────────────────────┬────────────────────┬─────────────────────────┘
+       │                      │                    │
+       │ Subscribe            │ Subscribe          │ Subscribe
+       ↓                      ↓                    ↓
+┌──────────────┐    ┌───────────────────┐    ┌──────────────────┐
+│consumer-worker│    │settlement-worker  │    │ refund-worker    │
+│   (8081)     │    │     (8084)        │    │    (8085)        │
+├──────────────┤    ├───────────────────┤    ├──────────────────┤
+│ 회계 장부     │    │ Mock PG 정산 API  │    │ Mock PG 환불 API │
+│ ledger_entry │    │ (1~3초 지연)      │    │ (1~3초 지연)     │
+│ 생성         │    │ (5% 실패율)       │    │ (5% 실패율)      │
+│              │    │                   │    │                  │
+│              │    │ Retry Scheduler   │    │ Retry Scheduler  │
+│              │    │ (10초 주기,       │    │ (10초 주기,      │
+│              │    │  최대 10회)       │    │  최대 10회)      │
+└──────┬───────┘    └─────────┬─────────┘    └────────┬─────────┘
+       │                      │                       │
+       │ Write               │ Write                 │ Write
+       ↓                      ↓                       ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              MariaDB (paydb)                                 │
+│  Tables: payment, ledger_entry, outbox_event, idem_response_cache,          │
+│          settlement_request, refund_request                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         monitoring-service (8082)                            │
+│  - Circuit Breaker 상태 조회                                                 │
+│  - Database 쿼리 (결제/정산/환불 통계)                                       │
+│  - Redis 캐시 통계                                                           │
+│  - Statistics API: /api/stats/settlement, /api/stats/refund                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+       ↓ Metrics Export
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          Prometheus (9090)                                   │
+│  메트릭 수집: Circuit Breaker, HTTP 요청, Kafka 메시지, DB 쿼리              │
+└─────────────────────────────────────────────────────────────────────────────┘
+       ↓ Query
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            Grafana (3000)                                    │
+│  Dashboards:                                                                 │
+│    - Payment Service Overview                                                │
+│    - Circuit Breaker Status                                                  │
+│    - Settlement & Refund Statistics (8 panels) ← Week 7 신규                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Service Discovery                                    │
+│                      Eureka Server (8761)                                    │
+│  Registered: ingest-service, consumer-worker, settlement-worker,             │
+│              refund-worker, monitoring-service, gateway                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Redis (6379)                                    │
+│  - Rate Limit 카운터 (24,000/분)                                             │
+│  - 멱등성 캐시 (TTL 600초)                                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## 주요 데이터 플로우
+
+### 1. 결제 승인 플로우
+
+```
+Frontend → Gateway → ingest-service (POST /api/payments/authorize)
+  → payment INSERT (status: AUTHORIZED)
+  → outbox_event INSERT
+  → Outbox Polling Scheduler (10초마다)
+  → Kafka: payment.authorized
+  → consumer-worker: ledger_entry INSERT (차변: 매출채권)
+```
+
+### 2. 정산 플로우 (Week 4 신규)
+
+```
+Frontend → Gateway → ingest-service (POST /api/payments/capture/{id})
+  → Kafka: payment.capture-requested
+
+settlement-worker:
+  → settlement_request INSERT (status: PENDING)
+  → Mock PG API 호출 (1~3초, 5% 실패율)
+  → 성공 시:
+    - settlement_request → SUCCESS
+    - payment → CAPTURED
+    - Kafka: payment.captured
+  → 실패 시:
+    - settlement_request → FAILED
+    - Retry Scheduler (10초마다, 최대 10회)
+    - retry_count >= 10 → Dead Letter
+```
+
+### 3. 환불 플로우 (Week 6 신규)
+
+```
+Frontend → Gateway → ingest-service (POST /api/payments/refund/{id})
+  → Kafka: payment.refund-requested
+
+refund-worker:
+  → refund_request INSERT (status: PENDING, amount: 부분환불 가능)
+  → Mock PG API 호출 (1~3초, 5% 실패율)
+  → 성공 시:
+    - refund_request → SUCCESS
+    - payment → REFUNDED
+    - Kafka: payment.refunded
+  → 실패 시:
+    - refund_request → FAILED
+    - Retry Scheduler (10초마다, 최대 10회)
+    - retry_count >= 10 → Dead Letter
+```
+
+---
+
 ## 1. Outbox Pattern 장애 진단 및 복구
 
 ### 문제 상황
