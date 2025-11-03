@@ -54,7 +54,7 @@ pipeline {
 
     stage('Build Spring Boot Services') {
       steps {
-        sh './gradlew :backend:eureka-server:bootJar :backend:gateway:bootJar :backend:ingest-service:bootJar :backend:consumer-worker:bootJar'
+        sh './gradlew :backend:eureka-server:bootJar :backend:gateway:bootJar :backend:ingest-service:bootJar :backend:consumer-worker:bootJar :backend:settlement-worker:bootJar :backend:refund-worker:bootJar :backend:monitoring-service:bootJar'
       }
     }
 
@@ -68,7 +68,7 @@ pipeline {
           docker compose down --remove-orphans || true
           docker compose up -d eureka-server mariadb redis zookeeper kafka
           sleep 20
-          docker compose up -d ingest-service consumer-worker gateway frontend prometheus grafana
+          docker compose up -d ingest-service consumer-worker settlement-worker refund-worker monitoring-service gateway frontend prometheus grafana
         '''
       }
     }
