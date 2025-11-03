@@ -13,7 +13,7 @@
 - [ ] Settlement/Reconciliation 대비 비동기 처리 보강
 - [x] payment.dlq 토픽 재전송 기반 Consumer 예외 처리 보강
 
-### 3주차 현재
+### 3주차
 - [x] Resilience4j 기반 Circuit Breaker 구현 (Kafka Publisher 보호)
 - [x] Circuit Breaker 자동 테스트 및 모니터링 (9단계 시나리오)
 - [x] Grafana에 Circuit Breaker 패널 추가 (4개 패널)
@@ -23,6 +23,12 @@
 - [x] API Gateway 도입 (Spring Cloud Gateway) - Eureka 기반 라우팅
 - [x] MCP 서버 3종(서킷 브레이커/Database/Redis) 구축 및 Claude 연동
 - [x] Rate Limit 24,000/24,000/24,000 상향 및 k6 400 RPS 시나리오 확정
+
+### 4주차 현재
+- [x] Outbox Pattern 장애 진단 (706개 미발행 이벤트 발견)
+- [x] 프로덕션 수준 Outbox 폴링 스케줄러 구현
+- [x] Circuit Breaker 통합 및 분산 환경 대응 (비관적 락)
+- [x] 지수 백오프 재시도 전략 및 Dead Letter 모니터링
 - [ ] Service Mesh 검토(Istio 또는 Linkerd)
 
 ## 서비스 구성 요소
