@@ -79,6 +79,17 @@ app:
       slow-call-duration-threshold: ${APP_CB_KAFKA_SLOW_CALL_THRESHOLD:5000}
       slow-call-rate-threshold: ${APP_CB_KAFKA_SLOW_CALL_RATE:50}
 
+outbox:
+  polling:
+    enabled: true
+    interval-ms: 10000           # Poll every 10 seconds
+    initial-delay-ms: 15000      # Wait 15 seconds after startup
+    batch-size: 100              # Process 100 events per batch
+    max-retries: 10              # Max retry attempts before dead letter
+    retry-interval-seconds: 30   # Min 30 seconds between retries for same event
+  dead-letter:
+    check-interval-ms: 300000    # Check for dead letters every 5 minutes
+
 resilience4j:
   circuitbreaker:
     instances:

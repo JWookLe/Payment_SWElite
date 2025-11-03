@@ -32,6 +32,15 @@ public class OutboxEvent {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
+    @Column(name = "retry_count", nullable = false)
+    private int retryCount = 0;
+
+    @Column(name = "last_retry_at")
+    private Instant lastRetryAt;
+
+    @Column(name = "published_at")
+    private Instant publishedAt;
+
     protected OutboxEvent() {
     }
 
@@ -68,9 +77,31 @@ public class OutboxEvent {
 
     public void markPublished() {
         this.published = true;
+        this.publishedAt = Instant.now();
+    }
+
+    public void incrementRetryCount() {
+        this.retryCount++;
+        this.lastRetryAt = Instant.now();
+    }
+
+    public int getRetryCount() {
+        return retryCount;
+    }
+
+    public Instant getLastRetryAt() {
+        return lastRetryAt;
+    }
+
+    public Instant getPublishedAt() {
+        return publishedAt;
     }
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean canRetry(int maxRetries) {
+        return retryCount < maxRetries;
     }
 }
