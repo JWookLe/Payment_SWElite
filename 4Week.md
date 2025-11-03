@@ -111,7 +111,7 @@ Frontend → Gateway → ingest-service (POST /api/payments/authorize)
   → consumer-worker: ledger_entry INSERT (차변: 매출채권)
 ```
 
-### 2. 정산 플로우 (Week 4 신규)
+### 2. 정산 플로우
 
 ```
 Frontend → Gateway → ingest-service (POST /api/payments/capture/{id})
@@ -130,7 +130,7 @@ settlement-worker:
     - retry_count >= 10 → Dead Letter
 ```
 
-### 3. 환불 플로우 (Week 6 신규)
+### 3. 환불 플로우
 
 ```
 Frontend → Gateway → ingest-service (POST /api/payments/refund/{id})
