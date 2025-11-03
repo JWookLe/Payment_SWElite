@@ -11,18 +11,19 @@ Jenkins 빌드 완료 후 Grafana에서 Circuit Breaker가 HALF_OPEN 상태로 �
 #### 초기 점검
 
 1. **consumer-worker 컨테이너 확인**
+
    - 정상 실행 중
    - Kafka 이벤트 처리 정상
-
 2. **Kafka 연결 확인**
+
    - 연결 정상
    - 토픽별 메시지 처리 확인
-
 3. **Circuit Breaker 상태 확인**
+
    - API 엔드포인트 404 발생 (노출 안 됨)
    - Prometheus 메트릭으로 확인 필요
-
 4. **데이터베이스 조회로 핵심 문제 발견**
+
    ```sql
    SELECT COUNT(*) as total,
           SUM(CASE WHEN published = 0 THEN 1 ELSE 0 END) as pending
@@ -30,6 +31,7 @@ Jenkins 빌드 완료 후 Grafana에서 Circuit Breaker가 HALF_OPEN 상태로 �
 
    -- 결과: total: 80417, pending: 706
    ```
+
    - 총 80,417개의 outbox 이벤트
    - 미발행 이벤트 706개 누적
    - 가장 오래된 미발행 이벤트: 2025-10-20 (약 2주 전)
@@ -37,10 +39,11 @@ Jenkins 빌드 완료 후 Grafana에서 Circuit Breaker가 HALF_OPEN 상태로 �
 #### 근본 원인
 
 1. **Circuit Breaker 이력 확인**
+
    - Jenkins 빌드 중 Kafka 재시작으로 Circuit Breaker OPEN 발생
    - 이후 HALF_OPEN 상태로 전환되었으나 완전 복구 안 됨
-
 2. **Outbox 폴링 스케줄러 미구현**
+
    - `PaymentEventPublisher` 코드 분석 결과:
      ```java
      // Line 117-118: 주석만 있고 실제 구현 없음
@@ -62,6 +65,7 @@ Jenkins 빌드 완료 후 Grafana에서 Circuit Breaker가 HALF_OPEN 상태로 �
 ### 구현 목표
 
 현업에서 사용하는 프로덕션 수준의 Outbox 폴링 패턴 구현:
+
 - Circuit Breaker 상태 인지
 - 분산 환경 대응 (비관적 락)
 - 재시도 전략 (지수 백오프)
@@ -101,6 +105,7 @@ public boolean canRetry(int maxRetries) {
 ```
 
 **자동 DDL 적용**:
+
 - JPA가 애플리케이션 시작 시 자동으로 컬럼 추가
 - 기존 데이터는 default 값(0, null)으로 초기화됨
 
@@ -124,6 +129,7 @@ List<OutboxEvent> findUnpublishedEventsForRetry(
 ```
 
 **핵심 포인트**:
+
 - `@Lock(PESSIMISTIC_WRITE)`: 분산 환경에서 동일 이벤트 중복 처리 방지
 - `retryCount < maxRetries`: 재시도 제한
 - `lastRetryAt < retryThreshold`: 지수 백오프 (최소 대기 시간)
@@ -234,26 +240,27 @@ public class OutboxEventScheduler {
 **핵심 기능**:
 
 1. **Circuit Breaker 인지**
+
    - Kafka 장애 시 (OPEN 상태) 폴링 스킵
    - 불필요한 재시도 방지
-
 2. **배치 처리**
+
    - 한 번에 100개씩 처리
    - 대량 이벤트도 안정적으로 처리
-
 3. **지수 백오프**
+
    - 최소 30초 간격으로 재시도
    - 시스템 부하 분산
-
 4. **재시도 제한**
+
    - 최대 10회 재시도
    - 무한 재시도 방지
-
 5. **Dead Letter 모니터링**
+
    - 5분마다 Dead Letter 이벤트 확인
    - 로그 경고로 운영자 알림
-
 6. **트랜잭션 관리**
+
    - `@Transactional`로 원자성 보장
    - 재시도 카운트 증가와 발행을 하나의 트랜잭션으로
 
@@ -299,15 +306,18 @@ outbox:
 #### 문제 1: 네트워크 불일치
 
 **증상**:
+
 ```
 java.net.UnknownHostException: mariadb
 ```
 
 **원인**:
+
 - 새로운 컨테이너가 `payment_swelite_default` 네트워크에 생성됨
 - 기존 컨테이너들은 `payment-swelite-pipeline_default` 네트워크에 있음
 
 **해결**:
+
 ```bash
 docker compose -p payment-swelite-pipeline up -d --no-deps --build ingest-service
 ```
@@ -317,15 +327,18 @@ docker compose -p payment-swelite-pipeline up -d --no-deps --build ingest-servic
 #### 문제 2: 포트 충돌
 
 **증상**:
+
 ```
 Bind for 0.0.0.0:8080 failed: port is already allocated
 ```
 
 **원인**:
+
 - Gateway 서비스가 이미 8080 포트 사용 중
 - 수동 docker run 시도로 충돌
 
 **해결**:
+
 - Docker Compose 사용으로 포트 관리 일원화
 
 ### 검증 결과
@@ -355,6 +368,7 @@ FROM outbox_event;
 ```
 
 **성과**:
+
 - 706개의 미발행 이벤트 모두 처리 완료
 - 가장 오래된 이벤트(10월 20일)부터 순서대로 발행됨
 - Circuit Breaker 정상 상태(CLOSED)로 복구됨
@@ -382,6 +396,7 @@ WHERE published = 1
 ### 분산 환경 대응
 
 **비관적 락 (Pessimistic Locking)**:
+
 ```java
 @Lock(LockModeType.PESSIMISTIC_WRITE)
 ```
@@ -393,6 +408,7 @@ WHERE published = 1
 ### 장애 격리
 
 **Circuit Breaker 통합**:
+
 ```java
 if (circuitBreaker.getState() == CircuitBreaker.State.OPEN) {
     log.debug("Outbox polling skipped - Circuit Breaker is OPEN");
@@ -407,6 +423,7 @@ if (circuitBreaker.getState() == CircuitBreaker.State.OPEN) {
 ### 점진적 복구
 
 **지수 백오프 (Exponential Backoff)**:
+
 ```java
 Instant retryThreshold = Instant.now().minus(Duration.ofSeconds(retryIntervalSeconds));
 ```
@@ -418,6 +435,7 @@ Instant retryThreshold = Instant.now().minus(Duration.ofSeconds(retryIntervalSec
 ### 운영 가시성
 
 **로깅 및 모니터링**:
+
 ```java
 log.info("Outbox polling completed: {} succeeded, {} failed", succeeded, failed);
 log.error("Found {} dead letter events that exceeded max retries", deadLetters.size());
@@ -430,6 +448,7 @@ log.error("Found {} dead letter events that exceeded max retries", deadLetters.s
 ### 설정 기반 운영
 
 **외부화된 설정**:
+
 ```yaml
 outbox:
   polling:
@@ -461,17 +480,18 @@ outbox:
 ### 수정된 파일
 
 1. **OutboxEvent.java**
+
    - 재시도 추적 필드 추가 (retryCount, lastRetryAt, publishedAt)
    - 비즈니스 메서드 추가
-
 2. **OutboxEventRepository.java**
+
    - 비관적 락 쿼리 추가
    - Dead Letter 조회 쿼리 추가
-
 3. **PaymentApplication.java**
-   - @EnableScheduling 추가
 
+   - @EnableScheduling 추가
 4. **application.yml**
+
    - outbox 설정 섹션 추가
 
 ### 신규 파일
@@ -505,51 +525,7 @@ outbox:
 
 ---
 
-## 8. 교훈
-
-### 문제 진단
-
-1. **증상만 보지 말고 근본 원인 찾기**
-   - Circuit Breaker HALF_OPEN은 증상
-   - 실제 원인은 Outbox 폴링 미구현
-
-2. **데이터베이스가 진실의 원천**
-   - 로그나 메트릭만 보지 말고 실제 데이터 확인
-   - 706개 미발행 이벤트가 핵심 단서
-
-### 구현 원칙
-
-1. **주석과 실제 코드는 다르다**
-   - "Event will be retried by outbox polling" 주석 존재
-   - 실제 폴링 로직은 없었음
-   - 코드가 진실
-
-2. **현업 패턴에는 이유가 있다**
-   - 비관적 락: 분산 환경 대응
-   - Circuit Breaker 통합: 장애 격리
-   - Dead Letter: 운영 가시성
-   - 지수 백오프: 시스템 보호
-
-3. **설정은 외부화하라**
-   - 환경별 다른 설정 필요
-   - 운영 중 튜닝 필요
-   - 코드 배포 없이 조정 가능
-
-### 운영 대응
-
-1. **자동화가 핵심**
-   - 수동 재처리는 위험하고 느림
-   - 스케줄러로 자동 복구
-   - 운영자는 모니터링만
-
-2. **관찰 가능성 확보**
-   - 로그로 처리 현황 추적
-   - Dead Letter로 문제 감지
-   - 메트릭으로 추세 파악
-
----
-
-## 9. 용어 정리
+## 8. 용어 정리
 
 - **Outbox Pattern**: 트랜잭션 아웃박스 패턴. 이벤트 발행 실패에도 데이터 정합성 보장
 - **Polling**: 주기적으로 상태를 확인하는 방식
@@ -563,17 +539,19 @@ outbox:
 
 ---
 
-## 10. 승인/정산 분리 아키텍처 (settlement-worker)
+## 9. 승인/정산 분리 아키텍처 (settlement-worker)
 
 ### 배경
 
 기존 시스템은 결제 승인과 정산을 하나의 API에서 처리했지만, 실제 PG사에서는 승인과 정산이 분리되어 있음:
+
 - **승인(Authorization)**: 즉시 처리 (카드사 승인)
 - **정산(Settlement)**: 비동기 처리 (실제 자금 이동)
 
 ### 구현 목표
 
 현업 PG 구조를 따라 승인/정산 분리:
+
 - 결제 상태 모델 확장 (3단계 → 11단계)
 - settlement-worker 마이크로서비스 추가
 - 이벤트 기반 비동기 처리
@@ -804,6 +782,7 @@ curl -X POST http://localhost:8080/api/payments/authorize \
 #### 결과 확인
 
 **1. API 응답**:
+
 ```json
 {
   "paymentId": 68434,
@@ -814,6 +793,7 @@ curl -X POST http://localhost:8080/api/payments/authorize \
 ```
 
 **2. settlement-worker 로그**:
+
 ```
 2025-11-03T05:01:05 Received capture-requested event: paymentId=68434
 2025-11-03T05:01:05 Requesting settlement to Mock PG: paymentId=68434
@@ -822,6 +802,7 @@ curl -X POST http://localhost:8080/api/payments/authorize \
 ```
 
 **3. payment 테이블**:
+
 ```
 payment_id: 68434
 status: CAPTURED
@@ -830,6 +811,7 @@ currency: KRW
 ```
 
 **4. settlement_request 테이블**:
+
 ```
 id: 3
 payment_id: 68434
@@ -841,6 +823,7 @@ retry_count: 0
 ```
 
 **5. ledger_entry 테이블**:
+
 ```
 entry_id: 7
 payment_id: 68434
