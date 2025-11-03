@@ -66,9 +66,21 @@ pipeline {
           ls -la monitoring/prometheus/
 
           docker compose down --remove-orphans || true
+
+          # Step 1: Infrastructure (Eureka, DB, Cache, Message Broker)
           docker compose up -d eureka-server mariadb redis zookeeper kafka
-          sleep 20
-          docker compose up -d ingest-service consumer-worker settlement-worker refund-worker monitoring-service gateway frontend prometheus grafana
+          echo "Waiting for infrastructure to be ready..."
+          sleep 25
+
+          # Step 2: Core services
+          docker compose up -d ingest-service gateway monitoring-service
+          echo "Waiting for core services to register with Eureka..."
+          sleep 15
+
+          # Step 3: Workers and UI
+          docker compose up -d consumer-worker settlement-worker refund-worker frontend prometheus grafana
+          echo "All services started. Waiting for health checks..."
+          sleep 10
         '''
       }
     }
@@ -78,15 +90,15 @@ pipeline {
         script {
           echo 'Waiting for ingest-service to be ready...'
           sh '''
-            # Health check with retry (max 60s)
+            # Health check with retry (max 120s)
             ready=0
-            for i in $(seq 1 30); do
+            for i in $(seq 1 60); do
               if docker compose exec -T ingest-service curl -f http://ingest-service:8080/actuator/health 2>/dev/null; then
                 echo "ingest-service is ready!"
                 ready=1
                 break
               fi
-              echo "Waiting for ingest-service... attempt $i/30"
+              echo "Waiting for ingest-service... attempt $i/60"
               sleep 2
             done
             if [ "$ready" -ne 1 ]; then
@@ -96,13 +108,13 @@ pipeline {
 
             echo "Waiting for gateway to be ready..."
             ready=0
-            for i in $(seq 1 30); do
+            for i in $(seq 1 60); do
               if docker compose exec -T gateway curl -f http://localhost:8080/actuator/health 2>/dev/null; then
                 echo "gateway is ready!"
                 ready=1
                 break
               fi
-              echo "Waiting for gateway... attempt $i/30"
+              echo "Waiting for gateway... attempt $i/60"
               sleep 2
             done
             if [ "$ready" -ne 1 ]; then
