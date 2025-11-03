@@ -37,17 +37,11 @@
 - [X] 승인/정산 분리 아키텍처 (settlement-worker 구현)
 - [X] 결제 상태 모델 확장 (3단계 → 11단계)
 - [X] Mock PG API 시뮬레이션 및 E2E 검증
-
-### 5주차 (Week 6)
-
 - [X] refund-worker 마이크로서비스 구현
 - [X] Mock PG 환불 API (1~3초 지연, 5% 실패율)
 - [X] payment.refund-requested 이벤트 구독 및 환불 처리
 - [X] payment.refunded 이벤트 발행 및 Payment 상태 업데이트
 - [X] 전체 플로우 E2E 검증 (승인 → 정산 → 환불)
-
-### 6주차 (Week 7)
-
 - [X] settlement-worker 재시도 스케줄러 구현 (10초 주기, 최대 10회 재시도)
 - [X] refund-worker 재시도 스케줄러 구현 (지수 백오프 적용)
 - [X] 정산/환불 통계 REST API 구현 (monitoring-service)
@@ -66,8 +60,8 @@
 | **consumer-worker**    | Kafka Consumer. 결제 이벤트를 ledger 엔트리로 반영하고 DLQ 처리 로직 포함. Eureka에 자동 등록.                                     |
 | **settlement-worker**  | 정산 전용 마이크로서비스. payment.capture-requested 이벤트 구독, Mock PG API 호출, settlement_request 추적 (포트 8084).            |
 | **refund-worker**      | 환불 전용 마이크로서비스. payment.refund-requested 이벤트 구독, Mock PG 환불 API 호출, refund_request 추적 (포트 8085).            |
-| **monitoring-service** | Spring Boot 기반 모니터링 REST API. Circuit Breaker 상태, 데이터베이스 쿼리, Redis 캐시 통계, 정산/환불 통계 제공 (포트 8082).      |
-| **mariadb**            | paydb 스키마 운영. payment, ledger_entry, outbox_event, idem_response_cache 테이블 관리.                                           |
+| **monitoring-service** | Spring Boot 기반 모니터링 REST API. Circuit Breaker 상태, 데이터베이스 쿼리, Redis 캐시 통계, 정산/환불 통계 제공 (포트 8082).     |
+| **mariadb**            | paydb 스키마 운영. payment, ledger_entry, outbox_event, idem_response_cache, settlement_request, refund_request 테이블 관리.       |
 | **kafka & zookeeper**  | 결제 이벤트 토픽(`payment.authorized`, `payment.captured`, `payment.refunded`)을 호스팅.                                     |
 | **redis**              | rate limit 카운터 및 결제 승인 응답 멱등 캐시 저장.                                                                                |
 | **jenkins**            | CI 서버. Gradle/NPM 빌드, Docker Compose 배포, k6 부하 테스트 자동화.                                                              |
@@ -77,10 +71,12 @@
 
 `backend/ingest-service/src/main/resources/schema.sql` 참고
 
-- `payment`: 결제 상태 및 멱등 키 보관
+- `payment`: 결제 상태 및 멱등 키 보관 (11단계 상태 관리)
 - `ledger_entry`: 승인/정산/환불 시 생성되는 회계 분개 기록
-- `outbox_event`: Kafka 발행 전 이벤트 저장소
+- `outbox_event`: Kafka 발행 전 이벤트 저장소 (Outbox Pattern)
 - `idem_response_cache`: 결제 승인 응답 멱등 캐시
+- `settlement_request`: 정산 요청 추적 (상태, 재시도 횟수, PG 거래 ID)
+- `refund_request`: 환불 요청 추적 (상태, 재시도 횟수, 부분 환불 금액)
 
 ## REST API 요약
 
@@ -93,9 +89,9 @@
 ## Kafka 토픽
 
 - `payment.authorized`
-- `payment.capture-requested` (신규)
+- `payment.capture-requested`
 - `payment.captured`
-- `payment.refund-requested` (신규)
+- `payment.refund-requested`
 - `payment.refunded`
 - `payment.dlq`
 

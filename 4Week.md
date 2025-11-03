@@ -859,7 +859,7 @@ amount: 250000
 
 ---
 
-## 11. 환불 워커 구현 (refund-worker) - Week 6
+## 11. 환불 워커 구현 (refund-worker)
 
 ### 배경
 
@@ -868,11 +868,13 @@ settlement-worker와 동일한 구조로 환불 처리를 독립 마이크로서
 ### 구현 내용
 
 **RefundWorkerApplication**
+
 - payment.refund-requested 토픽 구독
 - Mock PG 환불 API 호출
 - payment.refunded 이벤트 발행
 
 **MockPgApiClient** (환불 API)
+
 ```java
 public RefundResponse requestRefund(Long paymentId, BigDecimal amount, String reason) {
     // 1~3초 지연 시뮬레이션
@@ -891,18 +893,21 @@ public RefundResponse requestRefund(Long paymentId, BigDecimal amount, String re
 ### E2E 검증 결과
 
 **1. 승인**
+
 ```
 paymentId: 68435
 status: AUTHORIZED
 ```
 
 **2. 정산 (자동)**
+
 ```
 status: CAPTURED (약 2초 소요)
 settlement_request 기록 생성
 ```
 
 **3. 환불**
+
 ```
 POST /api/payments/refund/68435
 → status: REFUND_REQUESTED
@@ -913,7 +918,7 @@ POST /api/payments/refund/68435
 
 ---
 
-## 12. 재시도 스케줄러 및 통계 대시보드 - Week 7
+## 12. 재시도 스케줄러 및 통계 대시보드
 
 ### 배경
 
@@ -924,6 +929,7 @@ POST /api/payments/refund/68435
 **파일**: `backend/settlement-worker/src/main/java/com/example/settlement/scheduler/SettlementRetryScheduler.java`
 
 **핵심 기능**:
+
 - 10초마다 실패한 정산 자동 재시도
 - 최소 30초 간격 (지수 백오프)
 - 최대 10회 재시도
@@ -1002,29 +1008,30 @@ GET /api/stats/overview
 **패널 구성**:
 
 1. **Settlement Success Rate** (Stat 패널)
+
    - 정산 성공률 (%)
    - 임계값: 0% (빨강), 90% (노랑), 95% (초록)
-
 2. **Refund Success Rate** (Stat 패널)
-   - 환불 성공률 (%)
 
+   - 환불 성공률 (%)
 3. **Settlement Dead Letters** (Stat 패널)
+
    - 최대 재시도 초과 건수
    - 임계값: 0 (초록), 1 (노랑), 10 (빨강)
-
 4. **Refund Dead Letters** (Stat 패널)
+
    - 환불 Dead Letter 건수
-
 5. **Settlement Request Rate** (Time Series)
+
    - 정산 요청 처리율 (req/s)
-
 6. **Refund Request Rate** (Time Series)
+
    - 환불 요청 처리율 (req/s)
-
 7. **Settlement Status Distribution** (Pie Chart)
-   - SUCCESS / FAILED / PENDING 비율
 
+   - SUCCESS / FAILED / PENDING 비율
 8. **Refund Status Distribution** (Pie Chart)
+
    - SUCCESS / FAILED / PENDING 비율
 
 ### 달성한 목표
