@@ -133,7 +133,7 @@ pipeline {
           TS=$(date +%s)
           payload=$(printf '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"smoke-test-%s"}' "$TS")
           success=0
-          for i in $(seq 1 5); do
+          for i in $(seq 1 10); do
             if docker compose exec -T gateway sh -c "curl -sSf -X POST -H 'Content-Type: application/json' -d '$payload' http://localhost:8080/api/payments/authorize >/dev/null"; then
               success=1
               break

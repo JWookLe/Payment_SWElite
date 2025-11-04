@@ -239,6 +239,8 @@ services:
       - prometheus
     ports:
       - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
 
   frontend:
     build:
@@ -289,3 +291,4 @@ services:
 
 volumes:
   mariadb-data:
+  grafana-data:

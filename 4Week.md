@@ -1199,3 +1199,74 @@ GET /api/stats/overview
 2. **가시성**: Dead Letter 실시간 모니터링으로 빠른 대응 가능
 3. **분석**: 정산/환불 성공률, 처리량 추이 분석 가능
 4. **안정성**: 지수 백오프로 시스템 부하 최소화
+
+## 13. Grafana 대시보드 실시간 모니터링
+
+### 개요
+
+정산/환불 워커의 처리 상태를 실시간으로 모니터링하기 위해 MariaDB 직접 쿼리 기반 Grafana 대시보드를 구축했다.
+
+### 구현 방식
+
+#### 1. 데이터소스 설정
+
+**`monitoring/grafana/provisioning/datasources/mariadb.yml`**
+
+Prometheus 대신 MariaDB를 직접 데이터소스로 사용한다. settlement_request와 refund_request 테이블의 데이터를 실시간으로 조회하여 통계를 계산한다.
+
+```yaml
+datasources:
+  - name: MariaDB
+    type: mysql
+    url: mariadb:3306
+    database: paydb
+    user: payuser
+```
+
+#### 2. 대시보드 패널 (8개)
+
+**성공률 패널 (Stat)**
+- SQL: `SELECT ROUND((SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) FROM settlement_request`
+- 최근 6시간 데이터 기준 성공률 계산
+- 임계값: 95% 이상 녹색, 90~95% 노란색, 90% 미만 빨간색
+
+**Dead Letter 패널 (Stat)**
+- SQL: `SELECT COUNT(*) FROM settlement_request WHERE retry_count >= 10`
+- 재시도 10회 초과한 실패 건수 표시
+- 1건 이상 시 노란색, 10건 이상 시 빨간색 경고
+
+**시계열 그래프 (Time Series)**
+- SQL: `SELECT requested_at as time, COUNT(*) FROM settlement_request GROUP BY DATE_FORMAT(requested_at, '%Y-%m-%d %H:%i:00')`
+- 분 단위로 그룹핑하여 시간대별 요청량 추이 표시
+- 트래픽 패턴 분석 가능
+
+**상태 분포 (Pie Chart)**
+- SQL: `SELECT status, COUNT(*) FROM settlement_request GROUP BY status`
+- SUCCESS, FAILED, PENDING 비율을 파이 차트로 시각화
+- 시스템 건강도를 한눈에 파악 가능
+
+### 실시간 갱신
+
+- **갱신 주기**: 30초 자동 리프레시
+- **조회 범위**: 최근 6시간 데이터 (설정 변경 가능)
+- **데이터 영속성**: grafana-data 볼륨으로 대시보드 설정 및 사용자 계정 영구 저장
+
+### 활용 시나리오
+
+**1. 장애 감지**
+- Dead Letter가 증가하면 PG API 장애 또는 네트워크 문제 의심
+- 성공률이 급격히 하락하면 즉시 확인 필요
+
+**2. 트래픽 분석**
+- 시계열 그래프로 피크 타임 파악
+- 정산/환불 요청 패턴 분석하여 리소스 최적화
+
+**3. 장기 모니터링**
+- 상태 분포로 전체 시스템 안정성 평가
+- SUCCESS 비율이 지속적으로 낮으면 구조적 문제 검토
+
+### 접속 정보
+
+- URL: http://localhost:3000
+- 계정: admin / admin
+- 대시보드: Dashboards → Payment → Settlement & Refund Statistics

@@ -3,7 +3,7 @@
   "uid": "settlement-refund-stats",
   "title": "Settlement & Refund Statistics",
   "tags": ["settlement", "refund", "statistics"],
-  "timezone": "",
+  "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
@@ -22,14 +22,14 @@
       "type": "stat",
       "title": "Settlement Success Rate",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "mysql",
+        "uid": "mariadb"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "(count(settlement_request_status{status=\"SUCCESS\"}) / count(settlement_request_status)) * 100",
-          "legendFormat": "Success Rate %"
+          "rawSql": "SELECT ROUND((SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as value FROM settlement_request WHERE requested_at > NOW() - INTERVAL 6 HOUR",
+          "format": "table"
         }
       ],
       "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
@@ -40,16 +40,17 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": 0, "color": "red"},
+              {"value": null, "color": "red"},
               {"value": 90, "color": "yellow"},
               {"value": 95, "color": "green"}
             ]
-          }
+          },
+          "decimals": 2
         }
       },
       "options": {
         "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "text": {"titleSize": 18, "valueSize": 60},
+        "text": {},
         "graphMode": "area",
         "orientation": "auto"
       }
@@ -59,14 +60,14 @@
       "type": "stat",
       "title": "Refund Success Rate",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "mysql",
+        "uid": "mariadb"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "(count(refund_request_status{status=\"SUCCESS\"}) / count(refund_request_status)) * 100",
-          "legendFormat": "Success Rate %"
+          "rawSql": "SELECT ROUND((SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as value FROM refund_request WHERE requested_at > NOW() - INTERVAL 6 HOUR",
+          "format": "table"
         }
       ],
       "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
@@ -77,17 +78,19 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": 0, "color": "red"},
+              {"value": null, "color": "red"},
               {"value": 90, "color": "yellow"},
               {"value": 95, "color": "green"}
             ]
-          }
+          },
+          "decimals": 2
         }
       },
       "options": {
         "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "text": {"titleSize": 18, "valueSize": 60},
-        "graphMode": "area"
+        "text": {},
+        "graphMode": "area",
+        "orientation": "auto"
       }
     },
     {
@@ -95,25 +98,24 @@
       "type": "stat",
       "title": "Settlement Dead Letters",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "mysql",
+        "uid": "mariadb"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "count(settlement_request_status{status=\"FAILED\", retry_count>=\"10\"})",
-          "legendFormat": "Dead Letters"
+          "rawSql": "SELECT COUNT(*) as value FROM settlement_request WHERE retry_count >= 10",
+          "format": "table"
         }
       ],
       "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
           "color": {"mode": "thresholds"},
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": 0, "color": "green"},
+              {"value": null, "color": "green"},
               {"value": 1, "color": "yellow"},
               {"value": 10, "color": "red"}
             ]
@@ -122,8 +124,9 @@
       },
       "options": {
         "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "text": {"titleSize": 18, "valueSize": 60},
-        "graphMode": "area"
+        "text": {},
+        "graphMode": "none",
+        "orientation": "auto"
       }
     },
     {
@@ -131,25 +134,24 @@
       "type": "stat",
       "title": "Refund Dead Letters",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "mysql",
+        "uid": "mariadb"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "count(refund_request_status{status=\"FAILED\", retry_count>=\"10\"})",
-          "legendFormat": "Dead Letters"
+          "rawSql": "SELECT COUNT(*) as value FROM refund_request WHERE retry_count >= 10",
+          "format": "table"
         }
       ],
       "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
           "color": {"mode": "thresholds"},
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": 0, "color": "green"},
+              {"value": null, "color": "green"},
               {"value": 1, "color": "yellow"},
               {"value": 10, "color": "red"}
             ]
@@ -158,54 +160,99 @@
       },
       "options": {
         "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
-        "text": {"titleSize": 18, "valueSize": 60},
-        "graphMode": "area"
+        "text": {},
+        "graphMode": "none",
+        "orientation": "auto"
       }
     },
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Settlement Request Rate",
+      "title": "Settlement Requests Over Time",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "mysql",
+        "uid": "mariadb"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(settlement_request_total[5m])",
-          "legendFormat": "Requests/sec"
+          "rawSql": "SELECT requested_at as time, COUNT(*) as value FROM settlement_request WHERE requested_at > NOW() - INTERVAL 6 HOUR GROUP BY DATE_FORMAT(requested_at, '%Y-%m-%d %H:%i:00') ORDER BY time",
+          "format": "time_series"
         }
       ],
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
       "fieldConfig": {
         "defaults": {
-          "unit": "req/s",
-          "color": {"mode": "palette-classic"}
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "unit": "short"
         }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single", "sort": "none"}
       }
     },
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Refund Request Rate",
+      "title": "Refund Requests Over Time",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "mysql",
+        "uid": "mariadb"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(refund_request_total[5m])",
-          "legendFormat": "Requests/sec"
+          "rawSql": "SELECT requested_at as time, COUNT(*) as value FROM refund_request WHERE requested_at > NOW() - INTERVAL 6 HOUR GROUP BY DATE_FORMAT(requested_at, '%Y-%m-%d %H:%i:00') ORDER BY time",
+          "format": "time_series"
         }
       ],
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
       "fieldConfig": {
         "defaults": {
-          "unit": "req/s",
-          "color": {"mode": "palette-classic"}
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "unit": "short"
         }
+      },
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single", "sort": "none"}
       }
     },
     {
@@ -213,21 +260,27 @@
       "type": "piechart",
       "title": "Settlement Status Distribution",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "mysql",
+        "uid": "mariadb"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "count by (status) (settlement_request_status)",
-          "legendFormat": "{{status}}"
+          "rawSql": "SELECT status, COUNT(*) as value FROM settlement_request GROUP BY status",
+          "format": "table"
         }
       ],
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
       "options": {
         "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
         "pieType": "pie",
+        "tooltip": {"mode": "single"},
         "displayLabels": ["percent"]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"}
+        }
       }
     },
     {
@@ -235,21 +288,27 @@
       "type": "piechart",
       "title": "Refund Status Distribution",
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "mysql",
+        "uid": "mariadb"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "count by (status) (refund_request_status)",
-          "legendFormat": "{{status}}"
+          "rawSql": "SELECT status, COUNT(*) as value FROM refund_request GROUP BY status",
+          "format": "table"
         }
       ],
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
       "options": {
         "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
         "pieType": "pie",
+        "tooltip": {"mode": "single"},
         "displayLabels": ["percent"]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"}
+        }
       }
     }
   ]

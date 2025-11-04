@@ -117,15 +117,17 @@
   - Status → Targets에서 ingest-service, consumer-worker 메트릭 수집 상태 확인
 - **Grafana**: http://localhost:3000
   - 기본 계정: `admin`/`admin`
-  - `Payment Service Overview` 대시보드에서 요청 속도, p95 지연시간, Kafka 소비량, 에러율 등을 확인
+  - `Payment Service Overview` 대시보드: 요청 속도, p95 지연시간, Kafka 소비량, 에러율
+  - `Settlement & Refund Statistics` 대시보드: 정산/환불 성공률, Dead Letter, 시계열 추이 (MariaDB 직접 쿼리)
 
 ### 구성 방식
 
 - **Prometheus**: 커스텀 이미지 빌드 (`monitoring/prometheus/Dockerfile`)
   - 설정 파일을 이미지에 포함해서 볼륨 마운트 문제 해결
 - **Grafana**: 커스텀 이미지 빌드 (`monitoring/grafana/Dockerfile`)
-  - Datasource, Dashboard provisioning 설정을 이미지에 포함
-  - Payment Service Overview 대시보드 자동 로드
+  - Prometheus, MariaDB 데이터소스 자동 프로비저닝
+  - Payment Service Overview, Settlement & Refund Statistics 대시보드 자동 로드
+  - grafana-data 볼륨으로 설정 및 계정 영구 저장
 
 ## Load Testing (k6)
 
