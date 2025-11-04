@@ -48,7 +48,9 @@ public class KafkaMonitoringController {
             Set<String> topicNames = topics.names().get();
 
             List<String> paymentTopics = topicNames.stream()
-                    .filter(name -> name.startsWith("payment."))
+                    .filter(name -> name.startsWith("payment.") ||
+                                    name.equals("settlement.dlq") ||
+                                    name.equals("refund.dlq"))
                     .sorted()
                     .collect(Collectors.toList());
 
@@ -73,7 +75,8 @@ public class KafkaMonitoringController {
         try (KafkaConsumer<String, String> consumer = getConsumer()) {
             List<String> topics = topic != null
                     ? List.of(topic)
-                    : List.of("payment.authorized", "payment.captured", "payment.refunded", "payment.dlq");
+                    : List.of("payment.authorized", "payment.captured", "payment.refunded",
+                              "payment.dlq", "settlement.dlq", "refund.dlq");
 
             List<Map<String, Object>> stats = new ArrayList<>();
 
@@ -228,9 +231,14 @@ public class KafkaMonitoringController {
      * DLQ 메시지 조회 (최근 N개)
      */
     @GetMapping("/dlq-messages")
-    public Map<String, Object> getDlqMessages(@RequestParam(defaultValue = "10") int limit) {
+    public Map<String, Object> getDlqMessages(
+            @RequestParam(required = false) String topic,
+            @RequestParam(defaultValue = "10") int limit) {
+
+        // topic 파라미터가 없으면 payment.dlq 조회 (하위 호환성)
+        String dlqTopic = topic != null ? topic : "payment.dlq";
+
         try (KafkaConsumer<String, String> consumer = getConsumer()) {
-            String dlqTopic = "payment.dlq";
             List<TopicPartition> partitions = consumer.partitionsFor(dlqTopic).stream()
                     .map(p -> new TopicPartition(dlqTopic, p.partition()))
                     .collect(Collectors.toList());
@@ -267,6 +275,70 @@ public class KafkaMonitoringController {
             return Map.of(
                     "error", true,
                     "message", "Failed to retrieve DLQ messages: " + e.getMessage()
+            );
+        }
+    }
+
+    /**
+     * Settlement DLQ 카운트 조회
+     */
+    @GetMapping("/settlement-dlq-count")
+    public Map<String, Object> getSettlementDlqCount() {
+        try (KafkaConsumer<String, String> consumer = getConsumer()) {
+            String topic = "settlement.dlq";
+            List<TopicPartition> partitions = consumer.partitionsFor(topic).stream()
+                    .map(p -> new TopicPartition(topic, p.partition()))
+                    .collect(Collectors.toList());
+
+            Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
+            Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
+
+            long totalCount = endOffsets.entrySet().stream()
+                    .mapToLong(e -> e.getValue() - beginningOffsets.get(e.getKey()))
+                    .sum();
+
+            return Map.of(
+                    "topic", topic,
+                    "count", totalCount,
+                    "message", "Settlement DLQ count retrieved"
+            );
+        } catch (Exception e) {
+            return Map.of(
+                    "error", true,
+                    "count", 0,
+                    "message", "Failed to retrieve settlement DLQ count: " + e.getMessage()
+            );
+        }
+    }
+
+    /**
+     * Refund DLQ 카운트 조회
+     */
+    @GetMapping("/refund-dlq-count")
+    public Map<String, Object> getRefundDlqCount() {
+        try (KafkaConsumer<String, String> consumer = getConsumer()) {
+            String topic = "refund.dlq";
+            List<TopicPartition> partitions = consumer.partitionsFor(topic).stream()
+                    .map(p -> new TopicPartition(topic, p.partition()))
+                    .collect(Collectors.toList());
+
+            Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
+            Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
+
+            long totalCount = endOffsets.entrySet().stream()
+                    .mapToLong(e -> e.getValue() - beginningOffsets.get(e.getKey()))
+                    .sum();
+
+            return Map.of(
+                    "topic", topic,
+                    "count", totalCount,
+                    "message", "Refund DLQ count retrieved"
+            );
+        } catch (Exception e) {
+            return Map.of(
+                    "error", true,
+                    "count", 0,
+                    "message", "Failed to retrieve refund DLQ count: " + e.getMessage()
             );
         }
     }

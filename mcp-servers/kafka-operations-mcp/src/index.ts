@@ -117,7 +117,7 @@ class KafkaOperationsMcpServer {
       {
         name: "list_topics",
         description:
-          "결제 시스템의 Kafka 토픽 목록을 조회합니다 (payment.* 토픽만)",
+          "결제 시스템의 Kafka 토픽 목록을 조회합니다 (payment.*, settlement.dlq, refund.dlq)",
         inputSchema: {
           type: "object",
           properties: {},
@@ -134,7 +134,7 @@ class KafkaOperationsMcpServer {
             topic: {
               type: "string",
               description:
-                "조회할 토픽 이름 (선택사항, 미입력 시 전체 payment 토픽)",
+                "조회할 토픽 이름 (선택사항, 미입력 시 전체 토픽)",
             },
           },
         },

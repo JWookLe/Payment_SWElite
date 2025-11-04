@@ -150,42 +150,4 @@ public class SettlementStatsService {
 
         return stats;
     }
-
-    /**
-     * 정산 Dead Letter 목록 조회
-     */
-    public List<Map<String, Object>> getSettlementDeadLetters() {
-        return jdbcTemplate.queryForList(
-                "SELECT id, payment_id, request_amount, status, retry_count, " +
-                "pg_transaction_id, pg_response_code, pg_response_message, " +
-                "requested_at, last_retry_at, completed_at " +
-                "FROM settlement_request " +
-                "WHERE status = 'FAILED' AND retry_count >= 10 " +
-                "ORDER BY requested_at DESC"
-        );
-    }
-
-    /**
-     * 환불 Dead Letter 목록 조회
-     */
-    public List<Map<String, Object>> getRefundDeadLetters() {
-        return jdbcTemplate.queryForList(
-                "SELECT id, payment_id, refund_amount, status, retry_count, " +
-                "pg_cancel_transaction_id, pg_response_code, pg_response_message, " +
-                "refund_reason, requested_at, last_retry_at, completed_at " +
-                "FROM refund_request " +
-                "WHERE status = 'FAILED' AND retry_count >= 10 " +
-                "ORDER BY requested_at DESC"
-        );
-    }
-
-    /**
-     * 전체 Dead Letter 목록 조회
-     */
-    public Map<String, Object> getAllDeadLetters() {
-        Map<String, Object> result = new HashMap<>();
-        result.put("settlement", getSettlementDeadLetters());
-        result.put("refund", getRefundDeadLetters());
-        return result;
-    }
 }

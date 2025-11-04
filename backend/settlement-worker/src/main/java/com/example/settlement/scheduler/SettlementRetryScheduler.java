@@ -7,9 +7,11 @@ import com.example.settlement.domain.SettlementRequest;
 import com.example.settlement.repository.PaymentRepository;
 import com.example.settlement.repository.SettlementRequestRepository;
 import com.example.settlement.service.SettlementService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 정산 재시도 스케줄러
@@ -32,6 +36,8 @@ public class SettlementRetryScheduler {
     private final PaymentRepository paymentRepository;
     private final MockPgApiClient pgApiClient;
     private final SettlementService settlementService;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final ObjectMapper objectMapper;
 
     @Value("${settlement.max-retries:10}")
     private int maxRetries;
@@ -42,11 +48,15 @@ public class SettlementRetryScheduler {
     public SettlementRetryScheduler(SettlementRequestRepository settlementRequestRepository,
                                     PaymentRepository paymentRepository,
                                     MockPgApiClient pgApiClient,
-                                    SettlementService settlementService) {
+                                    SettlementService settlementService,
+                                    KafkaTemplate<String, String> kafkaTemplate,
+                                    ObjectMapper objectMapper) {
         this.settlementRequestRepository = settlementRequestRepository;
         this.paymentRepository = paymentRepository;
         this.pgApiClient = pgApiClient;
         this.settlementService = settlementService;
+        this.kafkaTemplate = kafkaTemplate;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -109,6 +119,7 @@ public class SettlementRetryScheduler {
                 if (request.getRetryCount() >= maxRetries) {
                     log.error("Settlement exceeded max retries: paymentId={}, maxRetries={}",
                             request.getPaymentId(), maxRetries);
+                    publishToDeadLetterQueue(request, ex.getMessage());
                 }
             }
         }
@@ -133,6 +144,35 @@ public class SettlementRetryScheduler {
                 log.error("Dead letter: paymentId={}, retryCount={}, lastError={}",
                         request.getPaymentId(), request.getRetryCount(), request.getPgResponseMessage());
             }
+        }
+    }
+
+    /**
+     * Dead Letter Queue로 메시지 발행
+     */
+    private void publishToDeadLetterQueue(SettlementRequest request, String errorMessage) {
+        try {
+            Map<String, Object> dlqMessage = new HashMap<>();
+            dlqMessage.put("settlementRequestId", request.getId());
+            dlqMessage.put("paymentId", request.getPaymentId());
+            dlqMessage.put("requestAmount", request.getRequestAmount());
+            dlqMessage.put("retryCount", request.getRetryCount());
+            dlqMessage.put("status", request.getStatus().name());
+            dlqMessage.put("pgResponseCode", request.getPgResponseCode());
+            dlqMessage.put("pgResponseMessage", request.getPgResponseMessage());
+            dlqMessage.put("errorMessage", errorMessage);
+            dlqMessage.put("requestedAt", request.getRequestedAt().toString());
+            dlqMessage.put("lastRetryAt", request.getLastRetryAt() != null ? request.getLastRetryAt().toString() : null);
+            dlqMessage.put("timestamp", Instant.now().toString());
+
+            String jsonMessage = objectMapper.writeValueAsString(dlqMessage);
+            kafkaTemplate.send("settlement.dlq", String.valueOf(request.getPaymentId()), jsonMessage);
+
+            log.info("Published settlement dead letter to Kafka: paymentId={}, retryCount={}",
+                    request.getPaymentId(), request.getRetryCount());
+        } catch (Exception e) {
+            log.error("Failed to publish settlement dead letter to Kafka: paymentId={}, error={}",
+                    request.getPaymentId(), e.getMessage());
         }
     }
 }

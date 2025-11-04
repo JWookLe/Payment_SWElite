@@ -35,19 +35,4 @@ public class SettlementStatsController {
     public Map<String, Object> getOverview() {
         return statsService.getOverviewStats();
     }
-
-    @GetMapping("/settlement/dead-letters")
-    public List<Map<String, Object>> getSettlementDeadLetters() {
-        return statsService.getSettlementDeadLetters();
-    }
-
-    @GetMapping("/refund/dead-letters")
-    public List<Map<String, Object>> getRefundDeadLetters() {
-        return statsService.getRefundDeadLetters();
-    }
-
-    @GetMapping("/dead-letters")
-    public Map<String, Object> getAllDeadLetters() {
-        return statsService.getAllDeadLetters();
-    }
 }

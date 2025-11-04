@@ -10,7 +10,7 @@
   "editable": true,
   "graphTooltip": 0,
   "time": {
-    "from": "now-6h",
+    "from": "now-7d",
     "to": "now"
   },
   "timepicker": {
@@ -28,8 +28,8 @@
       "targets": [
         {
           "refId": "A",
-          "rawSql": "SELECT ROUND((SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as value FROM settlement_request WHERE requested_at > NOW() - INTERVAL 6 HOUR",
-          "format": "table"
+          "rawSql": "SELECT NOW() as time, ROUND((SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as value FROM settlement_request WHERE requested_at > NOW() - INTERVAL 7 DAY",
+          "format": "time_series"
         }
       ],
       "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
@@ -66,8 +66,8 @@
       "targets": [
         {
           "refId": "A",
-          "rawSql": "SELECT ROUND((SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as value FROM refund_request WHERE requested_at > NOW() - INTERVAL 6 HOUR",
-          "format": "table"
+          "rawSql": "SELECT NOW() as time, ROUND((SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as value FROM refund_request WHERE requested_at > NOW() - INTERVAL 7 DAY",
+          "format": "time_series"
         }
       ],
       "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
@@ -96,16 +96,31 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Settlement Dead Letters",
+      "title": "Settlement Dead Letters (Kafka)",
       "datasource": {
-        "type": "mysql",
-        "uid": "mariadb"
+        "type": "infinity",
+        "uid": "infinity"
       },
       "targets": [
         {
           "refId": "A",
-          "rawSql": "SELECT COUNT(*) as value FROM settlement_request WHERE retry_count >= 10",
-          "format": "table"
+          "type": "json",
+          "source": "url",
+          "url": "http://pay-monitoring:8082/monitoring/kafka/settlement-dlq-count",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "format": "table",
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "count",
+              "text": "value",
+              "type": "number"
+            }
+          ],
+          "parser": "backend"
         }
       ],
       "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
@@ -132,16 +147,31 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Refund Dead Letters",
+      "title": "Refund Dead Letters (Kafka)",
       "datasource": {
-        "type": "mysql",
-        "uid": "mariadb"
+        "type": "infinity",
+        "uid": "infinity"
       },
       "targets": [
         {
           "refId": "A",
-          "rawSql": "SELECT COUNT(*) as value FROM refund_request WHERE retry_count >= 10",
-          "format": "table"
+          "type": "json",
+          "source": "url",
+          "url": "http://pay-monitoring:8082/monitoring/kafka/refund-dlq-count",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "format": "table",
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "count",
+              "text": "value",
+              "type": "number"
+            }
+          ],
+          "parser": "backend"
         }
       ],
       "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
@@ -176,7 +206,7 @@
       "targets": [
         {
           "refId": "A",
-          "rawSql": "SELECT requested_at as time, COUNT(*) as value FROM settlement_request WHERE requested_at > NOW() - INTERVAL 6 HOUR GROUP BY DATE_FORMAT(requested_at, '%Y-%m-%d %H:%i:00') ORDER BY time",
+          "rawSql": "SELECT UNIX_TIMESTAMP(DATE_FORMAT(requested_at, '%Y-%m-%d %H:%i:00')) as time_sec, COUNT(*) as value FROM settlement_request WHERE requested_at > NOW() - INTERVAL 7 DAY GROUP BY DATE_FORMAT(requested_at, '%Y-%m-%d %H:%i:00') ORDER BY time_sec",
           "format": "time_series"
         }
       ],
@@ -221,7 +251,7 @@
       "targets": [
         {
           "refId": "A",
-          "rawSql": "SELECT requested_at as time, COUNT(*) as value FROM refund_request WHERE requested_at > NOW() - INTERVAL 6 HOUR GROUP BY DATE_FORMAT(requested_at, '%Y-%m-%d %H:%i:00') ORDER BY time",
+          "rawSql": "SELECT UNIX_TIMESTAMP(DATE_FORMAT(requested_at, '%Y-%m-%d %H:%i:00')) as time_sec, COUNT(*) as value FROM refund_request WHERE requested_at > NOW() - INTERVAL 7 DAY GROUP BY DATE_FORMAT(requested_at, '%Y-%m-%d %H:%i:00') ORDER BY time_sec",
           "format": "time_series"
         }
       ],
