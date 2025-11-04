@@ -851,6 +851,23 @@ npm install && npm run build
 | **CI/CD**     | ❌                                | ✅ Jenkins/GitHub Actions   |
 | **Grafana**   | ❌                                | ✅ 메트릭 연동              |
 
+#### MCP 동작 원리
+
+1. **MCP 서버 실행**  
+   프로젝트 루트의 `.claude/mcp_settings.json`에 MCP 서버들의 실행 명령과 환경 변수가 정의되어 있습니다. Claude Desktop이 레포를 열면 이 설정을 읽고 `node mcp-servers/<name>/dist/index.js` 형태의 프로세스를 stdio 모드로 띄웁니다.
+
+2. **툴 선언으로 기능 노출**  
+   각 서버는 `ListTools` 응답에서 사용할 수 있는 툴 이름, 설명, 입력 스키마를 반환합니다(예: `kafka-operations-mcp/src/index.ts`의 `getTools()` 함수). Claude는 이 설명을 기반으로 어떤 상황에 어떤 툴을 호출할지 판단합니다.
+
+3. **자연어 → MCP 호출**  
+   사용자가 “DLQ 메시지 보여줘”처럼 자연어로 요청하면 Claude LLM이 적합한 MCP 툴을 선택해 `CallTool` 요청을 보냅니다. 예를 들어 `get_dlq_messages`를 호출하면서 `{"limit":10}` 같은 JSON 인자를 넘깁니다.
+
+4. **백엔드 연동 및 응답**  
+   MCP 서버는 전달받은 인자를 기반으로 `axios` 등을 이용해 `monitoring-service`의 REST API나 Kafka/Redis/DB에 접근해 필요한 데이터를 가져옵니다. 그런 뒤 결과를 사람이 읽기 쉬운 문자열로 가공해 MCP 응답으로 돌려줍니다.
+
+5. **Claude가 대화에 통합**  
+   Claude Desktop은 MCP 응답을 받아 자연어 문장으로 다시 정리해 채팅에 포함시킵니다. 사용자는 추가 맥락 없이도 “Kafka 토픽 상태”, “DB 미발행 이벤트”처럼 여러 운영 정보를 대화형으로 확인할 수 있습니다.
+
 **권장**:
 
 - 로컬 디버깅 → MCP 서버 사용
