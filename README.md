@@ -47,6 +47,11 @@
 - [X] 정산/환불 통계 REST API 구현 (monitoring-service)
 - [X] Grafana Settlement & Refund 대시보드 추가 (8개 패널)
 - [X] Dead Letter 자동 감지 및 모니터링 기능
+- [X] Kafka DLQ (settlement.dlq, refund.dlq) 토픽 구현
+- [X] Grafana Infinity 플러그인 연동으로 Kafka 직접 조회
+- [X] Kafka Operations MCP 서버 구현 및 Claude Desktop 연동
+
+**상세 내역**: [4Week.md](./4Week.md)
 
 ## 서비스 구성 요소
 
@@ -93,6 +98,8 @@
 - `payment.refund-requested`
 - `payment.refunded`
 - `payment.dlq`
+- `settlement.dlq` (정산 Dead Letter Queue)
+- `refund.dlq` (환불 Dead Letter Queue)
 
 ## Redis 기반 보호 기능
 
@@ -117,14 +124,17 @@
 - **Grafana**: http://localhost:3000
   - 기본 계정: `admin`/`admin`
   - `Payment Service Overview` 대시보드: 요청 속도, p95 지연시간, Kafka 소비량, 에러율
-  - `Settlement & Refund Statistics` 대시보드: 정산/환불 성공률, Dead Letter, 시계열 추이 (MariaDB 직접 쿼리)
+  - `Settlement & Refund Statistics` 대시보드: 정산/환불 성공률, Dead Letter (Kafka 직접 조회), 시계열 추이
+    - MariaDB 데이터소스: 성공률, 요청 추이, 상태 분포
+    - Infinity 플러그인: Kafka DLQ 메시지 수 (settlement.dlq, refund.dlq)
 
 ### 구성 방식
 
 - **Prometheus**: 커스텀 이미지 빌드 (`monitoring/prometheus/Dockerfile`)
   - 설정 파일을 이미지에 포함해서 볼륨 마운트 문제 해결
 - **Grafana**: 커스텀 이미지 빌드 (`monitoring/grafana/Dockerfile`)
-  - Prometheus, MariaDB 데이터소스 자동 프로비저닝
+  - Prometheus, MariaDB, Infinity 데이터소스 자동 프로비저닝
+  - Infinity 플러그인 설치 (HTTP JSON API 지원)
   - Payment Service Overview, Settlement & Refund Statistics 대시보드 자동 로드
   - grafana-data 볼륨으로 설정 및 계정 영구 저장
 
@@ -693,7 +703,7 @@ AI 기반 시스템 모니터링 및 디버깅을 위한 Claude Desktop 통합 M
 
 ### 개요
 
-MCP(Model Context Protocol)는 AI 모델이 외부 시스템과 상호작용할 수 있게 하는 표준 프로토콜입니다. 이 프로젝트는 3개의 MCP 서버를 포함하여 Claude가 자연어로 결제 시스템을 모니터링하고 디버깅할 수 있습니다.
+MCP(Model Context Protocol)는 AI 모델이 외부 시스템과 상호작용할 수 있게 하는 표준 프로토콜입니다. 이 프로젝트는 4개의 MCP 서버를 포함하여 Claude가 자연어로 결제 시스템을 모니터링하고 디버깅할 수 있습니다.
 
 ### MCP 서버 목록
 
@@ -753,6 +763,25 @@ Claude: 📊 3개 발견: #123 (10,000원), #456 (25,000원), #789 (50,000원)
 Claude: ✅ OK - 250/1000 사용 (25%), 리셋까지 45초
 ```
 
+#### 4. Kafka Operations MCP
+
+**위치**: `mcp-servers/kafka-operations-mcp`
+
+**기능**:
+
+- Kafka 토픽 목록 조회 (payment.*, settlement.dlq, refund.dlq)
+- 토픽별 메시지 수, 파티션 정보, 오프셋 조회
+- DLQ 메시지 조회 (최근 N개)
+- 토픽 생성/삭제
+- Kafka 클러스터 상태 확인
+
+**사용 예시**:
+
+```
+사용자: "settlement.dlq에 메시지 있어?"
+Claude: 📊 14개 메시지 발견 - 대부분 PG 타임아웃 에러
+```
+
 ### 설치 및 설정
 
 #### 1. MCP 서버 빌드
@@ -766,6 +795,9 @@ cd ../database-query-mcp
 npm install && npm run build
 
 cd ../redis-cache-mcp
+npm install && npm run build
+
+cd ../kafka-operations-mcp
 npm install && npm run build
 ```
 
@@ -793,6 +825,13 @@ npm install && npm run build
     "payment-redis": {
       "command": "node",
       "args": ["<절대경로>/mcp-servers/redis-cache-mcp/dist/index.js"],
+      "env": {
+        "API_BASE_URL": "http://localhost:8082"
+      }
+    },
+    "payment-kafka": {
+      "command": "node",
+      "args": ["<절대경로>/mcp-servers/kafka-operations-mcp/dist/index.js"],
       "env": {
         "API_BASE_URL": "http://localhost:8082"
       }

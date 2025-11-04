@@ -450,171 +450,48 @@ outbox:
 
 ---
 
-## 3. 배포 및 검증
+## 3. 핵심 패턴
 
-### 배포 과정
-
-#### 문제 1: 네트워크 불일치
-
-**증상**:
-
-```
-java.net.UnknownHostException: mariadb
-```
-
-**원인**:
-
-- 새로운 컨테이너가 `payment_swelite_default` 네트워크에 생성됨
-- 기존 컨테이너들은 `payment-swelite-pipeline_default` 네트워크에 있음
-
-**해결**:
-
-```bash
-docker compose -p payment-swelite-pipeline up -d --no-deps --build ingest-service
-```
-
-올바른 프로젝트 네임 지정으로 동일 네트워크에 배포.
-
-#### 문제 2: 포트 충돌
-
-**증상**:
-
-```
-Bind for 0.0.0.0:8080 failed: port is already allocated
-```
-
-**원인**:
-
-- Gateway 서비스가 이미 8080 포트 사용 중
-- 수동 docker run 시도로 충돌
-
-**해결**:
-
-- Docker Compose 사용으로 포트 관리 일원화
-
-### 검증 결과
-
-#### 1차 폴링 결과 (시작 후 15초)
-
-```
-2025-11-03T00:53:36.821Z  INFO --- [scheduling-1]
-Outbox polling completed: 100 succeeded, 0 failed
-```
-
-#### 2차 폴링 결과 (시작 후 25초)
-
-```
-2025-11-03T00:53:46.821Z  INFO --- [scheduling-1]
-Outbox polling completed: 100 succeeded, 0 failed
-```
-
-#### 최종 확인 (약 2분 후)
-
-```sql
-SELECT COUNT(*) as total,
-       SUM(CASE WHEN published = 0 THEN 1 ELSE 0 END) as pending
-FROM outbox_event;
-
--- 결과: total: 80417, pending: 0
-```
-
-**성과**:
-
-- 706개의 미발행 이벤트 모두 처리 완료
-- 가장 오래된 이벤트(10월 20일)부터 순서대로 발행됨
-- Circuit Breaker 정상 상태(CLOSED)로 복구됨
-
-#### 발행 통계 확인
-
-```sql
-SELECT MIN(created_at) as oldest_processed,
-       MAX(published_at) as latest_published,
-       COUNT(*) as total_published
-FROM outbox_event
-WHERE published = 1
-  AND published_at > '2025-11-03 00:50:00';
-
--- 결과:
--- oldest_processed: 2025-10-20 07:13:47
--- latest_published: 2025-11-03 00:54:20
--- total_published: 706
-```
-
----
-
-## 4. 프로덕션 패턴 적용 포인트
-
-### 분산 환경 대응
-
-**비관적 락 (Pessimistic Locking)**:
+### 비관적 락으로 중복 방지
 
 ```java
 @Lock(LockModeType.PESSIMISTIC_WRITE)
 ```
 
-- 여러 인스턴스가 동시에 실행되어도 안전
-- 동일한 이벤트를 중복 처리하지 않음
-- 데이터베이스 레벨에서 동시성 제어
+여러 서버가 동시에 실행되어도 같은 이벤트를 중복 처리하지 않음
 
-### 장애 격리
-
-**Circuit Breaker 통합**:
+### Circuit Breaker로 장애 격리
 
 ```java
 if (circuitBreaker.getState() == CircuitBreaker.State.OPEN) {
-    log.debug("Outbox polling skipped - Circuit Breaker is OPEN");
-    return;
+    return; // Kafka 장애 시 폴링 중단
 }
 ```
 
-- Kafka 장애 시 폴링 중단
-- 불필요한 리소스 소모 방지
-- 시스템 부하 최소화
+Kafka 다운 시 불필요한 재시도를 하지 않음
 
-### 점진적 복구
-
-**지수 백오프 (Exponential Backoff)**:
+### 지수 백오프로 부하 분산
 
 ```java
-Instant retryThreshold = Instant.now().minus(Duration.ofSeconds(retryIntervalSeconds));
+Instant retryThreshold = Instant.now().minus(Duration.ofSeconds(30));
 ```
 
-- 최소 30초 간격으로 재시도
-- 급격한 부하 증가 방지
-- 외부 시스템 복구 시간 확보
+최소 30초 간격으로 재시도해서 시스템 부하 최소화
 
-### 운영 가시성
-
-**로깅 및 모니터링**:
-
-```java
-log.info("Outbox polling completed: {} succeeded, {} failed", succeeded, failed);
-log.error("Found {} dead letter events that exceeded max retries", deadLetters.size());
-```
-
-- 처리 현황 실시간 로그
-- Dead Letter 자동 감지
-- 운영자 대응 가능
-
-### 설정 기반 운영
-
-**외부화된 설정**:
+### 설정 외부화
 
 ```yaml
 outbox:
   polling:
-    interval-ms: 10000
-    batch-size: 100
-    max-retries: 10
+    interval-ms: 10000     # 폴링 주기
+    max-retries: 10        # 최대 재시도
 ```
 
-- 코드 수정 없이 튜닝 가능
-- 환경별 다른 설정 적용 가능
-- 운영 중 동적 조정 가능
+코드 수정 없이 운영 중 튜닝 가능
 
 ---
 
-## 5. 달성한 목표
+## 4. 달성한 목표
 
 - ✅ Outbox 패턴 미구현 문제 진단
 - ✅ 2주간 누적된 706개 이벤트 완전 복구
@@ -626,7 +503,7 @@ outbox:
 
 ---
 
-## 6. 구현 파일 목록
+## 5. 구현 파일 목록
 
 ### 수정된 파일
 
@@ -654,43 +531,7 @@ outbox:
 
 ---
 
-## 7. 향후 개선 방향
-
-### 모니터링 강화
-
-- Outbox 폴링 메트릭 추가 (Prometheus)
-- Grafana 대시보드에 Outbox 상태 패널 추가
-- Dead Letter 이벤트 알림 설정 (Slack, Email)
-
-### 성능 최적화
-
-- 배치 크기 동적 조정 (부하에 따라)
-- 파티셔닝 전략 (이벤트 타입별 분리)
-- 병렬 처리 (멀티 스레드)
-
-### 운영 도구
-
-- Dead Letter 재처리 API 추가
-- Outbox 통계 조회 API
-- 수동 재시도 트리거 기능
-
----
-
-## 8. 용어 정리
-
-- **Outbox Pattern**: 트랜잭션 아웃박스 패턴. 이벤트 발행 실패에도 데이터 정합성 보장
-- **Polling**: 주기적으로 상태를 확인하는 방식
-- **Pessimistic Lock**: 비관적 락. 트랜잭션 시작 시 데이터 잠금
-- **Exponential Backoff**: 지수 백오프. 재시도 간격을 점진적으로 늘리는 전략
-- **Dead Letter**: 재시도 제한을 초과한 메시지. 수동 처리 필요
-- **Circuit Breaker Aware**: Circuit Breaker 상태를 인지하고 동작을 조정
-- **Batch Processing**: 여러 항목을 한 번에 처리하는 방식
-- **Fixed Delay**: 이전 작업 종료 후 일정 시간 대기
-- **Initial Delay**: 애플리케이션 시작 후 첫 실행까지 대기 시간
-
----
-
-## 9. 승인/정산 분리 아키텍처 (settlement-worker)
+## 6. 승인/정산 분리 아키텍처 (settlement-worker)
 
 ### 배경
 
@@ -1010,7 +851,7 @@ amount: 250000
 
 ---
 
-## 11. 환불 워커 구현 (refund-worker)
+## 7. 환불 워커 구현 (refund-worker)
 
 ### 배경
 
@@ -1069,7 +910,7 @@ POST /api/payments/refund/68435
 
 ---
 
-## 12. 재시도 스케줄러 및 통계 대시보드
+## 8. 재시도 스케줄러 및 통계 대시보드
 
 ### 배경
 
@@ -1200,74 +1041,256 @@ GET /api/stats/overview
 3. **분석**: 정산/환불 성공률, 처리량 추이 분석 가능
 4. **안정성**: 지수 백오프로 시스템 부하 최소화
 
-## 13. Grafana 대시보드 실시간 모니터링
+---
 
-### 개요
+## 9. Kafka DLQ 토픽 및 Grafana 모니터링
 
-정산/환불 워커의 처리 상태를 실시간으로 모니터링하기 위해 MariaDB 직접 쿼리 기반 Grafana 대시보드를 구축했다.
+### 배경: DB vs Kafka, 어떤 방식이 더 나을까?
 
-### 구현 방식
+재시도 횟수 초과 시 Dead Letter를 모니터링하는 방법을 두 가지 고민했다:
 
-#### 1. 데이터소스 설정
+**방법 1: MariaDB에서 조회**
+```sql
+SELECT COUNT(*) FROM settlement_request WHERE retry_count >= 10;
+```
 
-**`monitoring/grafana/provisioning/datasources/mariadb.yml`**
+**방법 2: Kafka DLQ 토픽에서 조회**
+```
+settlement.dlq, refund.dlq 토픽의 메시지 수 조회
+```
 
-Prometheus 대신 MariaDB를 직접 데이터소스로 사용한다. settlement_request와 refund_request 테이블의 데이터를 실시간으로 조회하여 통계를 계산한다.
+### 왜 Kafka 토픽 조회로 결정했나?
+
+#### 1. 아키텍처 일관성
+
+**문제점 (DB 조회)**:
+- 이벤트는 Kafka로 흐르는데, 모니터링만 DB를 보는 것은 이중 데이터 소스
+- 결제 시스템이 이벤트 중심 아키텍처인데, DLQ만 DB에 의존하면 일관성이 깨짐
+
+**해결 (Kafka 조회)**:
+- 모든 이벤트 흐름을 Kafka로 통일
+- 정상 이벤트도 Kafka, 실패 이벤트(DLQ)도 Kafka에서 조회
+- 시스템 전체가 이벤트 중심 아키텍처로 일관성 유지
+
+#### 2. 실시간성
+
+**DB 조회**:
+- 재시도 스케줄러가 DB 레코드의 `retry_count`를 업데이트
+- 스케줄러 주기(10초)만큼 지연 발생 가능
+
+**Kafka 조회**:
+- DLQ 토픽에 메시지가 발행되는 즉시 조회 가능
+- 실시간으로 Dead Letter 수 파악
+
+#### 3. 확장성
+
+**DB 조회**:
+- settlement_request, refund_request 각각 쿼리 필요
+- 테이블이 커지면 COUNT 쿼리 부하 증가
+
+**Kafka 조회**:
+- 토픽의 오프셋 차이만 계산 (O(1) 시간 복잡도)
+- 메시지가 많아도 조회 속도 일정
+
+#### 4. 이벤트 추적
+
+**DB 조회**:
+- 어떤 에러가 발생했는지 보려면 별도 조회 필요
+- 원본 이벤트와의 연결 고리 약함
+
+**Kafka 조회**:
+- DLQ 메시지 자체에 원본 이벤트, 에러 내용, 재시도 이력 모두 포함
+- 한 번에 전체 컨텍스트 확인 가능
+
+### 최종 구조: 하이브리드 접근
+
+Grafana 대시보드는 **두 가지 데이터 소스를 모두 활용**:
+
+1. **MariaDB 데이터소스** (성공률, 요청 추이)
+   - 정산/환불 성공률 계산
+   - 시간대별 요청량 추이
+   - 상태별 분포 (SUCCESS/FAILED/PENDING)
+
+2. **Infinity 플러그인 + Kafka** (Dead Letter)
+   - settlement.dlq, refund.dlq 메시지 수 조회
+   - monitoring-service API를 통해 Kafka 토픽 직접 접근
+
+이렇게 하면:
+- ✅ 정산/환불 처리 통계는 DB에서 효율적으로 조회
+- ✅ Dead Letter 모니터링은 Kafka에서 실시간으로 조회
+- ✅ 각 데이터 소스의 장점을 최대한 활용
+
+### Kafka Dead Letter Queue 구현
+
+#### DLQ 토픽 생성
+
+```bash
+# settlement.dlq 토픽 생성
+docker exec pay-kafka kafka-topics --create \
+  --bootstrap-server localhost:9092 \
+  --topic settlement.dlq \
+  --partitions 3 \
+  --replication-factor 1
+
+# refund.dlq 토픽 생성
+docker exec pay-kafka kafka-topics --create \
+  --bootstrap-server localhost:9092 \
+  --topic refund.dlq \
+  --partitions 3 \
+  --replication-factor 1
+```
+
+#### DLQ 메시지 구조
+
+```json
+{
+  "settlementRequestId": 123,
+  "paymentId": 68435,
+  "requestAmount": 250000.00,
+  "retryCount": 10,
+  "status": "FAILED",
+  "pgResponseCode": "TIMEOUT",
+  "pgResponseMessage": "PG API 타임아웃",
+  "errorMessage": "Max retries exceeded",
+  "requestedAt": "2025-11-04T07:00:00Z",
+  "lastRetryAt": "2025-11-04T07:05:00Z",
+  "timestamp": "2025-11-04T07:05:30Z"
+}
+```
+
+### Grafana Infinity 플러그인 연동
+
+#### 문제: 아키텍처 일관성
+
+초기에는 MariaDB에서 `retry_count >= 10`인 레코드를 조회했지만, 이벤트 중심 아키텍처와 맞지 않음. Kafka DLQ 토픽을 직접 조회하는 방식으로 변경.
+
+#### 해결: Kafka API + Infinity 플러그인
+
+**1. monitoring-service에 API 추가**
+
+```java
+@GetMapping("/settlement-dlq-count")
+public Map<String, Object> getSettlementDlqCount() {
+    try (KafkaConsumer<String, String> consumer = getConsumer()) {
+        String topic = "settlement.dlq";
+        List<TopicPartition> partitions = ...;
+
+        Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
+        Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
+
+        long totalCount = endOffsets.entrySet().stream()
+            .mapToLong(e -> e.getValue() - beginningOffsets.get(e.getKey()))
+            .sum();
+
+        return Map.of("topic", topic, "count", totalCount);
+    }
+}
+```
+
+**2. Grafana Infinity 데이터소스**
+
+`monitoring/grafana/provisioning/datasources/infinity.yml`:
 
 ```yaml
 datasources:
-  - name: MariaDB
-    type: mysql
-    url: mariadb:3306
-    database: paydb
-    user: payuser
+  - name: Infinity
+    type: yesoreyeram-infinity-datasource
+    uid: infinity
+    access: proxy
 ```
 
-#### 2. 대시보드 패널 (8개)
+**3. Grafana 대시보드 패널**
 
-**성공률 패널 (Stat)**
+```json
+{
+  "type": "stat",
+  "title": "Settlement Dead Letters (Kafka)",
+  "datasource": {
+    "type": "infinity",
+    "uid": "infinity"
+  },
+  "targets": [{
+    "type": "json",
+    "source": "url",
+    "url": "http://pay-monitoring:8082/monitoring/kafka/settlement-dlq-count",
+    "url_options": {
+      "method": "GET"
+    },
+    "columns": [{
+      "selector": "count",
+      "text": "value",
+      "type": "number"
+    }]
+  }]
+}
+```
 
-- SQL: `SELECT ROUND((SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) FROM settlement_request`
-- 최근 6시간 데이터 기준 성공률 계산
-- 임계값: 95% 이상 녹색, 90~95% 노란색, 90% 미만 빨간색
+### Grafana 대시보드 구성 (8개 패널)
 
-**Dead Letter 패널 (Stat)**
+1. **Settlement Success Rate** - MariaDB 쿼리로 성공률 계산
+2. **Refund Success Rate** - MariaDB 쿼리로 성공률 계산
+3. **Settlement Dead Letters (Kafka)** - Infinity 플러그인으로 Kafka DLQ 조회
+4. **Refund Dead Letters (Kafka)** - Infinity 플러그인으로 Kafka DLQ 조회
+5. **Settlement Requests Over Time** - MariaDB 시계열 그래프
+6. **Refund Requests Over Time** - MariaDB 시계열 그래프
+7. **Settlement Status Distribution** - MariaDB 원형 차트
+8. **Refund Status Distribution** - MariaDB 원형 차트
 
-- SQL: `SELECT COUNT(*) FROM settlement_request WHERE retry_count >= 10`
-- 재시도 10회 초과한 실패 건수 표시
-- 1건 이상 시 노란색, 10건 이상 시 빨간색 경고
+### 트러블슈팅
 
-**시계열 그래프 (Time Series)**
+**문제 1: Infinity 플러그인 설치 후 볼륨 마운트로 사라짐**
 
-- SQL: `SELECT requested_at as time, COUNT(*) FROM settlement_request GROUP BY DATE_FORMAT(requested_at, '%Y-%m-%d %H:%i:00')`
-- 분 단위로 그룹핑하여 시간대별 요청량 추이 표시
-- 트래픽 패턴 분석 가능
+```dockerfile
+# Dockerfile에 설치
+RUN grafana-cli plugins install yesoreyeram-infinity-datasource
+```
 
-**상태 분포 (Pie Chart)**
+하지만 `grafana-data` 볼륨이 `/var/lib/grafana`를 덮어써서 플러그인 사라짐.
 
-- SQL: `SELECT status, COUNT(*) FROM settlement_request GROUP BY status`
-- SUCCESS, FAILED, PENDING 비율을 파이 차트로 시각화
-- 시스템 건강도를 한눈에 파악 가능
+**해결:**
 
-### 실시간 갱신
+```yaml
+# docker-compose.yml
+grafana:
+  environment:
+    GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource  # 런타임 설치
+```
 
-- **갱신 주기**: 30초 자동 리프레시
-- **조회 범위**: 최근 6시간 데이터 (설정 변경 가능)
-- **데이터 영속성**: grafana-data 볼륨으로 대시보드 설정 및 사용자 계정 영구 저장
+**문제 2: Infinity 플러그인 설정 오류**
 
-### 활용 시나리오
+`Cannot read properties of undefined (reading 'method')`
 
-**1. 장애 감지**
+플러그인 설정 형식이 잘못됨. `url_options` 형식으로 수정.
 
-- Dead Letter가 증가하면 PG API 장애 또는 네트워크 문제 의심
-- 성공률이 급격히 하락하면 즉시 확인 필요
+**문제 3: Grafana 볼륨 초기화**
 
-**2. 트래픽 분석**
+기존 볼륨에 낡은 설정이 남아있어 데이터소스 프로비저닝 안됨.
 
-- 시계열 그래프로 피크 타임 파악
-- 정산/환불 요청 패턴 분석하여 리소스 최적화
+```bash
+docker compose down grafana
+docker volume rm payment_swelite_grafana-data
+docker compose up -d grafana
+```
 
-**3. 장기 모니터링**
+### Kafka Operations MCP 서버
 
-- 상태 분포로 전체 시스템 안정성 평가
-- SUCCESS 비율이 지속적으로 낮으면 구조적 문제 검토
+Claude Desktop에서 Kafka DLQ를 자연어로 조회할 수 있도록 MCP 서버 구현:
+
+**기능**:
+- Kafka 토픽 목록 조회 (payment.*, settlement.dlq, refund.dlq)
+- 토픽별 메시지 수, 파티션 정보, 오프셋 조회
+- DLQ 메시지 조회 (최근 N개)
+
+**사용 예시**:
+
+```
+사용자: "settlement.dlq에 메시지 있어?"
+Claude: 14개 메시지 발견 - 대부분 PG 타임아웃 에러
+```
+
+### 달성한 효과
+
+- ✅ 이벤트 중심 아키텍처 일관성 유지 (Kafka 직접 조회)
+- ✅ Grafana에서 실시간 DLQ 모니터링
+- ✅ Claude Desktop을 통한 자연어 DLQ 조회
+- ✅ MariaDB와 Kafka의 하이브리드 데이터소스 활용
