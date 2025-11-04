@@ -1294,3 +1294,56 @@ Claude: 14개 메시지 발견 - 대부분 PG 타임아웃 에러
 - ✅ Grafana에서 실시간 DLQ 모니터링
 - ✅ Claude Desktop을 통한 자연어 DLQ 조회
 - ✅ MariaDB와 Kafka의 하이브리드 데이터소스 활용
+
+---
+
+## 10. Worker 분리 전략 및 회고
+
+### 기존 구조의 문제점
+
+처음엔 consumer-worker 하나로 모든 이벤트를 처리했다. payment.authorized, payment.captured, payment.refunded 토픽을 구독해서 ledger_entry만 생성하는 단순한 구조였다.
+
+근데 실제 PG 연동을 시뮬레이션하려다 보니 문제가 보였다. 정산이나 환불은 외부 PG API를 호출해야 하는데, 이게 실패할 수 있고 재시도도 필요하다. 그런데 회계 장부 기록은 그냥 DB INSERT만 하면 되는 내부 작업이다. 이 둘을 한 worker에서 처리하면 관심사가 섞이고, 장애가 생겼을 때 영향 범위도 커진다.
+
+### 변경: Worker 3개로 분리
+
+결국 역할별로 worker를 분리했다:
+
+**consumer-worker**
+- 순수하게 ledger_entry 생성만 담당
+- payment.captured, payment.refunded 이벤트를 받으면 복식부기로 기록
+- 외부 의존성 없음 (MariaDB만 사용)
+
+**settlement-worker**
+- payment.capture-requested 이벤트 받아서 PG 정산 API 호출
+- Mock PG API로 1~3초 지연, 5% 실패율 시뮬레이션
+- 성공하면 payment.captured 발행 → consumer-worker가 장부 기록
+- 실패하면 재시도 스케줄러가 10초마다 재시도 (최대 10회)
+
+**refund-worker**
+- payment.refund-requested 받아서 PG 환불 API 호출
+- settlement-worker와 같은 패턴 (Mock API, 재시도, DLQ)
+
+분리하고 나니 확실히 깔끔했다. settlement-worker가 PG API 호출 실패로 뻗어도 consumer-worker는 정상 동작하고, 각 worker를 독립적으로 스케일 아웃할 수도 있다.
+
+### 남은 문제: 승인도 분리해야 하나?
+
+그런데 승인(authorize)은 아직도 ingest-service에서 동기로 처리하고 있다. 정산/환불은 -requested 이벤트 발행 → worker가 PG API 호출하는 패턴인데, 승인만 ingest-service에서 직접 DB에 AUTHORIZED 저장하고 끝낸다.
+
+실제로는 승인도 카드사 API를 호출해야 하고, 이게 가장 실패율이 높은 단계다 (한도 초과, 카드 정지 등). 근데 고객은 결제 버튼 누르고 기다리니까 동기 처리는 맞다.
+
+문제는 일관성이다. 정산/환불은 worker가 PG API를 호출하는데, 승인만 ingest-service가 직접 처리하면 패턴이 달라서 헷갈린다. 실제 PG API 연동을 추가하려면 결국 ingest-service 코드를 또 수정해야 한다.
+
+### 향후 계획
+
+**Option 1: 승인도 authorization-worker로 분리**
+- payment.authorize-requested 발행 → authorization-worker → PG API 호출
+- 동기 응답이 필요하니 Kafka로 하면 복잡함 (request-response 패턴 구현 필요)
+- 차라리 ingest-service가 authorization-worker를 동기 호출하는 게 나을 듯
+
+**Option 2: 승인은 그대로 두고 PG API만 추가**
+- ingest-service 내에 PG API 클라이언트 추가
+- 동기 호출이니까 이게 더 단순할 수도
+- 다만 ingest-service가 PG에 직접 의존하게 됨
+
+아직 고민 중이다. 일단 정산/환불 worker 분리로 얻은 게 많으니, 승인은 실제 PG 연동 필요할 때 다시 판단하려고 한다.
