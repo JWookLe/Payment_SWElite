@@ -47,7 +47,6 @@
 - [X] 정산/환불 통계 REST API 구현 (monitoring-service)
 - [X] Grafana Settlement & Refund 대시보드 추가 (8개 패널)
 - [X] Dead Letter 자동 감지 및 모니터링 기능
-- [X] 부분 환불 기능 (금액 지정 환불)
 
 ## 서비스 구성 요소
 

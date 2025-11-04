@@ -1003,10 +1003,10 @@ amount: 250000
 
 ### 향후 개선 방향
 
-- ~~환불 워커 구현 (refund-worker)~~ ✅ Week 6에서 완료
-- ~~정산 배치 스케줄러 (일일 정산)~~ ✅ Week 7에서 재시도 스케줄러로 완료
-- ~~재시도 실패 시 알림 연동~~ ✅ Week 7에서 Dead Letter 모니터링 완료
-- ~~정산 통계 대시보드~~ ✅ Week 7에서 완료
+- ~~환불 워커 구현 (refund-worker)~~ ✅
+- ~~정산 배치 스케줄러 (일일 정산)~~ ✅
+- ~~재시도 실패 시 알림 연동~~ ✅
+- ~~정산 통계 대시보드~~ ✅
 
 ---
 
@@ -1226,21 +1226,25 @@ datasources:
 #### 2. 대시보드 패널 (8개)
 
 **성공률 패널 (Stat)**
+
 - SQL: `SELECT ROUND((SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) FROM settlement_request`
 - 최근 6시간 데이터 기준 성공률 계산
 - 임계값: 95% 이상 녹색, 90~95% 노란색, 90% 미만 빨간색
 
 **Dead Letter 패널 (Stat)**
+
 - SQL: `SELECT COUNT(*) FROM settlement_request WHERE retry_count >= 10`
 - 재시도 10회 초과한 실패 건수 표시
 - 1건 이상 시 노란색, 10건 이상 시 빨간색 경고
 
 **시계열 그래프 (Time Series)**
+
 - SQL: `SELECT requested_at as time, COUNT(*) FROM settlement_request GROUP BY DATE_FORMAT(requested_at, '%Y-%m-%d %H:%i:00')`
 - 분 단위로 그룹핑하여 시간대별 요청량 추이 표시
 - 트래픽 패턴 분석 가능
 
 **상태 분포 (Pie Chart)**
+
 - SQL: `SELECT status, COUNT(*) FROM settlement_request GROUP BY status`
 - SUCCESS, FAILED, PENDING 비율을 파이 차트로 시각화
 - 시스템 건강도를 한눈에 파악 가능
@@ -1254,19 +1258,16 @@ datasources:
 ### 활용 시나리오
 
 **1. 장애 감지**
+
 - Dead Letter가 증가하면 PG API 장애 또는 네트워크 문제 의심
 - 성공률이 급격히 하락하면 즉시 확인 필요
 
 **2. 트래픽 분석**
+
 - 시계열 그래프로 피크 타임 파악
 - 정산/환불 요청 패턴 분석하여 리소스 최적화
 
 **3. 장기 모니터링**
+
 - 상태 분포로 전체 시스템 안정성 평가
 - SUCCESS 비율이 지속적으로 낮으면 구조적 문제 검토
-
-### 접속 정보
-
-- URL: http://localhost:3000
-- 계정: admin / admin
-- 대시보드: Dashboards → Payment → Settlement & Refund Statistics
