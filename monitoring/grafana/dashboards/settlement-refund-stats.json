@@ -5,7 +5,7 @@
   "tags": ["settlement", "refund", "statistics"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 4,
   "refresh": "30s",
   "editable": true,
   "graphTooltip": 0,
@@ -265,9 +265,14 @@
       },
       "targets": [
         {
-          "refId": "A",
-          "rawSql": "SELECT status, COUNT(*) as value FROM settlement_request GROUP BY status",
-          "format": "table"
+          "refId": "SUCCESS",
+          "rawSql": "SELECT NOW() as time, COUNT(*) as value, 'SUCCESS' as metric FROM settlement_request WHERE status = 'SUCCESS'",
+          "format": "time_series"
+        },
+        {
+          "refId": "FAILED",
+          "rawSql": "SELECT NOW() as time, COUNT(*) as value, 'FAILED' as metric FROM settlement_request WHERE status = 'FAILED'",
+          "format": "time_series"
         }
       ],
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
@@ -293,9 +298,14 @@
       },
       "targets": [
         {
-          "refId": "A",
-          "rawSql": "SELECT status, COUNT(*) as value FROM refund_request GROUP BY status",
-          "format": "table"
+          "refId": "SUCCESS",
+          "rawSql": "SELECT NOW() as time, COUNT(*) as value, 'SUCCESS' as metric FROM refund_request WHERE status = 'SUCCESS'",
+          "format": "time_series"
+        },
+        {
+          "refId": "FAILED",
+          "rawSql": "SELECT NOW() as time, COUNT(*) as value, 'FAILED' as metric FROM refund_request WHERE status = 'FAILED'",
+          "format": "time_series"
         }
       ],
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},

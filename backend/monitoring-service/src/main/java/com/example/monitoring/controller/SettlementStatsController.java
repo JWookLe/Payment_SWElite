@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,5 +34,20 @@ public class SettlementStatsController {
     @GetMapping("/overview")
     public Map<String, Object> getOverview() {
         return statsService.getOverviewStats();
+    }
+
+    @GetMapping("/settlement/dead-letters")
+    public List<Map<String, Object>> getSettlementDeadLetters() {
+        return statsService.getSettlementDeadLetters();
+    }
+
+    @GetMapping("/refund/dead-letters")
+    public List<Map<String, Object>> getRefundDeadLetters() {
+        return statsService.getRefundDeadLetters();
+    }
+
+    @GetMapping("/dead-letters")
+    public Map<String, Object> getAllDeadLetters() {
+        return statsService.getAllDeadLetters();
     }
 }
