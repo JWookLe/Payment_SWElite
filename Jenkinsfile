@@ -68,17 +68,17 @@ pipeline {
           docker compose down --remove-orphans || true
 
           # Step 1: Infrastructure (Eureka, DB, Cache, Message Broker)
-          docker compose up -d eureka-server mariadb redis zookeeper kafka
+          docker compose up -d --build eureka-server mariadb redis zookeeper kafka
           echo "Waiting for infrastructure to be ready..."
           sleep 25
 
           # Step 2: Core services
-          docker compose up -d ingest-service gateway monitoring-service
+          docker compose up -d --build ingest-service gateway monitoring-service
           echo "Waiting for core services to register with Eureka..."
           sleep 15
 
           # Step 3: Workers and UI
-          docker compose up -d consumer-worker settlement-worker refund-worker frontend prometheus grafana
+          docker compose up -d --build consumer-worker settlement-worker refund-worker frontend prometheus grafana
           echo "All services started. Waiting for health checks..."
           sleep 10
         '''
