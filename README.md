@@ -703,7 +703,7 @@ AI 기반 시스템 모니터링 및 디버깅을 위한 Claude Desktop 통합 M
 
 ### 개요
 
-MCP(Model Context Protocol)는 AI 모델이 외부 시스템과 상호작용할 수 있게 하는 표준 프로토콜입니다. 이 프로젝트는 4개의 MCP 서버를 포함하여 Claude가 자연어로 결제 시스템을 모니터링하고 디버깅할 수 있습니다.
+MCP(Model Context Protocol)는 AI 모델이 외부 시스템과 상호작용할 수 있게 하는 표준 프로토콜입니다. 이 프로젝트는 6개의 MCP 서버를 포함하여 Claude가 자연어로 결제 시스템을 모니터링하고 디버깅할 수 있습니다.
 
 ### MCP 서버 목록
 
@@ -782,6 +782,42 @@ Claude: ✅ OK - 250/1000 사용 (25%), 리셋까지 45초
 Claude: 📊 14개 메시지 발견 - 대부분 PG 타임아웃 에러
 ```
 
+#### 5. Loadtest MCP
+
+**위치**: `mcp-servers/loadtest-mcp`
+
+**기능**:
+
+- k6 부하 테스트 실행 및 모니터링
+- 테스트 시나리오 관리
+- 실시간 성능 메트릭 조회
+- 테스트 결과 분석
+
+**사용 예시**:
+
+```
+사용자: "400 RPS 부하 테스트 실행해줘"
+Claude: ✅ 테스트 시작 - 평균 응답시간 45ms, 에러율 0.2%
+```
+
+#### 6. System Health MCP
+
+**위치**: `mcp-servers/system-health-mcp`
+
+**기능**:
+
+- 전체 시스템 헬스 체크
+- 마이크로서비스 상태 모니터링
+- 리소스 사용량 확인 (CPU, 메모리, 디스크)
+- 알림 및 장애 감지
+
+**사용 예시**:
+
+```
+사용자: "시스템 전체 상태 확인"
+Claude: ✅ 모든 서비스 정상 - CPU 45%, 메모리 62%, ingest-service 응답시간 23ms
+```
+
 ### 설치 및 설정
 
 #### 1. MCP 서버 빌드
@@ -798,6 +834,12 @@ cd ../redis-cache-mcp
 npm install && npm run build
 
 cd ../kafka-operations-mcp
+npm install && npm run build
+
+cd ../loadtest-mcp
+npm install && npm run build
+
+cd ../system-health-mcp
 npm install && npm run build
 ```
 
