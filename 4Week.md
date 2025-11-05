@@ -4,37 +4,37 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                                   Frontend                                   │
-│                            (React + Vite, Port 5173)                         │
+│                                   Frontend                                  │
+│                            (React + Vite, Port 5173)                        │
 └────────────────────────────────┬────────────────────────────────────────────┘
                                  │ HTTP
                                  ↓
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              API Gateway (8080)                              │
-│                         Spring Cloud Gateway + Eureka                        │
+│                              API Gateway (8080)                             │
+│                         Spring Cloud Gateway + Eureka                       │
 └────────────────────────────────┬────────────────────────────────────────────┘
                                  │ Load Balancing
                                  ↓
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          ingest-service (8080)                               │
-│                  ┌────────────────────────────────┐                          │
-│                  │  REST API (Authorize/Capture/  │                          │
-│                  │  Refund) + Circuit Breaker     │                          │
-│                  └──────────┬─────────────────────┘                          │
-│                             │                                                │
-│                  ┌──────────▼─────────────────────┐                          │
+│                          ingest-service (8080)                              │
+│                  ┌────────────────────────────────┐                         │
+│                  │  REST API (Authorize/Capture/  │                         │
+│                  │  Refund) + Circuit Breaker     │                         │
+│                  └──────────┬─────────────────────┘                         │
+│                             │                                               │
+│                  ┌──────────▼─────────────────────┐                         │
 │                  │   Outbox Pattern (DB 저장)     │                          │
 │                  └──────────┬─────────────────────┘                          │
 │                             │                                                │
 │                  ┌──────────▼─────────────────────┐                          │
 │                  │  Outbox Polling Scheduler      │                          │
-│                  │  (10초마다, 최대 10회 재시도)  │                          │
+│                  │  (10초마다, 최대 10회 재시도)  │                             │
 │                  └──────────┬─────────────────────┘                          │
 └─────────────────────────────┼────────────────────────────────────────────────┘
                               │ Kafka Publish
                               ↓
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Kafka + Zookeeper                               │
+│                              Kafka + Zookeeper                              │
 │    Topics: payment.authorized, payment.capture-requested,                   │
 │            payment.captured, payment.refund-requested,                      │
 │            payment.refunded, payment.dlq                                    │
@@ -58,43 +58,43 @@
        │ Write               │ Write                 │ Write
        ↓                      ↓                       ↓
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              MariaDB (paydb)                                 │
+│                              MariaDB (paydb)                                │
 │  Tables: payment, ledger_entry, outbox_event, idem_response_cache,          │
 │          settlement_request, refund_request                                 │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         monitoring-service (8082)                            │
+│                         monitoring-service (8082)                           │
 │  - Circuit Breaker 상태 조회                                                 │
-│  - Database 쿼리 (결제/정산/환불 통계)                                       │
+│  - Database 쿼리 (결제/정산/환불 통계)                                         │
 │  - Redis 캐시 통계                                                           │
 │  - Statistics API: /api/stats/settlement, /api/stats/refund                 │
 └─────────────────────────────────────────────────────────────────────────────┘
        ↓ Metrics Export
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          Prometheus (9090)                                   │
-│  메트릭 수집: Circuit Breaker, HTTP 요청, Kafka 메시지, DB 쿼리              │
+│                          Prometheus (9090)                                  │
+│  메트릭 수집: Circuit Breaker, HTTP 요청, Kafka 메시지, DB 쿼리                 │
 └─────────────────────────────────────────────────────────────────────────────┘
        ↓ Query
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                            Grafana (3000)                                    │
-│  Dashboards:                                                                 │
-│    - Payment Service Overview                                                │
-│    - Circuit Breaker Status                                                  │
+│                            Grafana (3000)                                   │
+│  Dashboards:                                                                │
+│    - Payment Service Overview                                               │
+│    - Circuit Breaker Status                                                 │
 │    - Settlement & Refund Statistics (8 panels) ← Week 7 신규                 │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Service Discovery                                    │
-│                      Eureka Server (8761)                                    │
-│  Registered: ingest-service, consumer-worker, settlement-worker,             │
+│                         Service Discovery                                   │
+│                      Eureka Server (8761)                                   │
+│  Registered: ingest-service, consumer-worker, settlement-worker,            │
 │              refund-worker, monitoring-service, gateway                     │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Redis (6379)                                    │
+│                              Redis (6379)                                   │
 │  - Rate Limit 카운터 (24,000/분)                                             │
-│  - 멱등성 캐시 (TTL 600초)                                                   │
+│  - 멱등성 캐시 (TTL 600초)                                                    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
