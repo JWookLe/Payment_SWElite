@@ -1,0 +1,31 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.iml
+
+# Node
+node_modules
+frontend/node_modules
+frontend/dist
+
+# Gradle
+.gradle
+**/build
+!backend/**/build/libs/*.jar
+
+# Jenkins
+jenkins-data
+
+# Monitoring
+monitoring/grafana/data
+
+# Docker
+*.log
+
+# Temp files
+tmp
+*.tmp
