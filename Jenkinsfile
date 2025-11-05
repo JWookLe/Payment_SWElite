@@ -1,6 +1,12 @@
 pipeline {
   agent any
 
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    ansiColor('xterm')
+  }
+
   parameters {
     booleanParam(
       name: 'AUTO_CLEANUP',
@@ -12,6 +18,7 @@ pipeline {
   environment {
     FRONTEND_DIR = "frontend"
     BACKEND_DIR = "backend"
+    COMPOSE_CMD = "docker compose"
   }
 
   tools {
@@ -58,55 +65,107 @@ pipeline {
       }
     }
 
-    stage('Docker Build & Compose') {
+    stage('Build Container Images') {
       steps {
-        sh '''
-          # Inspect Docker build context
-          pwd
-          ls -la monitoring/prometheus/
+        script {
+          String composeCmd = env.COMPOSE_CMD ?: 'docker compose'
+          List<String> buildTargets = [
+            'eureka-server',
+            'ingest-service',
+            'consumer-worker',
+            'settlement-worker',
+            'refund-worker',
+            'gateway',
+            'monitoring-service',
+            'prometheus',
+            'grafana',
+            'frontend'
+          ]
+          sh label: 'docker compose build application images', script: """#!/bin/sh
+set -eu
+${composeCmd} build --pull ${buildTargets.join(' ')}
+"""
+        }
+      }
+    }
 
-          # 프로젝트 이름 고정 (기존 실행 중인 컨테이너와 동일하게)
-          export COMPOSE_PROJECT_NAME=payment-swelite-pipeline2
+    stage('Rolling Update Containers') {
+      steps {
+        script {
+          String composeCmd = env.COMPOSE_CMD ?: 'docker compose'
 
-          # Rolling Update: 변경된 서비스만 재배포
-          # docker compose가 기존 컨테이너를 인식하고 해당 서비스만 재생성
+          def compose = { String args ->
+            sh label: "${composeCmd} ${args}", script: """#!/bin/sh
+set -eu
+${composeCmd} ${args}
+"""
+          }
 
-          echo "=== Step 1: Infrastructure (항상 유지) ==="
-          # DB/Cache/MQ는 건드리지 않음 (데이터 보존)
-          docker compose up -d mariadb redis zookeeper kafka
-          echo "Infrastructure services verified."
+          def waitForService = { String service, int timeoutSec ->
+            int attempts = Math.max(1, (int) Math.ceil(timeoutSec / 5.0))
+            sh label: "wait for ${service}", script: """#!/bin/sh
+set -eu
+echo "Waiting for ${service} to reach running state..."
+for attempt in $(seq 1 ${attempts}); do
+  cid=\$(${composeCmd} ps -q ${service})
+  if [ -z "\$cid" ]; then
+    echo "${service}: container not created yet (\$attempt/${attempts})"
+  else
+    status=\$(docker inspect --format '{{.State.Status}}' \$cid)
+    health=\$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \$cid)
+    if [ "\$status" = "running" ]; then
+      if [ "\$health" = "healthy" ] || [ "\$health" = "none" ]; then
+        echo "${service}: running (status=\$status health=\$health)"
+        exit 0
+      fi
+    fi
+    if [ "\$status" = "exited" ] || [ "\$status" = "dead" ]; then
+      echo "${service}: exited unexpectedly (status=\$status health=\$health)"
+      ${composeCmd} logs ${service} || true
+      exit 1
+    fi
+    echo "${service}: still starting (status=\$status health=\$health) (\$attempt/${attempts})"
+  fi
+  sleep 5
+done
+echo "${service} did not become ready within ${timeoutSec}s"
+${composeCmd} logs ${service} || true
+exit 1
+"""
+          }
 
-          echo "=== Step 2: Eureka (서비스 레지스트리 재시작) ==="
-          docker compose build eureka-server
-          docker compose stop eureka-server && docker compose rm -f eureka-server || true
-          docker compose up -d eureka-server
-          echo "Waiting for Eureka to be ready..."
-          sleep 15
+          sh label: 'docker compose version', script: """#!/bin/sh
+set -eu
+${composeCmd} version
+"""
 
-          echo "=== Step 3: Application Services (변경된 것만 재배포) ==="
-          # 각 서비스 빌드 및 재배포
-          docker compose build gateway ingest-service monitoring-service
-          docker compose stop gateway ingest-service monitoring-service && docker compose rm -f gateway ingest-service monitoring-service || true
-          docker compose up -d gateway ingest-service monitoring-service
-          echo "Waiting for services to register with Eureka..."
-          sleep 10
+          List<String> infraServices = ['mariadb', 'redis', 'zookeeper', 'kafka']
+          echo "Ensuring infrastructure services are running: ${infraServices.join(', ')}"
+          compose("up -d ${infraServices.join(' ')}")
+          infraServices.each { waitForService(it, 90) }
 
-          echo "=== Step 4: Workers (병렬 재배포) ==="
-          docker compose build consumer-worker settlement-worker refund-worker
-          docker compose stop consumer-worker settlement-worker refund-worker && docker compose rm -f consumer-worker settlement-worker refund-worker || true
-          docker compose up -d consumer-worker settlement-worker refund-worker
-          sleep 5
+          List<Map<String, Object>> serviceGroups = [
+            [name: 'Service Discovery', services: ['eureka-server'], wait: 120],
+            [name: 'Core APIs', services: ['ingest-service', 'gateway', 'monitoring-service'], wait: 180],
+            [name: 'Workers', services: ['consumer-worker', 'settlement-worker', 'refund-worker'], wait: 150],
+            [name: 'Monitoring & Frontend', services: ['prometheus', 'grafana', 'frontend'], wait: 120]
+          ]
 
-          echo "=== Step 5: Monitoring & Frontend ==="
-          docker compose build prometheus grafana frontend
-          docker compose stop prometheus grafana frontend && docker compose rm -f prometheus grafana frontend || true
-          docker compose up -d prometheus grafana frontend
-          echo "All services updated."
-          sleep 5
+          serviceGroups.each { group ->
+            echo "Rolling update: ${group.name}"
+            List<String> services = group.services as List<String>
+            int waitSeconds = (group.wait as Integer) ?: 120
+            services.each { svc ->
+              compose("up -d --no-deps --build --force-recreate ${svc}")
+              waitForService(svc, waitSeconds)
+            }
+          }
 
-          echo "=== Deployment Complete ==="
-          docker compose ps
-        '''
+          sh label: 'docker compose ps', script: """#!/bin/sh
+set -eu
+${composeCmd} ps
+"""
+        }
       }
     }
 
@@ -163,14 +222,14 @@ pipeline {
               success=1
               break
             fi
-            echo \"Smoke test retry $i/5 - gateway not ready yet, waiting...\"
+            echo "Smoke test retry $i/10 - gateway not ready yet, waiting..."
             sleep 3
           done
-          if [ \"$success\" -ne 1 ]; then
-            echo \"Smoke test failed after retries\"
+          if [ "$success" -ne 1 ]; then
+            echo "Smoke test failed after retries"
             exit 1
           fi
-          echo \"Smoke test completed successfully\"
+          echo "Smoke test completed successfully"
         '''
       }
     }
@@ -197,9 +256,13 @@ pipeline {
   post {
     always {
       script {
+        String composeCmd = env.COMPOSE_CMD ?: 'docker compose'
         if (params.AUTO_CLEANUP == true) {
           echo 'Auto cleanup enabled - stopping all services...'
-          sh 'docker compose down --remove-orphans || true'
+          sh label: 'compose down', script: """#!/bin/sh
+set -eu
+${composeCmd} down --remove-orphans || true
+"""
         } else {
           echo 'Auto cleanup disabled - services remain running'
           echo 'Access services at:'
@@ -207,15 +270,9 @@ pipeline {
           echo '  - API: http://localhost:8080'
           echo '  - Prometheus: http://localhost:9090'
           echo '  - Grafana: http://localhost:3000'
-          echo 'To stop manually: docker compose down'
+          echo "To stop manually: ${composeCmd} down"
         }
       }
     }
   }
 }
-
-
-
-
-
-
