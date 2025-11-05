@@ -78,25 +78,29 @@ pipeline {
 
           echo "=== Step 2: Eureka (서비스 레지스트리 재시작) ==="
           docker compose build eureka-server
-          docker compose up -d --force-recreate eureka-server
+          docker compose stop eureka-server && docker compose rm -f eureka-server || true
+          docker compose up -d eureka-server
           echo "Waiting for Eureka to be ready..."
           sleep 15
 
           echo "=== Step 3: Application Services (변경된 것만 재배포) ==="
           # 각 서비스 빌드 및 재배포
           docker compose build gateway ingest-service monitoring-service
-          docker compose up -d --force-recreate gateway ingest-service monitoring-service
+          docker compose stop gateway ingest-service monitoring-service && docker compose rm -f gateway ingest-service monitoring-service || true
+          docker compose up -d gateway ingest-service monitoring-service
           echo "Waiting for services to register with Eureka..."
           sleep 10
 
           echo "=== Step 4: Workers (병렬 재배포) ==="
           docker compose build consumer-worker settlement-worker refund-worker
-          docker compose up -d --force-recreate consumer-worker settlement-worker refund-worker
+          docker compose stop consumer-worker settlement-worker refund-worker && docker compose rm -f consumer-worker settlement-worker refund-worker || true
+          docker compose up -d consumer-worker settlement-worker refund-worker
           sleep 5
 
           echo "=== Step 5: Monitoring & Frontend ==="
           docker compose build prometheus grafana frontend
-          docker compose up -d --force-recreate prometheus grafana frontend
+          docker compose stop prometheus grafana frontend && docker compose rm -f prometheus grafana frontend || true
+          docker compose up -d prometheus grafana frontend
           echo "All services updated."
           sleep 5
 
