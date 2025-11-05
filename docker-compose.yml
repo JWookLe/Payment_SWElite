@@ -1,6 +1,7 @@
 services:
   mariadb:
     image: mariadb:11.4
+    container_name: pay-mariadb
     command:
       - --max-connections=200
       - --innodb-buffer-pool-size=512M
@@ -23,11 +24,13 @@ services:
 
   redis:
     image: redis:7.4-alpine
+    container_name: pay-redis
     ports:
       - "6379:6379"
 
   zookeeper:
     image: zookeeper:3.9
+    container_name: pay-zookeeper
     environment:
       ZOO_ALLOW_ANONYMOUS_LOGIN: "true"
     ports:
@@ -35,6 +38,7 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.6.1
+    container_name: pay-kafka
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -54,6 +58,7 @@ services:
       context: .
       dockerfile: backend/eureka-server/Dockerfile
     image: eureka-server:local
+    container_name: pay-eureka
     environment:
       SERVER_PORT: 8761
     ports:
@@ -163,6 +168,7 @@ services:
       context: .
       dockerfile: backend/monitoring-service/Dockerfile
     image: monitoring-service:local
+    container_name: pay-monitoring
     environment:
       SERVER_PORT: 8082
       PAYMENT_DB_HOST: mariadb
@@ -195,6 +201,7 @@ services:
       context: .
       dockerfile: backend/gateway/Dockerfile
     image: gateway:local
+    container_name: pay-gateway
     environment:
       EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
     depends_on:
@@ -212,6 +219,7 @@ services:
       context: ./monitoring/prometheus
       dockerfile: Dockerfile
     image: pay-prometheus:local
+    container_name: pay-prometheus
     depends_on:
       - ingest-service
       - consumer-worker
@@ -223,6 +231,7 @@ services:
       context: ./monitoring/grafana
       dockerfile: Dockerfile
     image: pay-grafana:local
+    container_name: pay-grafana
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
@@ -254,6 +263,7 @@ services:
       context: .
       dockerfile: jenkins/Dockerfile
     image: pay-jenkins:local
+    container_name: pay-jenkins
     user: root
     ports:
       - "8088:8080"
@@ -266,7 +276,8 @@ services:
 
   ngrok:
     image: ngrok/ngrok:latest
-    command: ["http", "jenkins:8080"]
+    container_name: pay-ngrok
+    command: ["http", "pay-jenkins:8080"]
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
     env_file:

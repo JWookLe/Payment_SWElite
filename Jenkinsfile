@@ -65,14 +65,14 @@ pipeline {
           pwd
           ls -la monitoring/prometheus/
 
-          # 고정된 프로젝트 이름 사용 (수동 실행과 Jenkins 자동 빌드가 같은 이름 공유)
-          export COMPOSE_PROJECT_NAME=payment-swelite
+          echo "=== Step 1: 기존 컨테이너 정리 (포트 충돌 방지) ==="
+          # 모든 payment 관련 컨테이너 중지 및 제거
+          docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | xargs -r docker stop || true
+          docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | xargs -r docker rm || true
+          echo "✓ 기존 컨테이너 정리 완료"
 
-          echo "==================================================="
-          echo "Production-Grade Rolling Update 시작"
-          echo "==================================================="
-
-          echo "=== Step 1: 인프라 서비스 확인 (절대 재시작 안함 - 데이터 보존) ==="
+          echo ""
+          echo "=== Step 2: 인프라 서비스 시작 ==="
           # DB, Redis, Kafka는 이미 실행 중이면 그대로 유지
           # 처음 실행이거나 중지되어 있으면 시작
           docker compose up -d --no-recreate mariadb redis zookeeper kafka
@@ -80,78 +80,13 @@ pipeline {
           sleep 3
 
           echo ""
-          echo "=== Step 2: Eureka 서버 업데이트 (서비스 레지스트리) ==="
-          docker compose build eureka-server
-          # --force-recreate: 새 이미지로 컨테이너 교체 (Rolling Update)
-          # --no-deps: 의존성(DB 등)은 건드리지 않음
-          docker compose up -d --force-recreate --no-deps eureka-server
-          echo "✓ Eureka 서버 재배포 완료"
-          echo "Eureka가 준비될 때까지 대기 중..."
-          sleep 20
+          echo "=== Step 3: 전체 서비스 빌드 및 시작 ==="
+          docker compose up -d --build
+          echo "✓ 모든 서비스 시작 완료"
 
           echo ""
-          echo "=== Step 3: 코어 애플리케이션 서비스 업데이트 ==="
-          echo "Building: gateway, ingest-service, monitoring-service"
-          docker compose build gateway ingest-service monitoring-service
-
-          echo "Rolling Update: gateway (API 게이트웨이)"
-          docker compose up -d --force-recreate --no-deps gateway
-          sleep 5
-
-          echo "Rolling Update: ingest-service (결제 요청 수신)"
-          docker compose up -d --force-recreate --no-deps ingest-service
-          sleep 5
-
-          echo "Rolling Update: monitoring-service (모니터링 API)"
-          docker compose up -d --force-recreate --no-deps monitoring-service
-          echo "✓ 코어 서비스 재배포 완료"
-          echo "서비스들이 Eureka에 등록될 때까지 대기 중..."
-          sleep 10
-
-          echo ""
-          echo "=== Step 4: 백그라운드 워커 업데이트 ==="
-          echo "Building: consumer-worker, settlement-worker, refund-worker"
-          docker compose build consumer-worker settlement-worker refund-worker
-
-          echo "Rolling Update: consumer-worker (결제 처리)"
-          docker compose up -d --force-recreate --no-deps consumer-worker
-
-          echo "Rolling Update: settlement-worker (정산 처리)"
-          docker compose up -d --force-recreate --no-deps settlement-worker
-
-          echo "Rolling Update: refund-worker (환불 처리)"
-          docker compose up -d --force-recreate --no-deps refund-worker
-          echo "✓ 워커 서비스 재배포 완료"
-          sleep 5
-
-          echo ""
-          echo "=== Step 5: 모니터링 & 프론트엔드 업데이트 ==="
-          echo "Building: prometheus, grafana, frontend"
-          docker compose build prometheus grafana frontend
-
-          echo "Rolling Update: prometheus (메트릭 수집)"
-          docker compose up -d --force-recreate --no-deps prometheus
-
-          echo "Rolling Update: grafana (대시보드)"
-          docker compose up -d --force-recreate --no-deps grafana
-
-          echo "Rolling Update: frontend (사용자 UI)"
-          docker compose up -d --force-recreate --no-deps frontend
-          echo "✓ 모니터링 & 프론트엔드 재배포 완료"
-          sleep 5
-
-          echo ""
-          echo "==================================================="
-          echo "✓ Rolling Update 완료 - 전체 서비스 상태:"
-          echo "==================================================="
+          echo "=== 배포 완료 ==="
           docker compose ps
-
-          echo ""
-          echo "배포 전략 요약:"
-          echo "- 인프라 (DB/Redis/Kafka): 재시작 안함 (데이터 보존)"
-          echo "- 애플리케이션 서비스: 순차적 Rolling Update"
-          echo "- 각 서비스: 이전 버전 종료 → 새 버전 시작"
-          echo "- 다운타임: 최소화 (서비스별 5-10초)"
         '''
       }
     }
