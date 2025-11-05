@@ -73,38 +73,46 @@ pipeline {
           docker start pay-mariadb pay-redis pay-zookeeper pay-kafka 2>/dev/null || \
           docker compose up -d mariadb redis zookeeper kafka
 
-          # Eureka만 재빌드
+          # Eureka 재빌드
           docker compose build eureka-server
-          docker compose up -d --force-recreate eureka-server
+          docker stop pay-eureka && docker rm pay-eureka || true
+          docker compose up -d eureka-server
           echo "Waiting for Eureka to be ready..."
           sleep 15
 
           echo "=== Step 2: Core Services (순차 교체) ==="
           # Gateway 재빌드 및 교체
           docker compose build gateway
-          docker compose up -d --force-recreate gateway
+          docker stop pay-gateway && docker rm pay-gateway || true
+          docker compose up -d gateway
           sleep 5
 
           # Ingest Service 재빌드 및 교체
           docker compose build ingest-service
-          docker compose up -d --force-recreate ingest-service
+          docker stop payment-swelite-pipeline-ingest-service-1 && docker rm payment-swelite-pipeline-ingest-service-1 || true
+          docker compose up -d ingest-service
           sleep 5
 
           # Monitoring Service 재빌드 및 교체
           docker compose build monitoring-service
-          docker compose up -d --force-recreate monitoring-service
+          docker stop pay-monitoring && docker rm pay-monitoring || true
+          docker compose up -d monitoring-service
           echo "Waiting for core services to register with Eureka..."
           sleep 10
 
           echo "=== Step 3: Workers & UI (병렬 교체) ==="
           # Worker 빌드
           docker compose build consumer-worker settlement-worker refund-worker
-          docker compose up -d --force-recreate consumer-worker settlement-worker refund-worker
+          docker stop payment-swelite-pipeline2-consumer-worker-1 payment-swelite-pipeline2-settlement-worker-1 payment-swelite-pipeline2-refund-worker-1 && \
+          docker rm payment-swelite-pipeline2-consumer-worker-1 payment-swelite-pipeline2-settlement-worker-1 payment-swelite-pipeline2-refund-worker-1 || true
+          docker compose up -d consumer-worker settlement-worker refund-worker
           sleep 5
 
           # Monitoring stack & Frontend
           docker compose build prometheus grafana frontend
-          docker compose up -d --force-recreate prometheus grafana frontend
+          docker stop pay-prometheus pay-grafana payment-swelite-pipeline2-frontend-1 && \
+          docker rm pay-prometheus pay-grafana payment-swelite-pipeline2-frontend-1 || true
+          docker compose up -d prometheus grafana frontend
           echo "All services updated. Waiting for health checks..."
           sleep 10
 
