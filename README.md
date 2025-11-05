@@ -202,7 +202,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
 
 ## Service Discovery (Spring Cloud Eureka)
 
-Eureka는 마이크로서비스 아키텍처에서 서비스 등록/조회의 중앙 집중식 관리를 제공함.
+Eureka는 마이크로서비스 아키텍처에서 서비스 등록/조회의 중앙 집중식 관리를 제공함
 
 ### 개요
 
@@ -892,19 +892,11 @@ npm install && npm run build
 
 #### MCP 동작 원리
 
-1. **MCP 서버 실행**  
-   프로젝트 루트의 `.claude/mcp_settings.json`에 MCP 서버들의 실행 명령과 환경 변수가 정의되어 있습니다. Claude Desktop이 레포를 열면 이 설정을 읽고 `node mcp-servers/<name>/dist/index.js` 형태의 프로세스를 stdio 모드로 띄웁니다.
-
-2. **툴 선언으로 기능 노출**  
-   각 서버는 `ListTools` 응답에서 사용할 수 있는 툴 이름, 설명, 입력 스키마를 반환합니다(예: `kafka-operations-mcp/src/index.ts`의 `getTools()` 함수). Claude는 이 설명을 기반으로 어떤 상황에 어떤 툴을 호출할지 판단합니다.
-
-3. **자연어 → MCP 호출**  
-   사용자가 “DLQ 메시지 보여줘”처럼 자연어로 요청하면 Claude LLM이 적합한 MCP 툴을 선택해 `CallTool` 요청을 보냅니다. 예를 들어 `get_dlq_messages`를 호출하면서 `{"limit":10}` 같은 JSON 인자를 넘깁니다.
-
-4. **백엔드 연동 및 응답**  
-   MCP 서버는 전달받은 인자를 기반으로 `axios` 등을 이용해 `monitoring-service`의 REST API나 Kafka/Redis/DB에 접근해 필요한 데이터를 가져옵니다. 그런 뒤 결과를 사람이 읽기 쉬운 문자열로 가공해 MCP 응답으로 돌려줍니다.
-
-5. **Claude가 대화에 통합**  
+1. **MCP 서버 실행**프로젝트 루트의 `.claude/mcp_settings.json`에 MCP 서버들의 실행 명령과 환경 변수가 정의되어 있습니다. Claude Desktop이 레포를 열면 이 설정을 읽고 `node mcp-servers/<name>/dist/index.js` 형태의 프로세스를 stdio 모드로 띄웁니다.
+2. **툴 선언으로 기능 노출**각 서버는 `ListTools` 응답에서 사용할 수 있는 툴 이름, 설명, 입력 스키마를 반환합니다(예: `kafka-operations-mcp/src/index.ts`의 `getTools()` 함수). Claude는 이 설명을 기반으로 어떤 상황에 어떤 툴을 호출할지 판단합니다.
+3. **자연어 → MCP 호출**사용자가 “DLQ 메시지 보여줘”처럼 자연어로 요청하면 Claude LLM이 적합한 MCP 툴을 선택해 `CallTool` 요청을 보냅니다. 예를 들어 `get_dlq_messages`를 호출하면서 `{"limit":10}` 같은 JSON 인자를 넘깁니다.
+4. **백엔드 연동 및 응답**MCP 서버는 전달받은 인자를 기반으로 `axios` 등을 이용해 `monitoring-service`의 REST API나 Kafka/Redis/DB에 접근해 필요한 데이터를 가져옵니다. 그런 뒤 결과를 사람이 읽기 쉬운 문자열로 가공해 MCP 응답으로 돌려줍니다.
+5. **Claude가 대화에 통합**
    Claude Desktop은 MCP 응답을 받아 자연어 문장으로 다시 정리해 채팅에 포함시킵니다. 사용자는 추가 맥락 없이도 “Kafka 토픽 상태”, “DB 미발행 이벤트”처럼 여러 운영 정보를 대화형으로 확인할 수 있습니다.
 
 **권장**:
@@ -919,6 +911,7 @@ npm install && npm run build
 #### 시나리오 1: KT 클라우드 배포 (추천)
 
 **구성**:
+
 ```
 로컬 PC (Claude Desktop + MCP)
     ↓ HTTP (포트 포워딩 또는 VPN)
@@ -926,14 +919,17 @@ KT 클라우드 (monitoring-service:8082)
 ```
 
 **방법**:
+
 1. **SSH 포트 포워딩** (가장 간단):
+
    ```bash
    ssh -L 8082:localhost:8082 user@kt-cloud-ip
    ```
+
    - 로컬 8082 포트가 클라우드의 monitoring-service:8082로 연결됨
    - MCP 설정 변경 불필요 (여전히 `http://localhost:8082` 사용)
-
 2. **직접 접근** (보안 주의):
+
    ```json
    {
      "mcpServers": {
@@ -945,10 +941,11 @@ KT 클라우드 (monitoring-service:8082)
      }
    }
    ```
+
    - KT 클라우드에서 8082 포트를 열어야 함
    - **보안**: IP 화이트리스트 또는 VPN 필수
-
 3. **VPN 터널** (가장 안전):
+
    - KT 클라우드와 VPN 연결
    - 프라이빗 IP로 monitoring-service 접근
    - 보안 규정 준수
@@ -958,11 +955,13 @@ KT 클라우드 (monitoring-service:8082)
 Claude Desktop을 클라우드 VM에 설치할 수도 있지만:
 
 **단점**:
+
 - 원격 데스크톱 필요 (GUI)
 - 네트워크 지연
 - 비용 증가 (VM 리소스)
 
 **추천하지 않는 이유**:
+
 - MCP는 로컬 개발/디버깅 도구
 - 운영 모니터링은 Grafana 사용
 
@@ -996,6 +995,7 @@ Claude Desktop을 클라우드 VM에 설치할 수도 있지만:
 #### 실전 사용법
 
 **로컬 개발 시**:
+
 ```bash
 # 로컬에서 Docker Compose로 실행
 docker compose up -d
@@ -1005,6 +1005,7 @@ docker compose up -d
 ```
 
 **KT 클라우드 배포 후**:
+
 ```bash
 # SSH 터널 연결
 ssh -L 8082:localhost:8082 user@kt-cloud-ip
@@ -1014,6 +1015,7 @@ ssh -L 8082:localhost:8082 user@kt-cloud-ip
 ```
 
 **팀원/운영팀**:
+
 ```bash
 # Grafana로 모니터링
 http://kt-cloud-ip:3000
@@ -1031,9 +1033,9 @@ curl http://kt-cloud-ip:8082/monitoring/circuit-breaker
 
 #### 요약
 
-| 환경           | MCP 사용 | 접근 방법                 | 비고                    |
-| -------------- | -------- | ------------------------- | ----------------------- |
-| **로컬 개발**  | ✅       | localhost:8082            | Docker Compose          |
-| **KT 클라우드** | ✅       | SSH 포트 포워딩           | 추천 (보안)             |
-| **KT 클라우드** | ✅       | 직접 접근 (포트 오픈)     | 비추천 (보안 위험)      |
-| **팀원/운영**  | ❌       | Grafana 또는 REST API     | MCP 없이 모니터링 가능  |
+| 환경                  | MCP 사용 | 접근 방법             | 비고                   |
+| --------------------- | -------- | --------------------- | ---------------------- |
+| **로컬 개발**   | ✅       | localhost:8082        | Docker Compose         |
+| **KT 클라우드** | ✅       | SSH 포트 포워딩       | 추천 (보안)            |
+| **KT 클라우드** | ✅       | 직접 접근 (포트 오픈) | 비추천 (보안 위험)     |
+| **팀원/운영**   | ❌       | Grafana 또는 REST API | MCP 없이 모니터링 가능 |
