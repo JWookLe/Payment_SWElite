@@ -202,7 +202,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
 
 ## Service Discovery (Spring Cloud Eureka)
 
-Eureka는 마이크로서비스 아키텍처에서 서비스 등록/조회의 중앙 집중식 관리를 제공함
+Eureka는 마이크로서비스 아키텍처에서 서비스 등록/조회의 중앙 집중식 관리를 제공함.
 
 ### 개요
 
