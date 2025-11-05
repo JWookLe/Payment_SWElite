@@ -14,8 +14,7 @@ frontend/dist
 
 # Gradle
 .gradle
-**/build
-!backend/**/build/libs/*.jar
+backend/**/build
 
 # Jenkins
 jenkins-data
