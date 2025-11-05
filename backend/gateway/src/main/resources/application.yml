@@ -28,6 +28,13 @@ spring:
           filters:
             - RewritePath=/api/monitoring/?(?<segment>.*), /monitoring/${segment}
 
+        - id: stats-api
+          uri: lb://MONITORING-SERVICE
+          predicates:
+            - Path=/api/stats/**
+          filters:
+            - StripPrefix=1
+
 server:
   port: ${SERVER_PORT:8080}
 
