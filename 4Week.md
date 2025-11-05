@@ -544,7 +544,7 @@ outbox:
 
 현업 PG 구조를 따라 승인/정산 분리:
 
-- 결제 상태 모델 확장 (3단계 → 11단계)
+- 결제 상태 모델 확장 (3단계 → 10단계)
 - settlement-worker 마이크로서비스 추가
 - 이벤트 기반 비동기 처리
 - PG API 호출 시뮬레이션
@@ -555,7 +555,7 @@ outbox:
 
 **파일**: `backend/ingest-service/src/main/java/com/example/payment/domain/PaymentStatus.java`
 
-11단계 상태 모델:
+10단계 상태 모델:
 
 ```java
 public enum PaymentStatus {
@@ -1050,11 +1050,13 @@ GET /api/stats/overview
 재시도 횟수 초과 시 Dead Letter를 모니터링하는 방법을 두 가지 고민했다:
 
 **방법 1: MariaDB에서 조회**
+
 ```sql
 SELECT COUNT(*) FROM settlement_request WHERE retry_count >= 10;
 ```
 
 **방법 2: Kafka DLQ 토픽에서 조회**
+
 ```
 settlement.dlq, refund.dlq 토픽의 메시지 수 조회
 ```
@@ -1064,10 +1066,12 @@ settlement.dlq, refund.dlq 토픽의 메시지 수 조회
 #### 1. 아키텍처 일관성
 
 **문제점 (DB 조회)**:
+
 - 이벤트는 Kafka로 흐르는데, 모니터링만 DB를 보는 것은 이중 데이터 소스
 - 결제 시스템이 이벤트 중심 아키텍처인데, DLQ만 DB에 의존하면 일관성이 깨짐
 
 **해결 (Kafka 조회)**:
+
 - 모든 이벤트 흐름을 Kafka로 통일
 - 정상 이벤트도 Kafka, 실패 이벤트(DLQ)도 Kafka에서 조회
 - 시스템 전체가 이벤트 중심 아키텍처로 일관성 유지
@@ -1075,30 +1079,36 @@ settlement.dlq, refund.dlq 토픽의 메시지 수 조회
 #### 2. 실시간성
 
 **DB 조회**:
+
 - 재시도 스케줄러가 DB 레코드의 `retry_count`를 업데이트
 - 스케줄러 주기(10초)만큼 지연 발생 가능
 
 **Kafka 조회**:
+
 - DLQ 토픽에 메시지가 발행되는 즉시 조회 가능
 - 실시간으로 Dead Letter 수 파악
 
 #### 3. 확장성
 
 **DB 조회**:
+
 - settlement_request, refund_request 각각 쿼리 필요
 - 테이블이 커지면 COUNT 쿼리 부하 증가
 
 **Kafka 조회**:
+
 - 토픽의 오프셋 차이만 계산 (O(1) 시간 복잡도)
 - 메시지가 많아도 조회 속도 일정
 
 #### 4. 이벤트 추적
 
 **DB 조회**:
+
 - 어떤 에러가 발생했는지 보려면 별도 조회 필요
 - 원본 이벤트와의 연결 고리 약함
 
 **Kafka 조회**:
+
 - DLQ 메시지 자체에 원본 이벤트, 에러 내용, 재시도 이력 모두 포함
 - 한 번에 전체 컨텍스트 확인 가능
 
@@ -1107,15 +1117,17 @@ settlement.dlq, refund.dlq 토픽의 메시지 수 조회
 Grafana 대시보드는 **두 가지 데이터 소스를 모두 활용**:
 
 1. **MariaDB 데이터소스** (성공률, 요청 추이)
+
    - 정산/환불 성공률 계산
    - 시간대별 요청량 추이
    - 상태별 분포 (SUCCESS/FAILED/PENDING)
-
 2. **Infinity 플러그인 + Kafka** (Dead Letter)
+
    - settlement.dlq, refund.dlq 메시지 수 조회
    - monitoring-service API를 통해 Kafka 토픽 직접 접근
 
 이렇게 하면:
+
 - ✅ 정산/환불 처리 통계는 DB에서 효율적으로 조회
 - ✅ Dead Letter 모니터링은 Kafka에서 실시간으로 조회
 - ✅ 각 데이터 소스의 장점을 최대한 활용
@@ -1277,6 +1289,7 @@ docker compose up -d grafana
 Claude Desktop에서 Kafka DLQ를 자연어로 조회할 수 있도록 MCP 서버 구현:
 
 **기능**:
+
 - Kafka 토픽 목록 조회 (payment.*, settlement.dlq, refund.dlq)
 - 토픽별 메시지 수, 파티션 정보, 오프셋 조회
 - DLQ 메시지 조회 (최근 N개)
