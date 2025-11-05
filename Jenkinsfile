@@ -66,10 +66,10 @@ pipeline {
           ls -la monitoring/prometheus/
 
           echo "=== Step 1: 기존 컨테이너 정리 (포트 충돌 방지) ==="
-          # 모든 payment 관련 컨테이너 중지 및 제거
-          docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | xargs -r docker stop || true
-          docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | xargs -r docker rm || true
-          echo "✓ 기존 컨테이너 정리 완료"
+          # Jenkins와 ngrok를 제외한 모든 payment 관련 컨테이너 중지 및 제거
+          docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | grep -v "pay-jenkins" | grep -v "pay-ngrok" | xargs -r docker stop || true
+          docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | grep -v "pay-jenkins" | grep -v "pay-ngrok" | xargs -r docker rm || true
+          echo "✓ 기존 컨테이너 정리 완료 (Jenkins 제외)"
 
           echo ""
           echo "=== Step 2: 인프라 서비스 시작 ==="
