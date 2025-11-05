@@ -65,22 +65,40 @@ pipeline {
           pwd
           ls -la monitoring/prometheus/
 
-          docker compose down --remove-orphans || true
+          # Rolling Update 방식: 서비스별 순차 재시작 (무중단 배포)
+          # docker compose down 대신 --force-recreate 사용
 
-          # Step 1: Infrastructure (Eureka, DB, Cache, Message Broker)
-          docker compose up -d --build eureka-server mariadb redis zookeeper kafka
-          echo "Waiting for infrastructure to be ready..."
-          sleep 25
-
-          # Step 2: Core services
-          docker compose up -d --build ingest-service gateway monitoring-service
-          echo "Waiting for core services to register with Eureka..."
+          echo "=== Step 1: Infrastructure (데이터 보존) ==="
+          # DB/Cache/MQ는 이미 실행 중이면 재사용 (데이터 유지)
+          docker compose up -d --no-recreate mariadb redis zookeeper kafka
+          # Eureka만 재빌드 (서비스 레지스트리)
+          docker compose up -d --build --force-recreate eureka-server
+          echo "Waiting for Eureka to be ready..."
           sleep 15
 
-          # Step 3: Workers and UI
-          docker compose up -d --build consumer-worker settlement-worker refund-worker frontend prometheus grafana
-          echo "All services started. Waiting for health checks..."
+          echo "=== Step 2: Core Services (순차 교체) ==="
+          # Gateway 먼저 교체
+          docker compose up -d --build --force-recreate gateway
+          sleep 5
+          # Ingest Service 교체
+          docker compose up -d --build --force-recreate ingest-service
+          sleep 5
+          # Monitoring Service 교체
+          docker compose up -d --build --force-recreate monitoring-service
+          echo "Waiting for core services to register with Eureka..."
           sleep 10
+
+          echo "=== Step 3: Workers & UI (병렬 교체) ==="
+          # Worker들은 병렬로 재시작 가능
+          docker compose up -d --build --force-recreate consumer-worker settlement-worker refund-worker
+          sleep 5
+          # Monitoring stack & Frontend
+          docker compose up -d --build --force-recreate prometheus grafana frontend
+          echo "All services updated. Waiting for health checks..."
+          sleep 10
+
+          echo "=== Rolling Update Complete ==="
+          docker compose ps
         '''
       }
     }
