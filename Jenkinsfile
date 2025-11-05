@@ -80,8 +80,10 @@ pipeline {
           sleep 3
 
           echo ""
-          echo "=== Step 3: 전체 서비스 빌드 및 시작 ==="
-          docker compose up -d --build
+          echo "=== Step 3: 전체 서비스 빌드 및 시작 (Jenkins 제외) ==="
+          # Jenkins와 ngrok는 이미 실행 중이므로 빌드에서 제외
+          docker compose build eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
+          docker compose up -d eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
           echo "✓ 모든 서비스 시작 완료"
 
           echo ""
