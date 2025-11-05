@@ -11,7 +11,7 @@
 
 - [X] Redis 기반 rate limit 및 멱등 캐시 고도화
 - [X] Prometheus + Grafana 지표 수집 및 시각화 파이프라인 구성
-- [X] k6 부하/스트레스 테스트 시나리오 작성 및 200 RPS 목표 달성
+- [X] k6 부하/스트레스 테스트 시나리오 작성 및 400 RPS 목표 달성
 - [X] GitHub Webhook + Jenkins 자동 빌드 파이프라인 구성
 - [ ] Settlement/Reconciliation 대비 비동기 처리 보강
 - [X] payment.dlq 토픽 재전송 기반 Consumer 예외 처리 보강
@@ -111,7 +111,7 @@
 | 환경                  | 목표 RPS  | Rate Limit (분)      | 비고        |
 | --------------------- | --------- | -------------------- | ----------- |
 | **개발**        | ~10 RPS   | 1,000/1,000/500      | 빠른 피드백 |
-| **부하 테스트** | 200 RPS   | 15,000/15,000/7,500  | 현재 설정   |
+| **부하 테스트** | 400 RPS   | 30,000/30,000/15,000 | 현재 설정   |
 | **운영 (목표)** | 1,000 TPS | 70,000/70,000/35,000 | 최종 목표   |
 
 ## Observability (Prometheus & Grafana)
@@ -144,11 +144,11 @@
 
 `loadtest/k6/payment-scenario.js`는 승인 → 정산 → (선택적) 환불 흐름을 검증함. 환경 변수로 각 단계를 토글할 수 있음.
 
-**현재 설정** (200 RPS 목표):
+**현재 설정** (400 RPS 목표):
 
 - Warm-up: 50 RPS (30초)
-- Ramp-up: 50 → 100 → 150 → 200 RPS (5분)
-- Sustain: 200 RPS (2분)
+- Ramp-up: 50 → 100 → 200 → 300 → 400 RPS (5분)
+- Sustain: 400 RPS (2분)
 - Cool-down: 0 RPS (30초)
 - **총 테스트 시간**: 8분
 
@@ -180,7 +180,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network payment-swelite-pipeline_default \
 
 - **에러율**: < 1%
 - **p95 응답시간**: < 100ms
-- **처리량**: 200 RPS 안정적 처리
+- **처리량**: 400 RPS 안정적 처리
 
 ## 로컬 실행 방법
 
@@ -490,7 +490,7 @@ mariadb:
 
 ### 커넥션 풀 최적화 (ingest-service)
 
-HikariCP 설정을 조정해서 200 RPS를 처리함:
+HikariCP 설정을 조정해서 400 RPS를 처리함:
 
 ```yaml
 SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 100  # 기본 10 → 100
@@ -503,7 +503,7 @@ SERVER_TOMCAT_THREADS_MAX: 400                   # 기본 200 → 400
 부하 테스트를 위해 Rate Limit을 단계적으로 설정함:
 
 - **개발 환경**: 1,000/1,000/500 (분당, authorize/capture/refund)
-- **부하 테스트**: 15,000/15,000/7,500 (200 RPS 목표 + 25% 여유분)
+- **부하 테스트**: 30,000/30,000/15,000 (400 RPS 목표 + 25% 여유분)
 - **운영 목표**: 70,000/70,000/35,000 (1,000 TPS 목표)
 
 ## 트러블슈팅
@@ -567,7 +567,7 @@ EXPOSE 3000
 **해결 과정**:
 
 1. **문제 인식**: 무작정 Rate Limit을 높이는 것은 실전과 동떨어짐
-2. **목표 설정**: 현재 200 RPS, 최종 1,000 TPS 처리
+2. **목표 설정**: 현재 400 RPS, 최종 1,000 TPS 처리
 3. **균형잡힌 접근**:
    - Rate Limit: 15,000/min (250 RPS, 25% 여유분)
    - DB 연결 풀을 증가함
@@ -911,3 +911,129 @@ npm install && npm run build
 
 - 로컬 디버깅 → MCP 서버 사용
 - 운영 모니터링 → REST API 사용
+
+### 클라우드 배포 시 MCP 사용 가능 여부
+
+**결론: 클라우드에 배포해도 MCP를 계속 사용할 수 있습니다!**
+
+#### 시나리오 1: KT 클라우드 배포 (추천)
+
+**구성**:
+```
+로컬 PC (Claude Desktop + MCP)
+    ↓ HTTP (포트 포워딩 또는 VPN)
+KT 클라우드 (monitoring-service:8082)
+```
+
+**방법**:
+1. **SSH 포트 포워딩** (가장 간단):
+   ```bash
+   ssh -L 8082:localhost:8082 user@kt-cloud-ip
+   ```
+   - 로컬 8082 포트가 클라우드의 monitoring-service:8082로 연결됨
+   - MCP 설정 변경 불필요 (여전히 `http://localhost:8082` 사용)
+
+2. **직접 접근** (보안 주의):
+   ```json
+   {
+     "mcpServers": {
+       "payment-circuit-breaker": {
+         "env": {
+           "API_BASE_URL": "http://kt-cloud-ip:8082"
+         }
+       }
+     }
+   }
+   ```
+   - KT 클라우드에서 8082 포트를 열어야 함
+   - **보안**: IP 화이트리스트 또는 VPN 필수
+
+3. **VPN 터널** (가장 안전):
+   - KT 클라우드와 VPN 연결
+   - 프라이빗 IP로 monitoring-service 접근
+   - 보안 규정 준수
+
+#### 시나리오 2: 클라우드에 Claude Desktop 설치 (비추천)
+
+Claude Desktop을 클라우드 VM에 설치할 수도 있지만:
+
+**단점**:
+- 원격 데스크톱 필요 (GUI)
+- 네트워크 지연
+- 비용 증가 (VM 리소스)
+
+**추천하지 않는 이유**:
+- MCP는 로컬 개발/디버깅 도구
+- 운영 모니터링은 Grafana 사용
+
+#### 권장 아키텍처
+
+```
+┌─────────────────────────────────────────────┐
+│          개발자 로컬 PC                       │
+│                                             │
+│  Claude Desktop + MCP Servers               │
+│    ↓ (SSH 포트 포워딩)                       │
+└─────────────────┬───────────────────────────┘
+                  │
+    ┌─────────────▼─────────────────────────┐
+    │      KT 클라우드 (프로덕션)             │
+    │                                       │
+    │  monitoring-service:8082              │
+    │    ↓ 데이터 조회                       │
+    │  MariaDB, Redis, Kafka                │
+    └───────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│        팀원/운영팀 (MCP 없음)                │
+│                                             │
+│  웹 브라우저                                 │
+│    ↓                                        │
+│  Grafana (http://kt-cloud-ip:3000)         │
+└─────────────────────────────────────────────┘
+```
+
+#### 실전 사용법
+
+**로컬 개발 시**:
+```bash
+# 로컬에서 Docker Compose로 실행
+docker compose up -d
+
+# Claude Desktop에서 MCP 사용
+# API_BASE_URL=http://localhost:8082
+```
+
+**KT 클라우드 배포 후**:
+```bash
+# SSH 터널 연결
+ssh -L 8082:localhost:8082 user@kt-cloud-ip
+
+# Claude Desktop에서 동일하게 MCP 사용
+# API_BASE_URL은 그대로 http://localhost:8082
+```
+
+**팀원/운영팀**:
+```bash
+# Grafana로 모니터링
+http://kt-cloud-ip:3000
+
+# 또는 monitoring-service REST API 직접 사용
+curl http://kt-cloud-ip:8082/monitoring/circuit-breaker
+```
+
+#### 보안 고려사항
+
+1. **SSH 터널**: 가장 안전, 별도 포트 오픈 불필요
+2. **VPN**: 회사 정책에 따라 필수일 수 있음
+3. **IP 화이트리스트**: 8082 포트를 열 경우 반드시 적용
+4. **인증/인가**: monitoring-service에 Spring Security 추가 권장
+
+#### 요약
+
+| 환경           | MCP 사용 | 접근 방법                 | 비고                    |
+| -------------- | -------- | ------------------------- | ----------------------- |
+| **로컬 개발**  | ✅       | localhost:8082            | Docker Compose          |
+| **KT 클라우드** | ✅       | SSH 포트 포워딩           | 추천 (보안)             |
+| **KT 클라우드** | ✅       | 직접 접근 (포트 오픈)     | 비추천 (보안 위험)      |
+| **팀원/운영**  | ❌       | Grafana 또는 REST API     | MCP 없이 모니터링 가능  |
