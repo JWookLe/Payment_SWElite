@@ -66,34 +66,45 @@ pipeline {
           ls -la monitoring/prometheus/
 
           # Rolling Update 방식: 서비스별 순차 재시작 (무중단 배포)
+          # 기존 실행 중인 컨테이너 재사용 (컨테이너 이름으로 연결)
 
           echo "=== Step 1: Infrastructure (데이터 보존) ==="
-          # --remove-orphans: 중지된 컨테이너도 자동으로 제거하고 재생성
-          # 볼륨은 유지되므로 데이터 안전
-          docker compose up -d --remove-orphans mariadb redis zookeeper kafka
-          # Eureka만 재빌드 (서비스 레지스트리)
-          docker compose up -d --build --force-recreate eureka-server
+          # 실행 중이면 그대로 사용, 중지되었으면 재시작
+          docker start pay-mariadb pay-redis pay-zookeeper pay-kafka 2>/dev/null || \
+          docker compose up -d mariadb redis zookeeper kafka
+
+          # Eureka만 재빌드
+          docker compose build eureka-server
+          docker compose up -d --force-recreate eureka-server
           echo "Waiting for Eureka to be ready..."
           sleep 15
 
           echo "=== Step 2: Core Services (순차 교체) ==="
-          # Gateway 먼저 교체
-          docker compose up -d --build --force-recreate gateway
+          # Gateway 재빌드 및 교체
+          docker compose build gateway
+          docker compose up -d --force-recreate gateway
           sleep 5
-          # Ingest Service 교체
-          docker compose up -d --build --force-recreate ingest-service
+
+          # Ingest Service 재빌드 및 교체
+          docker compose build ingest-service
+          docker compose up -d --force-recreate ingest-service
           sleep 5
-          # Monitoring Service 교체
-          docker compose up -d --build --force-recreate monitoring-service
+
+          # Monitoring Service 재빌드 및 교체
+          docker compose build monitoring-service
+          docker compose up -d --force-recreate monitoring-service
           echo "Waiting for core services to register with Eureka..."
           sleep 10
 
           echo "=== Step 3: Workers & UI (병렬 교체) ==="
-          # Worker들은 병렬로 재시작 가능
-          docker compose up -d --build --force-recreate consumer-worker settlement-worker refund-worker
+          # Worker 빌드
+          docker compose build consumer-worker settlement-worker refund-worker
+          docker compose up -d --force-recreate consumer-worker settlement-worker refund-worker
           sleep 5
+
           # Monitoring stack & Frontend
-          docker compose up -d --build --force-recreate prometheus grafana frontend
+          docker compose build prometheus grafana frontend
+          docker compose up -d --force-recreate prometheus grafana frontend
           echo "All services updated. Waiting for health checks..."
           sleep 10
 
