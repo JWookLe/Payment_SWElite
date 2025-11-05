@@ -66,7 +66,10 @@ pipeline {
           ls -la monitoring/prometheus/
 
           # Rolling Update 방식: 서비스별 순차 재시작 (무중단 배포)
-          # docker compose down 대신 --force-recreate 사용
+
+          echo "=== Cleanup: 중지된 컨테이너 제거 (실행 중인 건 유지) ==="
+          # 중지된 컨테이너만 제거 (실행 중인 컨테이너는 영향 없음)
+          docker container prune -f
 
           echo "=== Step 1: Infrastructure (데이터 보존) ==="
           # DB/Cache/MQ는 이미 실행 중이면 재사용 (데이터 유지)
