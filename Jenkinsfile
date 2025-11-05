@@ -65,58 +65,42 @@ pipeline {
           pwd
           ls -la monitoring/prometheus/
 
-          # Rolling Update 방식: 서비스별 순차 재시작 (무중단 배포)
-          # 기존 실행 중인 컨테이너 재사용 (컨테이너 이름으로 연결)
+          # 프로젝트 이름 고정 (기존 실행 중인 컨테이너와 동일하게)
+          export COMPOSE_PROJECT_NAME=payment-swelite-pipeline2
 
-          echo "=== Step 1: Infrastructure (데이터 보존) ==="
-          # 실행 중이면 그대로 사용, 중지되었으면 재시작
-          docker start pay-mariadb pay-redis pay-zookeeper pay-kafka 2>/dev/null || \
+          # Rolling Update: 변경된 서비스만 재배포
+          # docker compose가 기존 컨테이너를 인식하고 해당 서비스만 재생성
+
+          echo "=== Step 1: Infrastructure (항상 유지) ==="
+          # DB/Cache/MQ는 건드리지 않음 (데이터 보존)
           docker compose up -d mariadb redis zookeeper kafka
+          echo "Infrastructure services verified."
 
-          # Eureka 재빌드
+          echo "=== Step 2: Eureka (서비스 레지스트리 재시작) ==="
           docker compose build eureka-server
-          docker stop pay-eureka && docker rm pay-eureka || true
-          docker compose up -d eureka-server
+          docker compose up -d --force-recreate eureka-server
           echo "Waiting for Eureka to be ready..."
           sleep 15
 
-          echo "=== Step 2: Core Services (순차 교체) ==="
-          # Gateway 재빌드 및 교체
-          docker compose build gateway
-          docker stop pay-gateway && docker rm pay-gateway || true
-          docker compose up -d gateway
-          sleep 5
-
-          # Ingest Service 재빌드 및 교체
-          docker compose build ingest-service
-          docker stop payment-swelite-pipeline-ingest-service-1 && docker rm payment-swelite-pipeline-ingest-service-1 || true
-          docker compose up -d ingest-service
-          sleep 5
-
-          # Monitoring Service 재빌드 및 교체
-          docker compose build monitoring-service
-          docker stop pay-monitoring && docker rm pay-monitoring || true
-          docker compose up -d monitoring-service
-          echo "Waiting for core services to register with Eureka..."
+          echo "=== Step 3: Application Services (변경된 것만 재배포) ==="
+          # 각 서비스 빌드 및 재배포
+          docker compose build gateway ingest-service monitoring-service
+          docker compose up -d --force-recreate gateway ingest-service monitoring-service
+          echo "Waiting for services to register with Eureka..."
           sleep 10
 
-          echo "=== Step 3: Workers & UI (병렬 교체) ==="
-          # Worker 빌드
+          echo "=== Step 4: Workers (병렬 재배포) ==="
           docker compose build consumer-worker settlement-worker refund-worker
-          docker stop payment-swelite-pipeline2-consumer-worker-1 payment-swelite-pipeline2-settlement-worker-1 payment-swelite-pipeline2-refund-worker-1 && \
-          docker rm payment-swelite-pipeline2-consumer-worker-1 payment-swelite-pipeline2-settlement-worker-1 payment-swelite-pipeline2-refund-worker-1 || true
-          docker compose up -d consumer-worker settlement-worker refund-worker
+          docker compose up -d --force-recreate consumer-worker settlement-worker refund-worker
           sleep 5
 
-          # Monitoring stack & Frontend
+          echo "=== Step 5: Monitoring & Frontend ==="
           docker compose build prometheus grafana frontend
-          docker stop pay-prometheus pay-grafana payment-swelite-pipeline2-frontend-1 && \
-          docker rm pay-prometheus pay-grafana payment-swelite-pipeline2-frontend-1 || true
-          docker compose up -d prometheus grafana frontend
-          echo "All services updated. Waiting for health checks..."
-          sleep 10
+          docker compose up -d --force-recreate prometheus grafana frontend
+          echo "All services updated."
+          sleep 5
 
-          echo "=== Rolling Update Complete ==="
+          echo "=== Deployment Complete ==="
           docker compose ps
         '''
       }
