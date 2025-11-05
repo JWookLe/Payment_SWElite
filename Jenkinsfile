@@ -106,7 +106,7 @@ ${composeCmd} ${args}
             sh label: "wait for ${service}", script: """#!/bin/sh
 set -eu
 echo "Waiting for ${service} to reach running state..."
-for attempt in $(seq 1 ${attempts}); do
+for attempt in \$(seq 1 ${attempts}); do
   cid=\$(${composeCmd} ps -q ${service})
   if [ -z "\$cid" ]; then
     echo "${service}: container not created yet (\$attempt/${attempts})"
@@ -276,3 +276,4 @@ ${composeCmd} down --remove-orphans || true
     }
   }
 }
+
