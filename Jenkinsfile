@@ -67,13 +67,10 @@ pipeline {
 
           # Rolling Update 방식: 서비스별 순차 재시작 (무중단 배포)
 
-          echo "=== Cleanup: 중지된 컨테이너 제거 (실행 중인 건 유지) ==="
-          # 중지된 컨테이너만 제거 (실행 중인 컨테이너는 영향 없음)
-          docker container prune -f
-
           echo "=== Step 1: Infrastructure (데이터 보존) ==="
-          # DB/Cache/MQ는 이미 실행 중이면 재사용 (데이터 유지)
-          docker compose up -d --no-recreate mariadb redis zookeeper kafka
+          # --remove-orphans: 중지된 컨테이너도 자동으로 제거하고 재생성
+          # 볼륨은 유지되므로 데이터 안전
+          docker compose up -d --remove-orphans mariadb redis zookeeper kafka
           # Eureka만 재빌드 (서비스 레지스트리)
           docker compose up -d --build --force-recreate eureka-server
           echo "Waiting for Eureka to be ready..."
