@@ -50,6 +50,9 @@
 - [X] Kafka DLQ (settlement.dlq, refund.dlq) 토픽 구현
 - [X] Grafana Infinity 플러그인 연동으로 Kafka 직접 조회
 - [X] Kafka Operations MCP 서버 구현 및 Claude Desktop 연동
+- [X] Prometheus 메트릭 수집 대상 확장 (2개 → 7개 전체 마이크로서비스)
+- [X] 전체 서비스 통합 모니터링 (Eureka, Gateway, 3개 Worker 포함)
+- [X] Grafana 대시보드에서 전체 시스템 가시성 확보
 
 **상세 내역**: [4Week.md](./4Week.md)
 
@@ -120,13 +123,35 @@
 
 - `docker compose up -d` 시 Prometheus(9090)와 Grafana(3000)가 함께 기동됨.
 - **Prometheus**: http://localhost:9090
-  - Status → Targets에서 ingest-service, consumer-worker 메트릭 수집 상태 확인
+  - Status → Targets에서 **전체 7개 마이크로서비스** 메트릭 수집 상태 확인
+  - 모니터링 대상: eureka-server, gateway, ingest-service, consumer-worker, monitoring-service, settlement-worker, refund-worker
 - **Grafana**: http://localhost:3000
   - 기본 계정: `admin`/`admin`
   - `Payment Service Overview` 대시보드: 요청 속도, p95 지연시간, Kafka 소비량, 에러율
   - `Settlement & Refund Statistics` 대시보드: 정산/환불 성공률, Dead Letter (Kafka 직접 조회), 시계열 추이
     - MariaDB 데이터소스: 성공률, 요청 추이, 상태 분포
     - Infinity 플러그인: Kafka DLQ 메시지 수 (settlement.dlq, refund.dlq)
+
+### Prometheus 메트릭 수집 대상 (전체 7개 서비스)
+
+**파일**: `monitoring/prometheus/prometheus.yml`
+
+| 서비스                | Port | 메트릭 엔드포인트            | 주요 메트릭                                                           |
+| --------------------- | ---- | ---------------------------- | --------------------------------------------------------------------- |
+| **eureka-server**     | 8761 | /actuator/prometheus         | 서비스 레지스트리 크기, 갱신 임계값, 등록된 인스턴스 수              |
+| **gateway**           | 8080 | /actuator/prometheus         | Gateway 요청 수, 응답 시간, 라우팅 통계                               |
+| **ingest-service**    | 8080 | /actuator/prometheus         | HTTP 요청/응답, Circuit Breaker 상태, Outbox 폴링                     |
+| **consumer-worker**   | 8081 | /actuator/prometheus         | Kafka 메시지 소비량, Consumer Lag, Ledger Entry 생성                  |
+| **monitoring-service**| 8082 | /actuator/prometheus         | DB 쿼리 통계, 정산/환불 통계 API 호출                                 |
+| **settlement-worker** | 8084 | /actuator/prometheus         | 정산 요청 처리, PG API 호출 성공/실패율, 재시도 횟수                  |
+| **refund-worker**     | 8085 | /actuator/prometheus         | 환불 요청 처리, PG API 호출 성공/실패율, 재시도 횟수                  |
+
+**모든 서비스 공통 메트릭**:
+- `jvm_memory_used_bytes`: JVM 메모리 사용량 (heap, non-heap)
+- `http_server_requests_seconds_count`: HTTP 요청 처리 수
+- `http_server_requests_seconds_max`: 최대 응답 시간
+- `kafka_consumer_fetch_manager_records_consumed_total`: Kafka 메시지 소비 수 (worker 서비스)
+- `kafka_consumer_fetch_manager_records_lag_max`: Consumer Lag (worker 서비스)
 
 ### 구성 방식
 

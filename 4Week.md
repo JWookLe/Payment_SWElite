@@ -1310,7 +1310,155 @@ Claude: 14개 메시지 발견 - 대부분 PG 타임아웃 에러
 
 ---
 
-## 10. Worker 분리 전략 및 회고
+## 10. Prometheus 메트릭 전체 마이크로서비스 등록
+
+### 배경
+
+기존에는 ingest-service와 consumer-worker 2개 서비스만 Prometheus 메트릭을 수집하고 있었다. 하지만 전체 7개 마이크로서비스가 Spring Boot Actuator를 통해 `/actuator/prometheus` 엔드포인트를 제공하고 있었기 때문에, 일관성있게 모든 서비스의 메트릭을 수집하도록 변경했다.
+
+### 수정 내용
+
+**파일**: `monitoring/prometheus/prometheus.yml`
+
+**Before (2개 서비스만 모니터링)**:
+```yaml
+scrape_configs:
+  - job_name: 'ingest-service'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - ingest-service:8080
+
+  - job_name: 'consumer-worker'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - consumer-worker:8081
+```
+
+**After (전체 7개 서비스 모니터링)**:
+```yaml
+scrape_configs:
+  - job_name: 'eureka-server'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - eureka-server:8761
+
+  - job_name: 'gateway'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - gateway:8080
+
+  - job_name: 'ingest-service'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - ingest-service:8080
+
+  - job_name: 'consumer-worker'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - consumer-worker:8081
+
+  - job_name: 'monitoring-service'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - monitoring-service:8082
+
+  - job_name: 'settlement-worker'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - settlement-worker:8084
+
+  - job_name: 'refund-worker'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - refund-worker:8085
+```
+
+### 추가된 서비스
+
+1. **eureka-server** (Port 8761)
+   - 서비스 레지스트리 메트릭
+   - 등록된 서비스 수, 헬스체크 상태
+
+2. **gateway** (Port 8080)
+   - API Gateway 메트릭
+   - 요청 처리량, 응답 시간, 라우팅 통계
+
+3. **monitoring-service** (Port 8082)
+   - 모니터링 서비스 자체 메트릭
+   - Circuit Breaker 상태, DB 쿼리 통계
+
+4. **settlement-worker** (Port 8084)
+   - 정산 처리 메트릭
+   - PG API 호출 성공/실패율, 재시도 횟수
+
+5. **refund-worker** (Port 8085)
+   - 환불 처리 메트릭
+   - PG API 호출 성공/실패율, 재시도 횟수
+
+### 확인 방법
+
+**1. Prometheus Targets 페이지**
+```
+http://localhost:9090/targets
+```
+7개 job이 모두 UP 상태인지 확인
+
+**2. Prometheus Query**
+```promql
+# 서비스별 HTTP 요청 수
+http_server_requests_seconds_count
+
+# 서비스별 JVM 메모리 사용량
+jvm_memory_used_bytes
+
+# 서비스별 Kafka 메시지 처리량
+kafka_consumer_fetch_manager_records_consumed_total
+```
+
+**3. Grafana 대시보드**
+- Payment Service Overview: 전체 서비스 메트릭 통합 뷰
+- Circuit Breaker Status: ingest-service Circuit Breaker 상태
+- Settlement & Refund Statistics: 정산/환불 처리 통계
+
+### 달성한 효과
+
+- ✅ 전체 7개 마이크로서비스 메트릭 수집
+- ✅ 서비스별 성능 모니터링 (CPU, 메모리, 요청 처리량)
+- ✅ Kafka 메시지 처리 모니터링 (consumer lag, throughput)
+- ✅ Spring Boot Actuator 메트릭 활용 (JVM, HTTP, DB)
+- ✅ Grafana 대시보드에서 통합 가시성 확보
+
+### 모니터링 메트릭 예시
+
+**eureka-server**:
+- `eureka_server_registry_size`: 등록된 서비스 인스턴스 수
+- `eureka_server_renewal_threshold`: 갱신 임계값
+
+**gateway**:
+- `spring_cloud_gateway_requests_seconds_count`: 게이트웨이 요청 수
+- `spring_cloud_gateway_requests_seconds_sum`: 총 처리 시간
+
+**worker 서비스들**:
+- `kafka_consumer_fetch_manager_records_consumed_total`: Kafka 메시지 소비 수
+- `kafka_consumer_fetch_manager_records_lag_max`: Consumer Lag
+
+**모든 서비스 공통**:
+- `jvm_memory_used_bytes`: JVM 메모리 사용량
+- `http_server_requests_seconds_count`: HTTP 요청 처리 수
+- `http_server_requests_seconds_max`: 최대 응답 시간
+
+---
+
+## 11. Worker 분리 전략 및 회고
 
 ### 기존 구조의 문제점
 
