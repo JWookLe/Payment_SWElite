@@ -8,11 +8,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.payment.client.MockPgAuthApiClient.AuthorizationResponse;
+import com.example.payment.client.PgAuthApiService;
 import com.example.payment.domain.Payment;
 import com.example.payment.repository.LedgerEntryRepository;
 import com.example.payment.repository.PaymentRepository;
 import com.example.payment.web.dto.AuthorizePaymentRequest;
 import com.example.payment.web.dto.PaymentResponse;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +52,9 @@ class PaymentServiceTest {
     @Mock
     private PaymentEventPublisher eventPublisher;
 
+    @Mock
+    private PgAuthApiService pgAuthApiService;
+
     private PaymentService paymentService;
 
     @BeforeEach
@@ -58,7 +64,8 @@ class PaymentServiceTest {
                 ledgerEntryRepository,
                 idempotencyCacheService,
                 rateLimiter,
-                eventPublisher
+                eventPublisher,
+                pgAuthApiService
         );
     }
 
@@ -90,8 +97,8 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("캐시 미스 시 결제를 DB에 저장하고 이벤트를 발행해야 함")
-    void authorizePersistsAndPublishesEventWhenCacheMiss() {
+    @DisplayName("캐시 미스 시 PG API 호출 후 결제를 DB에 저장하고 이벤트를 발행해야 함")
+    void authorizePersistsAndPublishesEventWhenCacheMiss() throws Exception {
         // Given: 캐시 미스
         AuthorizePaymentRequest request = new AuthorizePaymentRequest("M123", 1000L, "KRW", "key-2");
 
@@ -100,6 +107,23 @@ class PaymentServiceTest {
 
         when(paymentRepository.findByMerchantIdAndIdempotencyKey("M123", "key-2"))
                 .thenReturn(Optional.empty());
+
+        // Mock PG API 승인 응답
+        AuthorizationResponse pgResponse = new AuthorizationResponse(
+                "SUCCESS",
+                "txn_12345678",
+                "APP12345678",
+                "0000",
+                "승인 성공",
+                BigDecimal.valueOf(1000L),
+                Instant.now()
+        );
+        when(pgAuthApiService.requestAuthorization(
+                eq("M123"),
+                eq(BigDecimal.valueOf(1000L)),
+                eq("KRW"),
+                anyString()
+        )).thenReturn(pgResponse);
 
         // Payment 저장 시 ID를 설정하여 반환
         when(paymentRepository.save(any(Payment.class)))
@@ -112,9 +136,15 @@ class PaymentServiceTest {
         // When: authorize 호출
         PaymentResult result = paymentService.authorize(request);
 
-        // Then: 중복이 아니고 이벤트가 발행되어야 함
+        // Then: 중복이 아니고 PG API 호출 및 이벤트가 발행되어야 함
         assertThat(result.duplicate()).isFalse();
         verify(rateLimiter).verifyAuthorizeAllowed("M123");
+        verify(pgAuthApiService).requestAuthorization(
+                eq("M123"),
+                eq(BigDecimal.valueOf(1000L)),
+                eq("KRW"),
+                anyString()
+        );
         verify(idempotencyCacheService).storeAuthorization(eq("M123"), eq("key-2"), eq(200), any(PaymentResponse.class));
 
         // Circuit Breaker를 통해 이벤트가 발행되어야 함

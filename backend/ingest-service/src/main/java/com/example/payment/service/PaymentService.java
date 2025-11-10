@@ -1,5 +1,9 @@
 package com.example.payment.service;
 
+import com.example.payment.client.PgAuthApiService;
+import com.example.payment.client.PgAuthApiService.PgCircuitOpenException;
+import com.example.payment.client.MockPgAuthApiClient.AuthorizationResponse;
+import com.example.payment.client.MockPgAuthApiClient.PgApiException;
 import com.example.payment.domain.Payment;
 import com.example.payment.domain.PaymentStatus;
 import com.example.payment.repository.LedgerEntryRepository;
@@ -29,23 +33,27 @@ public class PaymentService {
     private final IdempotencyCacheService idempotencyCacheService;
     private final RedisRateLimiter rateLimiter;
     private final PaymentEventPublisher eventPublisher;
+    private final PgAuthApiService pgAuthApiService;
 
     public PaymentService(PaymentRepository paymentRepository,
                           LedgerEntryRepository ledgerEntryRepository,
                           IdempotencyCacheService idempotencyCacheService,
                           RedisRateLimiter rateLimiter,
-                          PaymentEventPublisher eventPublisher) {
+                          PaymentEventPublisher eventPublisher,
+                          PgAuthApiService pgAuthApiService) {
         this.paymentRepository = paymentRepository;
         // ledgerEntryRepository는 consumer-worker에서 처리 (비동기)
         this.idempotencyCacheService = idempotencyCacheService;
         this.rateLimiter = rateLimiter;
         this.eventPublisher = eventPublisher;
+        this.pgAuthApiService = pgAuthApiService;
     }
 
     /**
      * 결제 승인 (실제 PG사 구조)
      * READY → AUTHORIZED 상태 전환
-     * 승인 성공 시 payment.capture-requested 이벤트 자동 발행
+     * PG API 호출 → 승인 성공 → AUTHORIZED 상태 저장
+     * (정산은 별도 API로 분리, 자동 트리거 제거)
      */
     @Transactional
     public PaymentResult authorize(AuthorizePaymentRequest request) {
@@ -138,26 +146,70 @@ public class PaymentService {
         rateLimiter.verifyAuthorizeAllowed(request.merchantId());
 
         try {
-            // AUTHORIZED 상태로 즉시 저장 (승인 완료)
+            // Step 1: Mock PG API 호출 (카드 승인) - Circuit Breaker로 보호됨
+            // 실제로는 카드 번호, CVV, 유효기간 등이 필요하지만 Mock이므로 간소화
+            log.info("Calling Mock PG Authorization API: merchantId={}, amount={}, currency={}",
+                    request.merchantId(), request.amount(), request.currency());
+
+            AuthorizationResponse pgResponse = pgAuthApiService.requestAuthorization(
+                    request.merchantId(),
+                    java.math.BigDecimal.valueOf(request.amount()),
+                    request.currency(),
+                    "MOCK_CARD_NUMBER"  // 실제론 request에서 받아야 함
+            );
+
+            log.info("PG Authorization succeeded: approvalNumber={}, transactionId={}",
+                    pgResponse.getApprovalNumber(), pgResponse.getTransactionId());
+
+            // Step 2: AUTHORIZED 상태로 저장 (승인 완료)
             Payment payment = new Payment(request.merchantId(), request.amount(),
                     request.currency(), PaymentStatus.AUTHORIZED, request.idempotencyKey());
             paymentRepository.save(payment);
 
-            PaymentResponse response = toResponse(payment, Collections.emptyList(),
-                    "Payment authorized successfully");
-
-            idempotencyCacheService.storeAuthorization(request.merchantId(), request.idempotencyKey(), 200, response);
-
-            // payment.capture-requested 이벤트 발행 (자동 정산 트리거)
-            publishEvent(payment, "PAYMENT_CAPTURE_REQUESTED", Map.of(
+            // Step 3: payment.authorized 이벤트 발행 (ledger 기록 트리거)
+            publishEvent(payment, "PAYMENT_AUTHORIZED", Map.of(
                     "paymentId", payment.getId(),
                     "status", payment.getStatus().name(),
                     "amount", payment.getAmount(),
                     "currency", payment.getCurrency(),
+                    "approvalNumber", pgResponse.getApprovalNumber(),
+                    "transactionId", pgResponse.getTransactionId(),
                     "occurredAt", Instant.now().toString()
             ));
 
+            PaymentResponse response = toResponse(payment, Collections.emptyList(),
+                    "Payment authorized successfully - Approval: " + pgResponse.getApprovalNumber());
+
+            idempotencyCacheService.storeAuthorization(request.merchantId(), request.idempotencyKey(), 200, response);
+
             return new PaymentResult(response, false);
+        } catch (PgCircuitOpenException circuitEx) {
+            // Circuit Breaker OPEN - PG API 다운됨
+            log.error("PG Authorization Circuit Breaker OPEN: merchantId={}, amount={}",
+                    request.merchantId(), request.amount());
+            PaymentResponse response = new PaymentResponse(
+                    null,
+                    "SERVICE_UNAVAILABLE",
+                    request.amount(),
+                    request.currency(),
+                    Instant.now(),
+                    Collections.emptyList(),
+                    "PG service temporarily unavailable. Please try again later."
+            );
+            return new PaymentResult(response, true);
+        } catch (PgApiException pgEx) {
+            // PG API 호출 실패 (승인 거부, 타임아웃 등)
+            log.error("PG Authorization failed: errorCode={}, message={}", pgEx.getErrorCode(), pgEx.getMessage());
+            PaymentResponse response = new PaymentResponse(
+                    null,
+                    "FAILED",
+                    request.amount(),
+                    request.currency(),
+                    Instant.now(),
+                    Collections.emptyList(),
+                    "Authorization failed: " + pgEx.getMessage()
+            );
+            return new PaymentResult(response, true);
         } catch (DataIntegrityViolationException ex) {
             log.warn("Duplicate idempotency key detected for merchant {}", request.merchantId());
             Payment payment = paymentRepository.findByMerchantIdAndIdempotencyKey(

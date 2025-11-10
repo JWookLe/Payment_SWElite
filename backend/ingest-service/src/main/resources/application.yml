@@ -104,6 +104,16 @@ resilience4j:
         automaticTransitionFromOpenToHalfOpenEnabled: true
         eventConsumerBufferSize: 10
         recordFailurePredicate: com.example.payment.service.KafkaPublishingFailurePredicate
+      pg-auth-api:
+        registerHealthIndicator: true
+        failureRateThreshold: 50          # 50% 실패율 시 OPEN
+        slowCallRateThreshold: 50         # 50% 느린 호출 시 OPEN
+        slowCallDurationThreshold: 5000ms # 5초 이상을 느린 호출로 간주
+        waitDurationInOpenState: 60s      # OPEN 상태 60초 유지 (Kafka보다 길게)
+        permittedNumberOfCallsInHalfOpenState: 5  # HALF_OPEN에서 5번 테스트
+        minimumNumberOfCalls: 10          # 최소 10번 호출 후 통계 계산
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        eventConsumerBufferSize: 10
     metrics:
       enabled: true
   retry:
