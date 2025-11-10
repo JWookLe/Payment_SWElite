@@ -17,8 +17,14 @@ frontend/dist
 backend/**/.gradle
 backend/**/build/classes
 backend/**/build/generated
-backend/**/build/resources/main
+backend/**/build/resources
 backend/**/build/tmp
+backend/**/build/test-results
+backend/**/build/reports
+backend/**/bin
+backend/**/out
+backend/**/.settings
+backend/**/src
 
 # Jenkins
 jenkins-data
