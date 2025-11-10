@@ -12,19 +12,13 @@ node_modules
 frontend/node_modules
 frontend/dist
 
-# Gradle - 소스 코드 및 불필요한 빌드 산출물 제외
+# Gradle - 전체 backend 디렉토리 제외 후 필요한 JAR만 포함
+backend
+!backend/*/build
+!backend/*/build/libs
+!backend/*/build/libs/*.jar
+backend/*/build/libs/*-plain.jar
 .gradle
-backend/**/.gradle
-backend/**/build
-!backend/**/build/libs
-backend/**/build/libs/*-plain.jar
-backend/**/bin
-backend/**/out
-backend/**/.settings
-backend/**/src
-backend/**/gradle
-backend/**/.classpath
-backend/**/.project
 
 # Jenkins
 jenkins-data
