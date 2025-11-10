@@ -7,16 +7,14 @@
 .idea
 *.iml
 
-# Node
+# Node / frontend artifacts
 node_modules
 frontend/node_modules
 frontend/dist
 
-# Gradle - 전체 backend 디렉토리 제외 후 필요한 JAR만 포함
-backend
-!backend/*/build
+# Gradle outputs (keep packaged jars)
+backend/*/build
 !backend/*/build/libs
-!backend/*/build/libs/*.jar
 backend/*/build/libs/*-plain.jar
 .gradle
 
@@ -26,9 +24,7 @@ jenkins-data
 # Monitoring
 monitoring/grafana/data
 
-# Docker
+# Logs / temp
 *.log
-
-# Temp files
 tmp
 *.tmp

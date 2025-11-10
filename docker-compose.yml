@@ -245,13 +245,11 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile
+      context: ./frontend
+      dockerfile: Dockerfile
       args:
         VITE_API_BASE: /api
     image: mock-frontend:local
-    environment:
-      VITE_API_BASE: /api
     depends_on:
       - gateway
       - ingest-service
@@ -260,8 +258,8 @@ services:
 
   jenkins:
     build:
-      context: .
-      dockerfile: jenkins/Dockerfile
+      context: ./jenkins
+      dockerfile: Dockerfile
     image: pay-jenkins:local
     container_name: pay-jenkins
     user: root
@@ -289,6 +287,12 @@ services:
     restart: unless-stopped
     profiles:
       - ngrok
+
+  curl-client:
+    image: curlimages/curl:8.10.1
+    entrypoint: ["/bin/sh", "-c"]
+    profiles:
+      - tooling
 
 volumes:
   mariadb-data:

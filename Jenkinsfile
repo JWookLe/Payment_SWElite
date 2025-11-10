@@ -11,11 +11,6 @@ pipeline {
 
   environment {
     FRONTEND_DIR = "frontend"
-    BACKEND_DIR = "backend"
-  }
-
-  tools {
-    gradle 'gradle-8.13'
   }
 
   triggers {
@@ -46,7 +41,7 @@ pipeline {
     stage('Install Frontend Dependencies') {
       steps {
         dir(FRONTEND_DIR) {
-          sh 'npm install'
+          sh 'npm ci'
           sh 'npm run build'
         }
       }
@@ -66,25 +61,22 @@ pipeline {
           ls -la monitoring/prometheus/
 
           echo "=== Step 1: 기존 컨테이너 정리 (포트 충돌 방지) ==="
-          # Jenkins와 ngrok를 제외한 모든 payment 관련 컨테이너 중지 및 제거
+          # Jenkins와 ngrok을 제외한 모든 payment 관련 컨테이너 중지 및 제거
           docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | grep -v "pay-jenkins" | grep -v "pay-ngrok" | xargs -r docker stop || true
           docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | grep -v "pay-jenkins" | grep -v "pay-ngrok" | xargs -r docker rm || true
           echo "✓ 기존 컨테이너 정리 완료 (Jenkins 제외)"
 
           echo ""
           echo "=== Step 2: 인프라 서비스 시작 ==="
-          # DB, Redis, Kafka는 이미 실행 중이면 그대로 유지
-          # 처음 실행이거나 중지되어 있으면 시작
           docker compose up -d --no-recreate mariadb redis zookeeper kafka
           echo "✓ 인프라 서비스 안전하게 유지됨 (데이터 보존)"
           sleep 3
 
           echo ""
           echo "=== Step 3: 전체 서비스 빌드 및 시작 (Jenkins 제외) ==="
-          # Jenkins와 ngrok는 이미 실행 중이므로 빌드에서 제외
           docker compose build eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
           docker compose up -d eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
-          echo "✓ 모든 서비스 시작 완료"
+          echo "✓ 모든 서비스 기동 완료"
 
           echo ""
           echo "=== 배포 완료 ==="
@@ -95,42 +87,30 @@ pipeline {
 
     stage('Wait for Services') {
       steps {
-        script {
-          echo 'Waiting for ingest-service to be ready...'
-          sh '''
-            # Health check with retry (max 120s)
+        sh '''
+          check_ready() {
+            url="$1"
+            name="$2"
+            attempts="${3:-60}"
             ready=0
-            for i in $(seq 1 60); do
-              if docker compose exec -T ingest-service curl -f http://ingest-service:8080/actuator/health 2>/dev/null; then
-                echo "ingest-service is ready!"
+            for i in $(seq 1 "$attempts"); do
+              if docker compose run --rm --no-deps curl-client "curl -sf ${url} > /dev/null"; then
+                echo "$name is ready!"
                 ready=1
                 break
               fi
-              echo "Waiting for ingest-service... attempt $i/60"
+              echo "Waiting for $name... attempt $i/$attempts"
               sleep 2
             done
             if [ "$ready" -ne 1 ]; then
-              echo "ingest-service failed to become ready within timeout."
+              echo "$name failed to become ready within timeout."
               exit 1
             fi
+          }
 
-            echo "Waiting for gateway to be ready..."
-            ready=0
-            for i in $(seq 1 60); do
-              if docker compose exec -T gateway curl -f http://localhost:8080/actuator/health 2>/dev/null; then
-                echo "gateway is ready!"
-                ready=1
-                break
-              fi
-              echo "Waiting for gateway... attempt $i/60"
-              sleep 2
-            done
-            if [ "$ready" -ne 1 ]; then
-              echo "gateway failed to become ready within timeout."
-              exit 1
-            fi
-          '''
-        }
+          check_ready http://ingest-service:8080/actuator/health ingest-service
+          check_ready http://gateway:8080/actuator/health gateway
+        '''
       }
     }
 
@@ -142,18 +122,18 @@ pipeline {
           payload=$(printf '{"merchantId":"JENKINS","amount":1000,"currency":"KRW","idempotencyKey":"smoke-test-%s"}' "$TS")
           success=0
           for i in $(seq 1 10); do
-            if docker compose exec -T gateway sh -c "curl -sSf -X POST -H 'Content-Type: application/json' -d '$payload' http://localhost:8080/api/payments/authorize >/dev/null"; then
+            if docker compose run --rm --no-deps curl-client "curl -sSf -X POST -H 'Content-Type: application/json' -d '$payload' http://gateway:8080/api/payments/authorize > /dev/null"; then
               success=1
               break
             fi
-            echo \"Smoke test retry $i/5 - gateway not ready yet, waiting...\"
+            echo "Smoke test retry $i/10 - gateway not ready yet, waiting..."
             sleep 3
           done
-          if [ \"$success\" -ne 1 ]; then
-            echo \"Smoke test failed after retries\"
+          if [ "$success" -ne 1 ]; then
+            echo "Smoke test failed after retries"
             exit 1
           fi
-          echo \"Smoke test completed successfully\"
+          echo "Smoke test completed successfully"
         '''
       }
     }
@@ -196,9 +176,3 @@ pipeline {
     }
   }
 }
-
-
-
-
-
-
