@@ -27,4 +27,6 @@ public interface RefundRequestRepository extends JpaRepository<RefundRequest, Lo
             RefundStatus status,
             int retryCount
     );
+
+    boolean existsByPaymentIdAndStatus(Long paymentId, RefundStatus status);
 }

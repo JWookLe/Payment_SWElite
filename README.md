@@ -56,6 +56,16 @@
 
 **상세 내역**: [4Week.md](./4Week.md)
 
+### 5주차
+
+- [X] Docker 컨텍스트/이미지 최적화 (`.dockerignore`, 공통 Dockerfile, 비루트 실행)
+- [X] Jenkins 파이프라인 재작성 (npm ci, curl-client 기반 헬스/스모크, Auto Cleanup 개선)
+- [X] 승인 → 정산 → 환불 이벤트 파이프라인 일관성 (capture-requested 발행, worker 멱등성/신뢰성 강화)
+- [X] consumer-worker 경량화 및 DLQ 보강, refund-worker 멱등 처리
+- [X] MariaDB 포트 충돌 해소(`13306:3306`) 및 HeidiSQL 접속 가이드 반영
+
+**상세 내역**: [5Week.md](./5Week.md)
+
 ## 서비스 구성 요소
 
 | 구성                         | 설명                                                                                                                               |

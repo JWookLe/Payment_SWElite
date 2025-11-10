@@ -40,7 +40,7 @@ public class PaymentEventListener {
         this.dlqTopic = dlqTopic;
     }
 
-    @KafkaListener(topics = {"payment.authorized", "payment.captured", "payment.refunded"})
+    @KafkaListener(topics = {"payment.captured", "payment.refunded"})
     @Transactional
     public void handleEvent(ConsumerRecord<String, String> record) {
         String payload = record.value();
@@ -77,6 +77,8 @@ public class PaymentEventListener {
                             occurredAt != null ? Instant.parse(occurredAt) : Instant.now()
                     ));
                 }
+            } else {
+                log.debug("No ledger action required for topic {}", topic);
             }
         } catch (Exception ex) {
             log.error("Failed to process event from topic {} partition {} offset {}", topic, partition, offset, ex);
@@ -101,9 +103,10 @@ public class PaymentEventListener {
 
         try {
             String body = objectMapper.writeValueAsString(dlqMessage);
-            kafkaTemplate.send(dlqTopic, body);
+            kafkaTemplate.send(dlqTopic, body).get();
         } catch (Exception sendException) {
             log.error("Failed to publish event to DLQ topic {}", dlqTopic, sendException);
+            throw new IllegalStateException("DLQ publish failed", sendException);
         }
     }
 

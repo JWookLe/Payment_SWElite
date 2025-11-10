@@ -6,7 +6,6 @@ import com.example.payment.client.MockPgAuthApiClient.AuthorizationResponse;
 import com.example.payment.client.MockPgAuthApiClient.PgApiException;
 import com.example.payment.domain.Payment;
 import com.example.payment.domain.PaymentStatus;
-import com.example.payment.repository.LedgerEntryRepository;
 import com.example.payment.repository.PaymentRepository;
 import com.example.payment.web.dto.AuthorizePaymentRequest;
 import com.example.payment.web.dto.CapturePaymentRequest;
@@ -36,13 +35,11 @@ public class PaymentService {
     private final PgAuthApiService pgAuthApiService;
 
     public PaymentService(PaymentRepository paymentRepository,
-                          LedgerEntryRepository ledgerEntryRepository,
                           IdempotencyCacheService idempotencyCacheService,
                           RedisRateLimiter rateLimiter,
                           PaymentEventPublisher eventPublisher,
                           PgAuthApiService pgAuthApiService) {
         this.paymentRepository = paymentRepository;
-        // ledgerEntryRepository는 consumer-worker에서 처리 (비동기)
         this.idempotencyCacheService = idempotencyCacheService;
         this.rateLimiter = rateLimiter;
         this.eventPublisher = eventPublisher;
@@ -180,6 +177,8 @@ public class PaymentService {
             PaymentResponse response = toResponse(payment, Collections.emptyList(),
                     "Payment authorized successfully - Approval: " + pgResponse.getApprovalNumber());
 
+            scheduleSettlement(payment, pgResponse);
+
             idempotencyCacheService.storeAuthorization(request.merchantId(), request.idempotencyKey(), 200, response);
 
             return new PaymentResult(response, false);
@@ -219,6 +218,22 @@ public class PaymentService {
                     "Idempotency key already used");
             return new PaymentResult(response, true);
         }
+    }
+
+    private void scheduleSettlement(Payment payment, AuthorizationResponse pgResponse) {
+        payment.setStatus(PaymentStatus.CAPTURE_REQUESTED);
+        paymentRepository.save(payment);
+
+        publishEvent(payment, "PAYMENT_CAPTURE_REQUESTED", Map.of(
+                "paymentId", payment.getId(),
+                "status", payment.getStatus().name(),
+                "amount", payment.getAmount(),
+                "currency", payment.getCurrency(),
+                "merchantId", payment.getMerchantId(),
+                "approvalNumber", pgResponse.getApprovalNumber(),
+                "transactionId", pgResponse.getTransactionId(),
+                "occurredAt", Instant.now().toString()
+        ));
     }
 
     private void publishEvent(Payment payment, String eventType, Map<String, Object> payload) {

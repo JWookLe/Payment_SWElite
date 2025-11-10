@@ -97,7 +97,7 @@ public class OutboxEventScheduler {
                     outboxEventRepository.save(event);
 
                     // Attempt to publish
-                    String topic = topicNameFor(event.getEventType());
+                    String topic = eventPublisher.resolveTopicName(event.getEventType());
                     eventPublisher.publishToKafkaWithCircuitBreaker(event, topic, event.getPayload());
 
                     // If we reach here, publishing was successful
@@ -174,12 +174,4 @@ public class OutboxEventScheduler {
         // which can be monitored by the monitorDeadLetterEvents() job
     }
 
-    private String topicNameFor(String eventType) {
-        return switch (eventType) {
-            case "PAYMENT_AUTHORIZED" -> "payment.authorized";
-            case "PAYMENT_CAPTURED" -> "payment.captured";
-            case "PAYMENT_REFUNDED" -> "payment.refunded";
-            default -> "payment.unknown";
-        };
-    }
 }

@@ -51,6 +51,25 @@ public class RefundService {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
 
+        if (payment.getStatus() == PaymentStatus.REFUNDED) {
+            log.info("Payment {} already marked as REFUNDED. Re-publishing event if necessary.", paymentId);
+            publishRefundedEvent(payment, amount);
+            return;
+        }
+
+        if (payment.getStatus() != PaymentStatus.REFUND_REQUESTED) {
+            log.warn("Received refund request for payment {} in unexpected status {}. Skipping.", paymentId, payment.getStatus());
+            return;
+        }
+
+        if (refundRequestRepository.existsByPaymentIdAndStatus(paymentId, RefundRequest.RefundStatus.SUCCESS)) {
+            log.info("Refund request already completed for payment {}. Ensuring event propagation.", paymentId);
+            payment.setStatus(PaymentStatus.REFUNDED);
+            paymentRepository.save(payment);
+            publishRefundedEvent(payment, amount);
+            return;
+        }
+
         // RefundRequest 생성 및 저장
         RefundRequest refundRequest = new RefundRequest(
                 paymentId,
@@ -104,12 +123,13 @@ public class RefundService {
             eventPayload.put("occurredAt", Instant.now().toString());
 
             String message = objectMapper.writeValueAsString(eventPayload);
-            kafkaTemplate.send("payment.refunded", String.valueOf(payment.getId()), message);
+            kafkaTemplate.send("payment.refunded", String.valueOf(payment.getId()), message).get();
 
             log.info("Published payment.refunded event: paymentId={}", payment.getId());
 
         } catch (Exception ex) {
             log.error("Failed to publish payment.refunded event: paymentId={}", payment.getId(), ex);
+            throw new IllegalStateException("Failed to publish payment.refunded event", ex);
         }
     }
 }

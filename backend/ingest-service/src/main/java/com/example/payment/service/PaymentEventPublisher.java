@@ -70,7 +70,7 @@ public class PaymentEventPublisher {
 
             // Attempt to publish to Kafka (protected by circuit breaker)
             try {
-                publishToKafkaWithCircuitBreaker(outboxEvent, topicNameFor(eventType), jsonPayload);
+                publishToKafkaWithCircuitBreaker(outboxEvent, resolveTopicName(eventType), jsonPayload);
             } catch (Exception ex) {
                 // Circuit breaker caught the exception, log and continue
                 log.warn("Circuit breaker prevented Kafka publish for paymentId={}, eventType={}", paymentId, eventType, ex);
@@ -146,6 +146,10 @@ public class PaymentEventPublisher {
                             log.debug("Circuit Breaker success recorded with {} total calls",
                                     circuitBreaker.getMetrics().getNumberOfSuccessfulCalls()));
         }
+    }
+
+    public String resolveTopicName(String eventType) {
+        return topicNameFor(eventType);
     }
 
     private String topicNameFor(String eventType) {

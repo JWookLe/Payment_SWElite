@@ -5,13 +5,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.payment.client.MockPgAuthApiClient.AuthorizationResponse;
 import com.example.payment.client.PgAuthApiService;
 import com.example.payment.domain.Payment;
-import com.example.payment.repository.LedgerEntryRepository;
 import com.example.payment.repository.PaymentRepository;
 import com.example.payment.web.dto.AuthorizePaymentRequest;
 import com.example.payment.web.dto.PaymentResponse;
@@ -41,9 +41,6 @@ class PaymentServiceTest {
     private PaymentRepository paymentRepository;
 
     @Mock
-    private LedgerEntryRepository ledgerEntryRepository;
-
-    @Mock
     private IdempotencyCacheService idempotencyCacheService;
 
     @Mock
@@ -61,7 +58,6 @@ class PaymentServiceTest {
     void setUp() {
         paymentService = new PaymentService(
                 paymentRepository,
-                ledgerEntryRepository,
                 idempotencyCacheService,
                 rateLimiter,
                 eventPublisher,
@@ -150,9 +146,9 @@ class PaymentServiceTest {
         // Circuit Breaker를 통해 이벤트가 발행되어야 함
         ArgumentCaptor<Long> paymentIdCaptor = ArgumentCaptor.forClass(Long.class);
         ArgumentCaptor<String> eventTypeCaptor = ArgumentCaptor.forClass(String.class);
-        verify(eventPublisher).publishEvent(paymentIdCaptor.capture(), eventTypeCaptor.capture(), any());
+        verify(eventPublisher, times(2)).publishEvent(paymentIdCaptor.capture(), eventTypeCaptor.capture(), any());
 
-        assertThat(paymentIdCaptor.getValue()).isEqualTo(99L);
-        assertThat(eventTypeCaptor.getValue()).isEqualTo("PAYMENT_AUTHORIZED");
+        assertThat(paymentIdCaptor.getAllValues()).containsExactly(99L, 99L);
+        assertThat(eventTypeCaptor.getAllValues()).containsExactly("PAYMENT_AUTHORIZED", "PAYMENT_CAPTURE_REQUESTED");
     }
 }
