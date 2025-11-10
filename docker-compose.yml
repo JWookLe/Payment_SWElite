@@ -55,8 +55,8 @@ services:
 
   eureka-server:
     build:
-      context: .
-      dockerfile: backend/eureka-server/Dockerfile
+      context: ./backend/eureka-server
+      dockerfile: Dockerfile
     image: eureka-server:local
     container_name: pay-eureka
     environment:
@@ -66,8 +66,8 @@ services:
 
   ingest-service:
     build:
-      context: .
-      dockerfile: backend/ingest-service/Dockerfile
+      context: ./backend/ingest-service
+      dockerfile: Dockerfile
     image: ingest-service:local
     environment:
       PAYMENT_DB_HOST: mariadb
@@ -96,8 +96,8 @@ services:
         condition: service_started
   consumer-worker:
     build:
-      context: .
-      dockerfile: backend/consumer-worker/Dockerfile
+      context: ./backend/consumer-worker
+      dockerfile: Dockerfile
     image: consumer-worker:local
     environment:
       PAYMENT_DB_HOST: mariadb
@@ -117,8 +117,8 @@ services:
 
   settlement-worker:
     build:
-      context: .
-      dockerfile: backend/settlement-worker/Dockerfile
+      context: ./backend/settlement-worker
+      dockerfile: Dockerfile
     image: settlement-worker:local
     environment:
       PAYMENT_DB_HOST: mariadb
@@ -141,8 +141,8 @@ services:
 
   refund-worker:
     build:
-      context: .
-      dockerfile: backend/refund-worker/Dockerfile
+      context: ./backend/refund-worker
+      dockerfile: Dockerfile
     image: refund-worker:local
     environment:
       PAYMENT_DB_HOST: mariadb
@@ -165,8 +165,8 @@ services:
 
   monitoring-service:
     build:
-      context: .
-      dockerfile: backend/monitoring-service/Dockerfile
+      context: ./backend/monitoring-service
+      dockerfile: Dockerfile
     image: monitoring-service:local
     container_name: pay-monitoring
     environment:
@@ -198,8 +198,8 @@ services:
 
   gateway:
     build:
-      context: .
-      dockerfile: backend/gateway/Dockerfile
+      context: ./backend/gateway
+      dockerfile: Dockerfile
     image: gateway:local
     container_name: pay-gateway
     environment:

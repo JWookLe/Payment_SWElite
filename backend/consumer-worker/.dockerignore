@@ -1,0 +1,14 @@
+src
+build/classes
+build/generated
+build/resources
+build/tmp
+build/test-results
+build/reports
+build/libs/*-plain.jar
+.gradle
+bin
+out
+.settings
+.classpath
+.project
