@@ -105,6 +105,67 @@ public class RedisMonitoringController {
     }
 
     /**
+     * GET /monitoring/redis/stats
+     * Get comprehensive Redis statistics
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Object>> getRedisStats() {
+        try {
+            Set<String> rateLimitKeys = redisTemplate.keys("rate_limit:*");
+            Set<String> idempotencyKeys = redisTemplate.keys("idempotency:*");
+            Set<String> cacheKeys = redisTemplate.keys("cache:*");
+
+            Map<String, Object> stats = new HashMap<>();
+            stats.put("rateLimitKeys", rateLimitKeys != null ? rateLimitKeys.size() : 0);
+            stats.put("idempotencyKeys", idempotencyKeys != null ? idempotencyKeys.size() : 0);
+            stats.put("cacheKeys", cacheKeys != null ? cacheKeys.size() : 0);
+            stats.put("totalKeys",
+                (rateLimitKeys != null ? rateLimitKeys.size() : 0) +
+                (idempotencyKeys != null ? idempotencyKeys.size() : 0) +
+                (cacheKeys != null ? cacheKeys.size() : 0)
+            );
+
+            // Count blocked merchants
+            long blockedCount = 0;
+            if (rateLimitKeys != null && !rateLimitKeys.isEmpty()) {
+                for (String key : rateLimitKeys) {
+                    String value = redisTemplate.opsForValue().get(key);
+                    if (value != null && Integer.parseInt(value) >= 100) {
+                        blockedCount++;
+                    }
+                }
+            }
+            stats.put("blockedMerchants", blockedCount);
+
+            // Sample some rate limit values
+            List<Map<String, Object>> rateLimitSamples = new ArrayList<>();
+            if (rateLimitKeys != null && !rateLimitKeys.isEmpty()) {
+                rateLimitKeys.stream()
+                        .limit(5)
+                        .forEach(key -> {
+                            String value = redisTemplate.opsForValue().get(key);
+                            Long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
+                            rateLimitSamples.add(Map.of(
+                                    "key", key,
+                                    "count", value != null ? value : "0",
+                                    "ttlSeconds", ttl != null ? ttl : 0
+                            ));
+                        });
+            }
+
+            stats.put("rateLimitSamples", rateLimitSamples);
+            stats.put("message", "Redis statistics retrieved successfully");
+
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of(
+                    "error", "Redis stats retrieval failed",
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    /**
      * GET /monitoring/redis/cache-stats
      * Get cache statistics
      */

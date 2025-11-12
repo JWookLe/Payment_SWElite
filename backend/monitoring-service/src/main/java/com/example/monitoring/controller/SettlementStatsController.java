@@ -10,9 +10,10 @@ import java.util.Map;
 
 /**
  * 정산/환불 통계 API
+ * Gateway를 통해 /api/stats/** 경로로 접근
  */
 @RestController
-@RequestMapping("/api/stats")
+@RequestMapping("/stats")
 public class SettlementStatsController {
 
     private final SettlementStatsService statsService;
@@ -21,6 +22,10 @@ public class SettlementStatsController {
         this.statsService = statsService;
     }
 
+    /**
+     * GET /api/stats/settlement (via Gateway)
+     * -> /stats/settlement (actual)
+     */
     @GetMapping("/settlement")
     public Map<String, Object> getSettlementStats() {
         return statsService.getSettlementStats();

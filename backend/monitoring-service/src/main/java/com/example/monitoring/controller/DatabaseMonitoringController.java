@@ -146,6 +146,60 @@ public class DatabaseMonitoringController {
     }
 
     /**
+     * GET /monitoring/database/stats
+     * Get comprehensive database statistics
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Object>> getDatabaseStats() {
+        try {
+            Map<String, Object> stats = new HashMap<>();
+
+            // Payment counts by status
+            String paymentStatusSql = "SELECT status, COUNT(*) as count FROM payment GROUP BY status";
+            List<Map<String, Object>> paymentByStatus = jdbcTemplate.queryForList(paymentStatusSql);
+            stats.put("paymentsByStatus", paymentByStatus);
+
+            // Total payments
+            String totalPaymentsSql = "SELECT COUNT(*) as total FROM payment";
+            Long totalPayments = jdbcTemplate.queryForObject(totalPaymentsSql, Long.class);
+            stats.put("totalPayments", totalPayments);
+
+            // Ledger entry count
+            String ledgerCountSql = "SELECT COUNT(*) as count FROM ledger_entry";
+            Long ledgerCount = jdbcTemplate.queryForObject(ledgerCountSql, Long.class);
+            stats.put("ledgerEntryCount", ledgerCount);
+
+            // Outbox event statistics
+            String outboxStatsSql = "SELECT " +
+                "COUNT(*) as total, " +
+                "SUM(CASE WHEN published = 1 THEN 1 ELSE 0 END) as published, " +
+                "SUM(CASE WHEN published = 0 THEN 1 ELSE 0 END) as unpublished " +
+                "FROM outbox_event";
+            Map<String, Object> outboxStats = jdbcTemplate.queryForMap(outboxStatsSql);
+            stats.put("outboxEvents", outboxStats);
+
+            // Settlement statistics
+            String settlementStatsSql = "SELECT status, COUNT(*) as count FROM settlement_request GROUP BY status";
+            List<Map<String, Object>> settlementByStatus = jdbcTemplate.queryForList(settlementStatsSql);
+            stats.put("settlementsByStatus", settlementByStatus);
+
+            // Refund statistics
+            String refundStatsSql = "SELECT status, COUNT(*) as count FROM refund_request GROUP BY status";
+            List<Map<String, Object>> refundByStatus = jdbcTemplate.queryForList(refundStatsSql);
+            stats.put("refundsByStatus", refundByStatus);
+
+            stats.put("message", "Database statistics retrieved successfully");
+
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of(
+                "error", "Database stats query failed",
+                "message", e.getMessage()
+            ));
+        }
+    }
+
+    /**
      * GET /monitoring/database/reconciliation
      * Verify double-entry bookkeeping integrity
      */

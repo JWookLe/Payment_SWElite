@@ -39,6 +39,82 @@ public class KafkaMonitoringController {
     }
 
     /**
+     * GET /monitoring/kafka/stats
+     * Get comprehensive Kafka statistics
+     */
+    @GetMapping("/stats")
+    public Map<String, Object> getKafkaStats() {
+        try (AdminClient admin = getAdminClient();
+             KafkaConsumer<String, String> consumer = getConsumer()) {
+
+            Map<String, Object> stats = new HashMap<>();
+
+            // Topic list
+            ListTopicsResult topics = admin.listTopics();
+            Set<String> topicNames = topics.names().get();
+            List<String> paymentTopics = topicNames.stream()
+                    .filter(name -> name.startsWith("payment.") ||
+                                    name.equals("settlement.dlq") ||
+                                    name.equals("refund.dlq"))
+                    .sorted()
+                    .collect(Collectors.toList());
+            stats.put("topicCount", paymentTopics.size());
+            stats.put("topics", paymentTopics);
+
+            // Consumer groups
+            Collection<ConsumerGroupListing> groups = admin.listConsumerGroups().all().get();
+            stats.put("consumerGroupCount", groups.size());
+            List<String> groupIds = groups.stream()
+                    .map(ConsumerGroupListing::groupId)
+                    .collect(Collectors.toList());
+            stats.put("consumerGroups", groupIds);
+
+            // DLQ counts
+            Map<String, Long> dlqCounts = new HashMap<>();
+            String[] dlqTopics = {"payment.dlq", "settlement.dlq", "refund.dlq"};
+            for (String dlqTopic : dlqTopics) {
+                try {
+                    List<TopicPartition> partitions = consumer.partitionsFor(dlqTopic).stream()
+                            .map(p -> new TopicPartition(dlqTopic, p.partition()))
+                            .collect(Collectors.toList());
+
+                    Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
+                    Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
+
+                    long totalCount = endOffsets.entrySet().stream()
+                            .mapToLong(e -> e.getValue() - beginningOffsets.get(e.getKey()))
+                            .sum();
+                    dlqCounts.put(dlqTopic, totalCount);
+                } catch (Exception e) {
+                    dlqCounts.put(dlqTopic, 0L);
+                }
+            }
+            stats.put("dlqCounts", dlqCounts);
+
+            // Cluster health
+            try {
+                DescribeClusterResult cluster = admin.describeCluster();
+                int nodeCount = cluster.nodes().get().size();
+                String clusterId = cluster.clusterId().get();
+                stats.put("clusterHealthy", true);
+                stats.put("brokerCount", nodeCount);
+                stats.put("clusterId", clusterId);
+            } catch (Exception e) {
+                stats.put("clusterHealthy", false);
+            }
+
+            stats.put("message", "Kafka statistics retrieved successfully");
+
+            return stats;
+        } catch (Exception e) {
+            return Map.of(
+                    "error", true,
+                    "message", "Failed to retrieve Kafka stats: " + e.getMessage()
+            );
+        }
+    }
+
+    /**
      * 토픽 목록 조회
      */
     @GetMapping("/topics")
