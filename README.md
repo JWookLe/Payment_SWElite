@@ -1,4 +1,4 @@
-# Payment_SWElite
+﻿# Payment_SWElite
 
 ## 주차별 목표
 
@@ -63,6 +63,7 @@
 - [X] 승인 → 정산 → 환불 이벤트 파이프라인 일관성 (capture-requested 발행, worker 멱등성/신뢰성 강화)
 - [X] consumer-worker 경량화 및 DLQ 보강, refund-worker 멱등 처리
 - [X] MariaDB 포트 충돌 해소(`13306:3306`) 및 HeidiSQL 접속 가이드 반영
+- [X] F/E Amend
 
 **상세 내역**: [5Week.md](./5Week.md)
 
@@ -146,17 +147,18 @@
 
 **파일**: `monitoring/prometheus/prometheus.yml`
 
-| 서비스                | Port | 메트릭 엔드포인트            | 주요 메트릭                                                           |
-| --------------------- | ---- | ---------------------------- | --------------------------------------------------------------------- |
-| **eureka-server**     | 8761 | /actuator/prometheus         | 서비스 레지스트리 크기, 갱신 임계값, 등록된 인스턴스 수              |
-| **gateway**           | 8080 | /actuator/prometheus         | Gateway 요청 수, 응답 시간, 라우팅 통계                               |
-| **ingest-service**    | 8080 | /actuator/prometheus         | HTTP 요청/응답, Circuit Breaker 상태, Outbox 폴링                     |
-| **consumer-worker**   | 8081 | /actuator/prometheus         | Kafka 메시지 소비량, Consumer Lag, Ledger Entry 생성                  |
-| **monitoring-service**| 8082 | /actuator/prometheus         | DB 쿼리 통계, 정산/환불 통계 API 호출                                 |
-| **settlement-worker** | 8084 | /actuator/prometheus         | 정산 요청 처리, PG API 호출 성공/실패율, 재시도 횟수                  |
-| **refund-worker**     | 8085 | /actuator/prometheus         | 환불 요청 처리, PG API 호출 성공/실패율, 재시도 횟수                  |
+| 서비스                       | Port | 메트릭 엔드포인트    | 주요 메트릭                                             |
+| ---------------------------- | ---- | -------------------- | ------------------------------------------------------- |
+| **eureka-server**      | 8761 | /actuator/prometheus | 서비스 레지스트리 크기, 갱신 임계값, 등록된 인스턴스 수 |
+| **gateway**            | 8080 | /actuator/prometheus | Gateway 요청 수, 응답 시간, 라우팅 통계                 |
+| **ingest-service**     | 8080 | /actuator/prometheus | HTTP 요청/응답, Circuit Breaker 상태, Outbox 폴링       |
+| **consumer-worker**    | 8081 | /actuator/prometheus | Kafka 메시지 소비량, Consumer Lag, Ledger Entry 생성    |
+| **monitoring-service** | 8082 | /actuator/prometheus | DB 쿼리 통계, 정산/환불 통계 API 호출                   |
+| **settlement-worker**  | 8084 | /actuator/prometheus | 정산 요청 처리, PG API 호출 성공/실패율, 재시도 횟수    |
+| **refund-worker**      | 8085 | /actuator/prometheus | 환불 요청 처리, PG API 호출 성공/실패율, 재시도 횟수    |
 
 **모든 서비스 공통 메트릭**:
+
 - `jvm_memory_used_bytes`: JVM 메모리 사용량 (heap, non-heap)
 - `http_server_requests_seconds_count`: HTTP 요청 처리 수
 - `http_server_requests_seconds_max`: 최대 응답 시간
@@ -981,9 +983,7 @@ npm install && npm run build
 - 로컬 디버깅 → MCP 서버 사용
 - 운영 모니터링 → REST API 사용
 
-### 클라우드 배포 시 MCP 사용 가능 여부
-
-**결론: 클라우드에 배포해도 MCP를 계속 사용할 수 있습니다!**
+### 클라우드 배포 시 MCP 사용
 
 #### 시나리오 1: KT 클라우드 배포 (추천)
 
@@ -1116,3 +1116,134 @@ curl http://kt-cloud-ip:8082/monitoring/circuit-breaker
 | **KT 클라우드** | ✅       | SSH 포트 포워딩       | 추천 (보안)            |
 | **KT 클라우드** | ✅       | 직접 접근 (포트 오픈) | 비추천 (보안 위험)     |
 | **팀원/운영**   | ❌       | Grafana 또는 REST API | MCP 없이 모니터링 가능 |
+
+## Frontend Studio (SWELITE Commerce LAB)
+
+**React + Vite 기반 프리미엄 결제 체험 스튜디오**
+
+### 주요 기능
+
+- **프리미엄 제품 카탈로그**: Signature Tech (iPhone 16 Pro, Galaxy S25 Ultra, iPad Pro)와 Atelier Living (Dyson Gen5, Balmuda Air Purifier, Breville Barista) 카테고리로 구성된 고급 제품 라인업
+- **완전한 결제 플로우**: 승인(Authorize) → 정산(Capture) → 환불(Refund) 전체 사이클을 단일 화면에서 시연
+- **멱등성 키 관리**: 주문 제어 패널에서 멱등성 키를 직접 관리하고 중복 결제 방지 테스트 가능
+- **실시간 영수증 타임라인**: 승인/정산/환불 단계가 시간순으로 시각화되어 결제 상태 추적 용이
+- **프로덕션급 UI/UX**: 다크 테마, 글래스모피즘 효과, 반응형 그리드 레이아웃으로 상용 서비스 수준의 인터페이스 구현
+- **Gateway 통합**: 모든 API 요청은 Spring Cloud Gateway(`http://localhost:8080/api`)를 통해 라우팅됨
+- **관리자 대시보드**: 데이터베이스 조회, K6 부하 테스트 실행, AI 분석 보고서 생성을 웹 UI로 관리
+
+### 접속 방법
+
+```bash
+# Docker Compose 실행 후
+http://localhost:5173          # 고객용 결제 스튜디오
+http://localhost:5173/admin    # 관리자 대시보드
+```
+
+### 관리자 대시보드 (Admin Dashboard)
+
+**주요 기능**:
+- **데이터베이스 조회**: Payment, Outbox, Settlement, Refund 테이블 실시간 조회
+- **K6 부하 테스트**: 웹 UI에서 원클릭으로 승인 전용/승인+정산/전체 플로우 테스트 실행
+- **AI 분석 보고서**: OpenAI GPT-4 기반 성능 분석 및 최적화 권장사항 생성
+- **서킷 브레이커 테스트**: Kafka 장애 시나리오 자동 실행 및 검증
+
+**사용 예시**:
+```bash
+# 데이터베이스 조회
+curl http://localhost:8082/api/admin/query
+
+# K6 부하 테스트 실행 (승인 전용)
+curl -X POST http://localhost:8082/api/admin/loadtest/run \
+  -H "Content-Type: application/json" \
+  -d '{"scenario": "authorize-only"}'
+
+# AI 분석 보고서 생성
+curl http://localhost:8082/api/admin/loadtest/analyze
+```
+
+### 주요 파일
+
+- [frontend/src/App.jsx](frontend/src/App.jsx): 메인 애플리케이션 컴포넌트 (988줄)
+- [frontend/src/AdminPage.jsx](frontend/src/AdminPage.jsx): 관리자 대시보드 컴포넌트
+- [frontend/src/styles.css](frontend/src/styles.css): 프로덕션급 스타일링 (653줄)
+
+---
+
+## MockPG 부하 테스트 모드
+
+MockPG는 실제 PG사 API를 시뮬레이션하는 Mock 클라이언트로 두 가지 모드를 지원합니다.
+
+### 모드별 실패율
+
+| 모드                   | Authorization | Settlement | Refund | 용도               |
+| ---------------------- | ------------- | ---------- | ------ | ------------------ |
+| **일반 모드**    | 0.5%          | 5%         | 5%     | 에러 처리 로직 검증 |
+| **부하 테스트 모드** | 0.01%         | 0.01%      | 0.01%  | 순수 성능 측정     |
+
+### 설정 방법
+
+```bash
+# .env 파일
+MOCK_PG_LOADTEST_MODE=true   # 부하 테스트 모드 (K6 테스트 시 권장)
+MOCK_PG_LOADTEST_MODE=false  # 일반 모드 (개발/QA)
+```
+
+### 동작 원리
+
+**일반 모드** (개발/QA):
+```java
+// 현실적인 실패율로 에러 처리 검증
+double effectiveFailureRate = 0.005;  // 0.5% 실패율
+if (Math.random() < effectiveFailureRate) {
+    throw new PgApiException("PG_TIMEOUT", "승인 API 타임아웃");
+}
+```
+
+**부하 테스트 모드** (성능 측정):
+```java
+// 실패율 최소화로 순수 성능 측정
+double effectiveFailureRate = 0.0001;  // 0.01% 실패율
+if (Math.random() < effectiveFailureRate) {
+    log.warn("Mock PG failed (random failure): mode=LOADTEST");
+    throw new PgApiException("PG_TIMEOUT", "승인 API 타임아웃");
+}
+```
+
+### 사용 시나리오
+
+**개발 환경** (일반 모드):
+- 결제 실패 시 재시도 로직 검증
+- Circuit Breaker 동작 확인
+- DLQ 메시지 처리 테스트
+- Outbox 재발행 로직 검증
+
+**부하 테스트** (LOADTEST_MODE):
+- K6 400 RPS 성능 테스트
+- Threshold 통과 (http_req_failed < 5%, payment_errors < 2%)
+- Circuit Breaker CLOSED 상태 유지
+- 순수 시스템 처리 능력 측정
+
+### K6 Threshold와의 관계
+
+K6 부하 테스트는 다음 threshold를 검증합니다:
+
+```javascript
+const thresholds = {
+  http_req_failed: ["rate<0.05"],      // HTTP 실패율 < 5%
+  payment_errors: ["rate<0.02"],       // 결제 에러율 < 2%
+  http_req_duration: ["p(95)<1000"],   // p95 응답시간 < 1초
+};
+```
+
+**일반 모드 문제점**:
+- Settlement/Refund 5% 실패율이 threshold 초과
+- Circuit Breaker가 간헐적으로 OPEN 상태로 전환
+- K6 테스트 결과: FAILED
+
+**LOADTEST_MODE 해결책**:
+- 모든 API 0.01% 실패율로 threshold 통과
+- Circuit Breaker 안정적으로 CLOSED 유지
+- K6 테스트 결과: PASSED
+
+> **중요**: Threshold를 완화하는 것은 고객 경험을 희생하는 것입니다. 대신 MockPG 모드를 전환하여 목적에 맞는 테스트를 수행하세요.
+
