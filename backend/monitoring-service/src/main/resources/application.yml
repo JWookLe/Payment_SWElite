@@ -45,3 +45,9 @@ services:
     url: ${INGEST_SERVICE_URL:http://localhost:8080}
   prometheus:
     url: ${PROMETHEUS_URL:http://localhost:9090}
+
+# MCP AI Analyzer Settings
+mcp:
+  ai-analyzer:
+    enabled: ${MCP_AI_ANALYZER_ENABLED:true}
+    path: ${MCP_AI_ANALYZER_PATH:mcp-servers/ai-test-analyzer}
