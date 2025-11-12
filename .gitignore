@@ -43,3 +43,6 @@ loadtest/k6/*.json
 .env.*
 *.env.local
 
+# Personal notes and analysis
+UserPersonal.md
+
