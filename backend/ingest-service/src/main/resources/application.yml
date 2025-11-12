@@ -132,3 +132,10 @@ eureka:
     fetch-registry: true
   instance:
     prefer-ip-address: true
+
+mock:
+  pg:
+    delay-min-ms: 50
+    delay-max-ms: 150
+    failure-rate: 0.005
+    loadtest-mode: ${MOCK_PG_LOADTEST_MODE:false}

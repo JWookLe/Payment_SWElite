@@ -18,6 +18,9 @@ public class MockPgApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(MockPgApiClient.class);
 
+    @org.springframework.beans.factory.annotation.Value("${mock.pg.loadtest-mode:false}")
+    private boolean loadTestMode;
+
     /**
      * 정산 요청 (매입 확정)
      * 실제 PG API 호출 시뮬레이션
@@ -39,9 +42,13 @@ public class MockPgApiClient {
             throw new PgApiException("PG_INTERRUPTED", "정산 API 호출 중단");
         }
 
-        // 5% 확률로 실패 시뮬레이션
-        if (Math.random() < 0.05) {
-            log.warn("Mock PG settlement failed (random failure): paymentId={}", paymentId);
+        // 실패 시뮬레이션
+        // 부하테스트 모드: 거의 성공 (0.01% 실패) - 성능 측정용
+        // 일반 모드: 현실적인 실패율 (5% 실패) - 에러 처리 검증용
+        double failureRate = loadTestMode ? 0.0001 : 0.05;
+        if (Math.random() < failureRate) {
+            log.warn("Mock PG settlement failed (random failure): paymentId={}, mode={}",
+                    paymentId, loadTestMode ? "LOADTEST" : "NORMAL");
             throw new PgApiException("PG_TIMEOUT", "정산 API 타임아웃");
         }
 

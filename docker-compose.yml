@@ -85,6 +85,8 @@ services:
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 100
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 20
       SERVER_TOMCAT_THREADS_MAX: 400
+      # MockPG 부하테스트 모드 (false=일반모드 5% 실패, true=부하테스트모드 0.01% 실패)
+      MOCK_PG_LOADTEST_MODE: ${MOCK_PG_LOADTEST_MODE:-false}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -131,6 +133,8 @@ services:
       SERVER_PORT: 8084
       SETTLEMENT_MAX_RETRIES: 10
       SETTLEMENT_RETRY_INTERVAL: 30
+      # MockPG 부하테스트 모드
+      MOCK_PG_LOADTEST_MODE: ${MOCK_PG_LOADTEST_MODE:-false}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -155,6 +159,8 @@ services:
       SERVER_PORT: 8085
       REFUND_MAX_RETRIES: 10
       REFUND_RETRY_INTERVAL: 30
+      # MockPG 부하테스트 모드
+      MOCK_PG_LOADTEST_MODE: ${MOCK_PG_LOADTEST_MODE:-false}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -182,6 +188,9 @@ services:
       INGEST_SERVICE_URL: http://ingest-service:8080
       PROMETHEUS_URL: http://prometheus:9090
       EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      MCP_AI_ANALYZER_ENABLED: "true"
+      MCP_AI_ANALYZER_PATH: /app/mcp-servers/ai-test-analyzer
     depends_on:
       mariadb:
         condition: service_healthy
@@ -195,6 +204,11 @@ services:
         condition: service_started
     ports:
       - "8082:8082"
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./loadtest:/app/loadtest
+      - ./mcp-servers:/app/mcp-servers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
 
   gateway:
     build:

@@ -54,3 +54,7 @@ eureka:
     fetch-registry: true
   instance:
     prefer-ip-address: true
+
+mock:
+  pg:
+    loadtest-mode: ${MOCK_PG_LOADTEST_MODE:false}

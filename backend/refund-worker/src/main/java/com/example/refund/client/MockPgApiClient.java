@@ -18,10 +18,14 @@ public class MockPgApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(MockPgApiClient.class);
 
+    @org.springframework.beans.factory.annotation.Value("${mock.pg.loadtest-mode:false}")
+    private boolean loadTestMode;
+
     /**
      * 환불 요청 (Mock)
      * - 1~3초 지연 시뮬레이션
-     * - 5% 확률로 실패 시뮬레이션
+     * - 일반 모드: 5% 확률로 실패 시뮬레이션
+     * - 부하테스트 모드: 0.01% 확률로 실패
      */
     public RefundResponse requestRefund(Long paymentId, BigDecimal amount, String reason) throws PgApiException {
         try {
@@ -30,8 +34,13 @@ public class MockPgApiClient {
             log.info("Requesting refund to Mock PG: paymentId={}, amount={}, reason={}", paymentId, amount, reason);
             Thread.sleep(delay);
 
-            // 5% 확률로 실패 시뮬레이션
-            if (Math.random() < 0.05) {
+            // 실패 시뮬레이션
+            // 부하테스트 모드: 거의 성공 (0.01% 실패) - 성능 측정용
+            // 일반 모드: 현실적인 실패율 (5% 실패) - 에러 처리 검증용
+            double failureRate = loadTestMode ? 0.0001 : 0.05;
+            if (Math.random() < failureRate) {
+                log.warn("Mock PG refund failed (random failure): paymentId={}, mode={}",
+                        paymentId, loadTestMode ? "LOADTEST" : "NORMAL");
                 throw new PgApiException("PG_TIMEOUT", "환불 API 타임아웃");
             }
 

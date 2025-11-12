@@ -1,13 +1,13 @@
 package com.example.payment.client;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 /**
  * Mock PG Authorization API Client
@@ -18,10 +18,23 @@ public class MockPgAuthApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(MockPgAuthApiClient.class);
 
+    @Value("${mock.pg.delay-min-ms:50}")
+    private int minDelayMs;
+
+    @Value("${mock.pg.delay-max-ms:150}")
+    private int maxDelayMs;
+
+    @Value("${mock.pg.failure-rate:0.005}")
+    private double failureRate;
+
+    @Value("${mock.pg.loadtest-mode:false}")
+    private boolean loadTestMode;
+
     /**
      * 카드 승인 요청 (Mock)
      * - 1~3초 지연 시뮬레이션 (실제 PG API 응답 시간)
-     * - 5% 확률로 실패 시뮬레이션
+     * - 일반 모드: 0.5% 확률로 실패 시뮬레이션 (현실적인 에러 처리 테스트용)
+     * - 부하 테스트 모드: 0.01% 확률로 실패 (성능 측정용)
      *
      * @param merchantId 가맹점 ID
      * @param amount 승인 금액
@@ -41,16 +54,22 @@ public class MockPgAuthApiClient {
 
         // 1~3초 지연 시뮬레이션 (실제 PG API 응답 시간)
         try {
-            int delay = ThreadLocalRandom.current().nextInt(1000, 3000);
+            int upperBound = Math.max(minDelayMs, maxDelayMs);
+            int lowerBound = Math.min(minDelayMs, maxDelayMs);
+            int delay = ThreadLocalRandom.current().nextInt(lowerBound, upperBound + 1);
             Thread.sleep(delay);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new PgApiException("PG_INTERRUPTED", "승인 API 호출 중단");
         }
 
-        // 5% 확률로 실패 시뮬레이션
-        if (Math.random() < 0.05) {
-            log.warn("Mock PG authorization failed (random failure): merchantId={}, amount={}", merchantId, amount);
+        // 실패 시뮬레이션
+        // 부하테스트 모드: 거의 성공 (0.01% 실패) - 성능 측정용
+        // 일반 모드: 현실적인 실패율 (0.5% 실패) - 에러 처리 검증용
+        double effectiveFailureRate = loadTestMode ? 0.0001 : failureRate;
+        if (Math.random() < effectiveFailureRate) {
+            log.warn("Mock PG authorization failed (random failure): merchantId={}, amount={}, mode={}",
+                    merchantId, amount, loadTestMode ? "LOADTEST" : "NORMAL");
             throw new PgApiException("PG_TIMEOUT", "승인 API 타임아웃");
         }
 
