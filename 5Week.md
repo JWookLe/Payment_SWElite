@@ -571,14 +571,6 @@ curl http://localhost:8080/api/admin/tests/status/circuit-breaker
 
 `status=running` → `success` 전환까지 약 90초가 소요되며, 실패 시 `rawData.output`에 전체 로그와 exit code가 남는다.
 
-### 5-10. KT Cloud DMZ 분리 배포 이슈
-
-- **VM 배치**: VM1(172.25.0.37)에 MariaDB·Kafka·Ingest·Monitoring, VM2(172.25.0.79)에 Gateway·Frontend·Workers 구성.
-- **Gateway 조치**: `SPRING_CLOUD_DISCOVERY_CLIENT_SIMPLE_INSTANCES_INGEST-SERVICE_0_URI=http://172.25.0.37:8081`, `SPRING_CLOUD_DISCOVERY_CLIENT_SIMPLE_INSTANCES_MONITORING-SERVICE_0_URI=http://172.25.0.37:8082` 등 정적 인스턴스 URI 주입 후 재빌드.
-- **Ingest 노출**: `docker-compose.yml`에서 `pay-ingest` 컨테이너를 `8081:8080`으로 노출하고 `EUREKA_INSTANCE_*` 환경 변수에 VM1 IP 명시.
-- **현황**: `curl http://localhost:8080/api/payments/authorize` 요청은 여전히 500. VM2→VM1 8081/8082 트래픽을 KT Cloud DMZ 방화벽이 차단 중이라 `/actuator/health`도 연결 거부.
-- **다음 단계**: 네트워크 팀에 “동일 DMZ 간 특정 포트(예: 8081, 8082) 허용 규칙” 추가 요청. 허용되면 Gateway에서 다시 health-check 및 결제 API 재검증.
-
 ## 6. MockPG LOADTEST_MODE 구현
 
 ### 6-1. 문제 상황
@@ -1056,3 +1048,45 @@ docker exec payment_swelite-ingest-service-1 printenv | grep HIKARI
 - [ ] 400 RPS 지속 달성 시 DB 샤딩/스케일업 계획 수립
 - [ ] Gateway timeout 메트릭 추가 (현재 8% 실패 원인 분석)
 - [ ] Circuit Breaker 테스트 실패 원인 조사 및 수정
+
+## 10. KT Cloud 운영 배포 현황 (2025-11-14)
+
+### 10-1. VM 토폴로지 및 포트 노출
+
+| 구분 | VM | IP | 탑재 서비스 | 주요 포트 | 비고 |
+| ---- | --- | --- | ----------- | --------- | ---- |
+| VM1 | KT Cloud VM1 | 172.25.0.37 | MariaDB, Kafka, Redis, Eureka, Ingest-service, Monitoring | 13306 (MariaDB), 9092 (Kafka), 8761 (Eureka), **8081→Ingest**, 8082 (Monitoring) | 기존 운영 VM |
+| VM2 | KT Cloud VM2 | 172.25.0.79 | Gateway, Frontend, Consumer/Worker | 8080 (Gateway) | 신설 VM, DMZ 동일 Tier |
+
+### 10-2. Gateway/Ingress 조정 사항
+
+- `docker-compose.yml` (VM2)에서 `gateway` 서비스에 정적 Discovery 인스턴스 주입:
+  - `SPRING_CLOUD_DISCOVERY_CLIENT_SIMPLE_INSTANCES_INGEST-SERVICE_0_URI=http://172.25.0.37:8081`
+  - `SPRING_CLOUD_DISCOVERY_CLIENT_SIMPLE_INSTANCES_MONITORING-SERVICE_0_URI=http://172.25.0.37:8082`
+  - 기존 Eureka URL은 `http://172.25.0.37:8761/eureka/` 유지.
+- `ingest-service` (VM1) 컨테이너는 `ports: "8081:8080"`으로 노출하고 `EUREKA_INSTANCE_*`(IP, HOSTNAME, PORT) 환경변수에 172.25.0.37 명시해 Eureka 등록 정보와 외부 노출을 일치시켰다.
+- 각 서비스는 재빌드 및 `docker compose up -d --build` 후 기동하여 컨테이너/프로세스 상태(`docker ps | grep ingest`)로 정상 기동 확인.
+
+### 10-3. 진단 결과
+
+- Gateway 내부에서 실행한 테스트:
+
+```bash
+curl -i -X POST http://localhost:8080/api/payments/authorize \
+     -H "Content-Type: application/json" \
+     -d '{"merchantId":"TEST","amount":1000,"currency":"KRW","idempotencyKey":"curl-test-5"}'
+```
+
+  - 응답: HTTP 500. Gateway → Ingest 호출이 모두 실패하며 요청 ID만 다르게 반복.
+- VM2에서 직접 Ingest 헬스체크(`curl -i http://172.25.0.37:8081/actuator/health`) 시도 시 `Connection refused(7)` 발생.
+- 반면 Ingest 컨테이너 로그(`docker logs --tail=200 pay-ingest`)에는 기동 시점 로그 이후 신규 요청 흔적이 없으며, Eureka에는 정상 등록(`registration status: 204`). 이는 Gateway가 네트워크 단에서 응답을 수신하지 못하고 있음을 의미.
+- KT Cloud Security Group/방화벽 규칙은 DMZ→DMZ 동일 Tier 간 수동 허용이 필요하나, 현재 포트 8081/8082 허용 규칙을 추가할 수 없는 UI 제약이 있어 요청 자체가 보류된 상태.
+
+### 10-4. 후속 조치
+
+1. **네트워크팀 요청**: DMZ 내 172.25.0.79 → 172.25.0.37 방향 TCP 8081, 8082 허용 규칙 추가 가능 여부 확인 및 작업 의뢰.
+2. **방화벽 적용 후 검증**:
+   - `curl http://172.25.0.37:8081/actuator/health`가 `{"status":"UP"}`을 반환하는지 확인.
+   - 같은 VM(QA)에서 `curl -i -X POST http://localhost:8080/api/payments/authorize ...` 재실행하여 200/201 응답 여부와 Gateway 로그를 재확인.
+   - 필요 시 Gateway `application.yml`의 `spring.cloud.discovery.client.simple.instances` 섹션과 Eureka 메타데이터 일치 여부 점검.
+3. **운영 안정화**: 방화벽이 열리면 Jenkins 파이프라인에 KT Cloud 배포 테스트 스텝을 추가하여 API 헬스체크 자동화.
