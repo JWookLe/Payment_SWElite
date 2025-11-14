@@ -63,6 +63,7 @@
 - [X] 승인 → 정산 → 환불 이벤트 파이프라인 일관성 (capture-requested 발행, worker 멱등성/신뢰성 강화)
 - [X] consumer-worker 경량화 및 DLQ 보강, refund-worker 멱등 처리
 - [X] MariaDB 포트 충돌 해소(`13306:3306`) 및 HeidiSQL 접속 가이드 반영
+- [X] 관리자 Circuit Breaker 테스트 비동기화 및 자동 복구 스크립트 안정화
 - [X] F/E Amend
 
 **상세 내역**: [5Week.md](./5Week.md)
@@ -328,6 +329,24 @@ bash scripts/test-circuit-breaker.sh
 # Jenkins 파이프라인에서 자동 실행됨
 # Smoke Test 다음 "Circuit Breaker Test" 단계 포함
 ```
+
+### Admin Dashboard 테스트 흐름
+
+- 프론트 관리자 페이지(`/admin`) → **Resilience** 섹션 → `Circuit Breaker` 카드의 “테스트 실행” 버튼을 누르면 Gateway가 `/api/admin/tests/circuit-breaker`로 POST 요청을 보낸다.
+- 모니터링 서비스는 즉시 `status=running` 보고서를 반환하고, 백그라운드 스레드에서 `scripts/test-circuit-breaker.sh`를 실행해 Kafka 중단→OPEN→복구→CLOSED까지 9단계를 자동 수행한다.
+- 진행 상황은 `GET /api/admin/tests/status/<testId>`(프론트 폴링, 수동 호출 가능)에서 확인할 수 있으며, 약 90초 후 `success`/`failure`와 함께 전체 로그(`rawData.output`)가 저장된다.
+
+```bash
+# 수동 실행
+curl -X POST http://localhost:8080/api/admin/tests/circuit-breaker \
+     -H "Content-Type: application/json" \
+     -d '{"testId":"circuit-breaker","generateReport":true}'
+
+# 상태 확인
+curl http://localhost:8080/api/admin/tests/status/circuit-breaker
+```
+
+- 스크립트는 Kafka 컨테이너를 중지/재기동하면서 `OPEN_STATE_WAIT_SECONDS`, `RECOVERY_READY_CHECKS` 등의 파라미터로 상태를 감시하고, 최종 상태가 `CLOSED`가 되지 않으면 exit code 1과 함께 실패 보고서를 남긴다.
 
 ### 실시간 모니터링
 
