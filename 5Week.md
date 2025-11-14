@@ -571,6 +571,14 @@ curl http://localhost:8080/api/admin/tests/status/circuit-breaker
 
 `status=running` → `success` 전환까지 약 90초가 소요되며, 실패 시 `rawData.output`에 전체 로그와 exit code가 남는다.
 
+### 5-10. KT Cloud DMZ 분리 배포 이슈
+
+- **VM 배치**: VM1(172.25.0.37)에 MariaDB·Kafka·Ingest·Monitoring, VM2(172.25.0.79)에 Gateway·Frontend·Workers 구성.
+- **Gateway 조치**: `SPRING_CLOUD_DISCOVERY_CLIENT_SIMPLE_INSTANCES_INGEST-SERVICE_0_URI=http://172.25.0.37:8081`, `SPRING_CLOUD_DISCOVERY_CLIENT_SIMPLE_INSTANCES_MONITORING-SERVICE_0_URI=http://172.25.0.37:8082` 등 정적 인스턴스 URI 주입 후 재빌드.
+- **Ingest 노출**: `docker-compose.yml`에서 `pay-ingest` 컨테이너를 `8081:8080`으로 노출하고 `EUREKA_INSTANCE_*` 환경 변수에 VM1 IP 명시.
+- **현황**: `curl http://localhost:8080/api/payments/authorize` 요청은 여전히 500. VM2→VM1 8081/8082 트래픽을 KT Cloud DMZ 방화벽이 차단 중이라 `/actuator/health`도 연결 거부.
+- **다음 단계**: 네트워크 팀에 “동일 DMZ 간 특정 포트(예: 8081, 8082) 허용 규칙” 추가 요청. 허용되면 Gateway에서 다시 health-check 및 결제 API 재검증.
+
 ## 6. MockPG LOADTEST_MODE 구현
 
 ### 6-1. 문제 상황
