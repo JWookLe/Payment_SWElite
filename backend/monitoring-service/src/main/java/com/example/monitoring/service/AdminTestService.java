@@ -167,65 +167,88 @@ public class AdminTestService {
     }
 
     /**
-     * Circuit Breaker 테스트 실행
+     * Circuit Breaker 테스트 실행 (비동기)
      */
     public TestReportDTO runCircuitBreakerTest(String testId, boolean generateReport) {
-        long startTime = System.currentTimeMillis();
         LocalDateTime timestamp = LocalDateTime.now();
 
-        try {
-            logger.info("Running Circuit Breaker test: testId={}", testId);
+        TestReportDTO runningReport = new TestReportDTO();
+        runningReport.setReportId(UUID.randomUUID().toString());
+        runningReport.setTestId(testId);
+        runningReport.setTestName("Circuit Breaker Test");
+        runningReport.setStatus("running");
+        runningReport.setTimestamp(timestamp);
+        runningReport.setDuration("진행 중...");
+        runningReport.setRawData(new HashMap<>());
 
-            ProcessBuilder processBuilder = new ProcessBuilder();
-            processBuilder.command("bash", "scripts/test-circuit-breaker.sh");
-            processBuilder.directory(new File(System.getProperty("user.dir")));
-            processBuilder.redirectErrorStream(true);
+        runningTests.put(testId, runningReport);
 
-            Process process = processBuilder.start();
+        new Thread(() -> {
+            long startTime = System.currentTimeMillis();
+            try {
+                logger.info("Running Circuit Breaker test: testId={}", testId);
 
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                    logger.info(line);
+                ProcessBuilder processBuilder = new ProcessBuilder();
+                processBuilder.command("bash", "scripts/test-circuit-breaker.sh");
+                processBuilder.directory(new File(System.getProperty("user.dir")));
+                processBuilder.redirectErrorStream(true);
+
+                // Set environment variables for Docker network access
+                processBuilder.environment().put("API_BASE_URL", "http://ingest-service:8080");
+                processBuilder.environment().put("GATEWAY_BASE_URL", "http://gateway:8080/api");
+
+                logger.info("Environment variables set for circuit breaker test:");
+                logger.info("  API_BASE_URL = {}", processBuilder.environment().get("API_BASE_URL"));
+                logger.info("  GATEWAY_BASE_URL = {}", processBuilder.environment().get("GATEWAY_BASE_URL"));
+
+                Process process = processBuilder.start();
+
+                StringBuilder output = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        output.append(line).append("\n");
+                        logger.info(line);
+                    }
                 }
+
+                int exitCode = process.waitFor();
+                long duration = System.currentTimeMillis() - startTime;
+
+                Map<String, Object> rawData = new HashMap<>();
+                rawData.put("exitCode", exitCode);
+                rawData.put("output", output.toString());
+
+                String status = exitCode == 0 ? "success" : "failure";
+
+                TestReportDTO report = new TestReportDTO();
+                report.setReportId(runningReport.getReportId());
+                report.setTestId(testId);
+                report.setTestName("Circuit Breaker Test");
+                report.setStatus(status);
+                report.setTimestamp(timestamp);
+                report.setDuration(formatDuration(duration));
+                report.setRawData(rawData);
+
+                if (generateReport) {
+                    Map<String, Object> analysis = mcpAnalysisService.analyzeCircuitBreakerTest(testId, rawData);
+                    report.setAiSummary((String) analysis.get("aiSummary"));
+                    report.setMetrics((Map<String, String>) analysis.get("metrics"));
+                    report.setRecommendations((List<String>) analysis.get("recommendations"));
+                }
+
+                saveReport(report);
+            } catch (Exception e) {
+                logger.error("Failed to run Circuit Breaker test", e);
+                createErrorReport(testId, "Circuit Breaker Test",
+                        timestamp, System.currentTimeMillis() - startTime, e);
+            } finally {
+                runningTests.remove(testId);
             }
+        }).start();
 
-            int exitCode = process.waitFor();
-            long duration = System.currentTimeMillis() - startTime;
-
-            Map<String, Object> rawData = new HashMap<>();
-            rawData.put("exitCode", exitCode);
-            rawData.put("output", output.toString());
-
-            String status = exitCode == 0 ? "success" : "failure";
-
-            TestReportDTO report = new TestReportDTO();
-            report.setReportId(UUID.randomUUID().toString());
-            report.setTestId(testId);
-            report.setTestName("Circuit Breaker Test");
-            report.setStatus(status);
-            report.setTimestamp(timestamp);
-            report.setDuration(formatDuration(duration));
-            report.setRawData(rawData);
-
-            if (generateReport) {
-                Map<String, Object> analysis = mcpAnalysisService.analyzeCircuitBreakerTest(testId, rawData);
-                report.setAiSummary((String) analysis.get("aiSummary"));
-                report.setMetrics((Map<String, String>) analysis.get("metrics"));
-                report.setRecommendations((List<String>) analysis.get("recommendations"));
-            }
-
-            saveReport(report);
-            return report;
-
-        } catch (Exception e) {
-            logger.error("Failed to run Circuit Breaker test", e);
-            return createErrorReport(testId, "Circuit Breaker Test",
-                    timestamp, System.currentTimeMillis() - startTime, e);
-        }
+        return runningReport;
     }
 
     /**

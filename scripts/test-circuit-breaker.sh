@@ -21,6 +21,16 @@ GATEWAY_BASE_URL="${GATEWAY_BASE_URL:-http://localhost:8080/api}"
 CIRCUIT_BREAKER_ENDPOINT="${CIRCUIT_BREAKER_ENDPOINT:-${API_BASE_URL}/circuit-breaker/kafka-publisher}"
 MAX_RETRIES=5
 RETRY_DELAY=2
+OPEN_STATE_WAIT_SECONDS="${OPEN_STATE_WAIT_SECONDS:-35}"
+RECOVERY_READY_CHECKS="${RECOVERY_READY_CHECKS:-12}"
+RECOVERY_TRAFFIC_ATTEMPTS="${RECOVERY_TRAFFIC_ATTEMPTS:-8}"
+RECOVERY_WAIT_SECONDS="${RECOVERY_WAIT_SECONDS:-6}"
+HALF_OPEN_SUCCESS_TARGET="${HALF_OPEN_SUCCESS_TARGET:-3}"
+
+# Debug: show environment variables
+echo "DEBUG: API_BASE_URL = ${API_BASE_URL}"
+echo "DEBUG: GATEWAY_BASE_URL = ${GATEWAY_BASE_URL}"
+echo "DEBUG: CIRCUIT_BREAKER_ENDPOINT = ${CIRCUIT_BREAKER_ENDPOINT}"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -34,8 +44,40 @@ check_prerequisites() {
   require_command timeout
 }
 
+stop_service() {
+  local service=$1
+  local container
+  container="$(service_container_name "${service}")"
+  docker stop "${container}" >/dev/null 2>&1 || true
+}
+
+start_service() {
+  local service=$1
+  local container
+  container="$(service_container_name "${service}")"
+  docker start "${container}" >/dev/null 2>&1 || true
+}
+
+service_container_name() {
+  local service=$1
+  container="$(docker ps -a --filter "label=com.docker.compose.service=${service}" --format "{{.Names}}" | head -n 1)"
+  if [[ -z "${container}" ]]; then
+    log_error "Could not find container for service '${service}'."
+    exit 1
+  fi
+  echo "${container}"
+}
+
+service_exec() {
+  local service=$1
+  shift
+  local container
+  container="$(service_container_name "${service}")"
+  docker exec "${container}" "$@"
+}
+
 ingest_exec() {
-  docker compose exec -T ingest-service "$@"
+  service_exec ingest-service "$@"
 }
 
 ingest_curl() {
@@ -81,14 +123,79 @@ print_state() {
   printf "  slow call rate: %s\n" "${slow_rate:-N/A}"
 }
 
+current_circuit_state() {
+  local payload state
+  payload="$(get_circuit_breaker_state)"
+  state="$(echo "${payload}" | grep -o '"state":"[^"]*"' | cut -d'"' -f4)"
+  echo "${state}"
+}
+
+wait_for_circuit_ready() {
+  log_info "Waiting for circuit breaker to allow recovery traffic..."
+  for attempt in $(seq 1 "${RECOVERY_READY_CHECKS}"); do
+    local state
+    state="$(current_circuit_state)"
+    if [[ "${state}" == "HALF_OPEN" || "${state}" == "CLOSED" ]]; then
+      log_success "Circuit breaker ready (state: ${state:-unknown})."
+      return 0
+    fi
+    log_warn "Circuit breaker still ${state:-unknown}; retrying in ${RECOVERY_WAIT_SECONDS}s (${attempt}/${RECOVERY_READY_CHECKS})."
+    sleep "${RECOVERY_WAIT_SECONDS}"
+  done
+  log_error "Circuit breaker did not leave OPEN state within expected window."
+  return 1
+}
+
+send_recovery_traffic() {
+  local successes=0
+  for attempt in $(seq 1 "${RECOVERY_TRAFFIC_ATTEMPTS}"); do
+    log_info "  recovery request ${attempt}..."
+    if send_payment_request "RECOVERY_TEST_${attempt}" 15; then
+      log_info "    recovery request ${attempt} completed."
+      successes=$((successes + 1))
+    else
+      log_warn "    recovery request ${attempt} failed (usually expected while HALF_OPEN)."
+    fi
+
+    sleep "${RECOVERY_WAIT_SECONDS}"
+    local state
+    state="$(current_circuit_state)"
+    log_info "    circuit state after attempt ${attempt}: ${state:-unknown}"
+
+    if [[ "${state}" == "CLOSED" ]]; then
+      log_success "Circuit breaker fully closed after recovery traffic (${successes} successful calls)."
+      return 0
+    fi
+  done
+
+  if [[ "${successes}" -ge "${HALF_OPEN_SUCCESS_TARGET}" ]]; then
+    log_info "Collected ${successes} half-open successes; waiting extra ${RECOVERY_WAIT_SECONDS}s for closure."
+    sleep "${RECOVERY_WAIT_SECONDS}"
+    local state
+    state="$(current_circuit_state)"
+    if [[ "${state}" == "CLOSED" ]]; then
+      log_success "Circuit breaker closed after grace period."
+      return 0
+    fi
+  fi
+
+  log_error "Circuit breaker failed to close after ${RECOVERY_TRAFFIC_ATTEMPTS} recovery attempts."
+  return 1
+}
+
+gateway_exec() {
+  service_exec gateway "$@"
+}
+
 send_payment_request() {
   local merchant_id=$1
   local timeout_seconds=${2:-15}
+  local idempotency_key="${merchant_id}-$(date +%s%N)"
 
-  timeout "${timeout_seconds}" docker compose exec -T gateway curl -sSf -X POST "${GATEWAY_BASE_URL}/payments/authorize" \
+  gateway_exec timeout "${timeout_seconds}" curl -sSf -X POST "${GATEWAY_BASE_URL}/payments/authorize" \
     -H "Content-Type: application/json" \
-    -d "{\"merchantId\":\"${merchant_id}\",\"amount\":50000,\"currency\":\"KRW\",\"idempotencyKey\":\"${merchant_id}-$(date +%s%N)\"}" \
-    >/dev/null 2>&1
+    -d "{\"merchantId\":\"${merchant_id}\",\"amount\":50000,\"currency\":\"KRW\",\"idempotencyKey\":\"${idempotency_key}\"}" \
+    >/dev/null
 }
 
 echo ""
@@ -115,12 +222,12 @@ sleep 2
 print_state "After healthy traffic"
 
 log_info "Step 3: stopping Kafka broker."
-docker compose stop kafka >/dev/null 2>&1 || true
+stop_service kafka
 sleep 5
 log_success "Kafka broker stopped."
 
-log_info "Step 4: sending 6 requests while Kafka is down (expect slow/failure)."
-for i in $(seq 1 6); do
+log_info "Step 4: sending 15 requests while Kafka is down (expect slow/failure)."
+for i in $(seq 1 15); do
   log_info "  slow request ${i}..."
   if send_payment_request "SLOW_TEST_${i}" 15; then
     log_warn "  request ${i} succeeded unexpectedly (no slow call?)."
@@ -128,7 +235,8 @@ for i in $(seq 1 6); do
     log_info "  request ${i} produced slow/failure as expected."
   fi
 done
-sleep 5
+log_info "Waiting ${OPEN_STATE_WAIT_SECONDS} seconds for Outbox polling to accumulate enough failures to open circuit breaker..."
+sleep "${OPEN_STATE_WAIT_SECONDS}"
 print_state "After Kafka downtime traffic"
 
 current_state="$(echo "$(get_circuit_breaker_state)" | grep -o '"state":"[^"]*"' | cut -d'"' -f4)"
@@ -139,15 +247,19 @@ else
 fi
 
 log_info "Step 5: restarting Kafka broker."
-docker compose start kafka >/dev/null 2>&1 || true
-sleep 15
+start_service kafka
+sleep 20
 log_success "Kafka broker restarted."
 
-log_info "Step 6: sending recovery request."
-if send_payment_request "RECOVERY_TEST" 10; then
-  log_info "  recovery request completed."
+recovery_failed=false
+log_info "Step 6: preparing recovery window."
+if ! wait_for_circuit_ready; then
+  recovery_failed=true
 else
-  log_warn "  recovery request failed."
+  log_info "Step 6: sending recovery traffic."
+  if ! send_recovery_traffic; then
+    recovery_failed=true
+  fi
 fi
 sleep 3
 print_state "After recovery traffic"
@@ -162,8 +274,8 @@ echo " Test complete"
 echo "=============================================================="
 echo ""
 
-if [[ -n "${final_successful}" && "${final_successful}" -gt 0 ]]; then
-  log_success "Circuit breaker scenario finished. Final state: ${final_state:-unknown}"
+if [[ "${recovery_failed}" == "false" && "${final_state}" == "CLOSED" && -n "${final_successful}" && "${final_successful}" -gt 0 ]]; then
+  log_success "Circuit breaker scenario finished successfully. Final state: ${final_state:-unknown}"
   exit 0
 fi
 
