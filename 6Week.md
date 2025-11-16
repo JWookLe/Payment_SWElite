@@ -18,30 +18,7 @@
 
 ---
 
-## 1. SSH & 네트워크 진단 가이드
-
-### 1-1. SSH 계정/명령 정리
-
-- 사용자에게 전달된 KT 콘솔 계정(hecto-prt-2-1/2)과 VM root 패스워드를 기반으로 `ssh root@210.104.76.135/136` 접속 절차를 재정리했다.
-- Jenkins/Frontend 등 포트 접근 시 KT 콘솔 보안그룹을 수정해야 하므로, “포트 접근 문제 → SG/방화벽/보안장비 순으로 점검” 흐름을 문서화.
-
-### 1-2. 패키지 관리자 차이
-
-- `/etc/os-release` 확인 결과 Rocky Linux 9.6 → `apt`가 없으므로 `dnf`/`yum`을 사용하도록 안내.
-- Codex CLI 설치 명령: `dnf update -y && dnf install -y curl unzip tar` → `curl -fsSL https://cli.openai.com/install.sh | bash`.
-
-### 1-3. DNS/Outbound 이슈
-
-- `ping 8.8.8.8 -c 4`가 100% packet loss → outbound 자체가 막혀 있음을 확인.
-- 조치 순서: 보안그룹/NAT/프록시 정책 확인 → 필요 시 공용 DNS(8.8.8.8) 또는 프록시 설정 적용 → 외부 접근 불가 시 로컬에서 설치 파일을 받아 `scp`.
-
-## 2. 프런트엔드/포트 점검
-
-- VM2에서 `docker compose ps frontend` 결과가 비어 있어 컨테이너가 내려가 있음을 확인했고, `docker compose up -d frontend` 또는 `--build` 옵션으로 재기동하는 절차를 공유했다.
-- 5173 포트는 KT 보안그룹에서 기본적으로 막혀 있으므로, 외부 노출이 필요하면 `TCP 5173` 인바운드 허용 또는 Gateway를 통해 reverse proxy 구성.
-- VM을 꺼도 컨테이너는 계속 뜨므로, 접속 불가 시 `docker compose ps`/`docker logs`로 상태를 확인하도록 안내.
-
-## 3. Compose 분리 & Git 관리
+## 1. Compose 분리 & Git 관리
 
 ### 3-1. VM1(state) / VM2(app) 분리
 
@@ -60,10 +37,3 @@
 
 - `git status`에 로컬 전용 파일이 계속 뜨는 문제 해결을 위해 `git status -sb` 확인 → `echo '<파일경로>' >> .git/info/exclude`.
 - Prometheus 기본 파일이 삭제 상태로 남지 않도록 `git checkout -- monitoring/prometheus/prometheus.yml`로 복원하거나, 삭제를 확정할 경우 커밋.
-
-## 4. 문서화 & 다음 액션
-
-1. `6Week.md`에 SSH/네트워크 진단, 프런트 포트 점검, compose 분리, Prometheus 관리 전략을 기록.
-2. VM1/VM2에서 `git pull origin main`이 바로 되도록 전용 파일을 ignore 했으며, 이후에도 동일 패턴을 유지.
-3. 다음 주에는 compose.state/app 구조를 공식 레포에 템플릿 형태로 추가하고, Prometheus cloud 파일을 자동 생성하는 스크립트를 준비 예정.
-
