@@ -2,73 +2,68 @@
 
 ## 0. 주간 목표
 
-- **Kafka Outbox 파이프라인을 비동기화하여 TPS·복원력을 동시에 끌어올리기**
-- 게이트웨이 HTTP 클라이언트/커넥션 풀 정비로 API 타임아웃을 선제적으로 제어
-- KT Cloud VM1·VM2 운영 구조를 환경별 compose/state 파일로 분리하고, Prometheus 설정을 안전하게 관리
+- KT Cloud VM1·VM2 환경에서 **운영자가 바로 진단·배포할 수 있는 접속/네트워크 절차** 정리
+- 프런트엔드(5173)·Gateway 노출 상태 및 Docker compose 분리를 점검하여 **VM별 역할을 명확히 유지**
+- Prometheus가 **컨테이너 이름 + 내부 IP를 혼용**해도 충돌 없이 관리되도록 Git/구성 전략 수립
 
-### 핵심 성과
+### 핵심 메모
 
-| 지표                              | Before               | After                               | 개선율/특징          |
-| --------------------------------- | -------------------- | ----------------------------------- | -------------------- |
-| **Outbox 재처리 배치 크기**     | 100 events / 10초     | 1,000 events / 250ms                | **40배↑** (즉각 복원) |
-| **Kafka 토픽 파티션**           | 1개                  | 승인/정산/환불 6개, DLQ 3개         | 소비 지연 최소화     |
-| **Gateway 연결 타임아웃**       | Spring Cloud 기본값  | 2초 연결, 20초 응답, 5초 풀 획득    | 장애 전파 차단       |
-| **VM 운영 관리**                 | 단일 compose 공유    | state/app 분리, Prometheus cloud별  | 로컬/클라우드 충돌 無 |
+| 항목                               | 현황/결론                                                                        |
+| ---------------------------------- | -------------------------------------------------------------------------------- |
+| OS/패키지 관리                    | Rocky Linux 9.6 → `dnf` 사용, `apt` 명령 없음                                    |
+| 외부 네트워크 진단                | `ping 8.8.8.8` 100% loss → 보안그룹/프록시 확인 필요                              |
+| 프런트 5173 접근                   | 컨테이너 미기동 + 보안그룹 미개방 → `docker compose up frontend` 후 5173 허용 필요 |
+| Compose 파일                      | VM1(state)·VM2(app) 전용 파일 사용, `.git/info/exclude`에 등록하여 pull 방해 제거 |
+| Prometheus 설정                    | 컨테이너 이름 + 172.25.x.x IP 혼용 허용, 클라우드 버전(`prometheus_cloud.yml`)은 Git 무시 |
 
 ---
 
-## 1. Kafka Outbox & 비동기 파이프라인
+## 1. SSH & 네트워크 진단 가이드
 
-### 1-1. PaymentEventPublisher 비동기화
+### 1-1. SSH 계정/명령 정리
 
-- `PaymentApplication`에 `@EnableAsync`를 추가하고, `config/AsyncConfig`에서 전용 `ThreadPoolTaskExecutor(outbox-dispatch-*)`를 구성했다.
-- `PaymentEventPublisher`는 Outbox 저장 직후 HTTP 스레드를 즉시 반환하고, 트랜잭션 커밋 이후 `dispatchOutboxEventAsync`로 Kafka 전송을 큐잉한다. `TransactionTemplate`을 주입해 재시도 시에도 DB 일관성을 보장하고, Circuit Breaker 감시 로깅을 강화했다.
-- 동작 검증을 위해 `PaymentEventPublisherTest`에 `SyncTaskExecutor` + `TransactionTemplate` mock을 주입해 비동기 경로를 커버했다.
+- 사용자에게 전달된 KT 콘솔 계정(hecto-prt-2-1/2)과 VM root 패스워드를 기반으로 `ssh root@210.104.76.135/136` 접속 절차를 재정리했다.
+- Jenkins/Frontend 등 포트 접근 시 KT 콘솔 보안그룹을 수정해야 하므로, “포트 접근 문제 → SG/방화벽/보안장비 순으로 점검” 흐름을 문서화.
 
-### 1-2. Outbox Scheduler & 자원 튜닝
+### 1-2. 패키지 관리자 차이
 
-- `OutboxEventScheduler`는 `batch-size 100 → 1000`, `interval 10s → 250ms`, `max-retries 10 → 20`, `retry-interval 30s → 5s`로 상향하여 Kafka 장애 후에도 수 초 내 복구된다.
-- 회로가 OPEN이어도 폴링을 건너뛰지 않고, 이벤트마다 `dispatchOutboxEventAsync`를 호출해 워커 풀에서 처리한다. 큐잉 수·DLQ 후보를 구분해 로깅한다.
-- `application.yml`에는 Hikari 풀(300/60), Tomcat 스레드/커넥션(400/50/4000), Kafka producer 타임아웃(2s/3s), 배치 사이즈(32KB), idempotence 옵션을 적용해 고부하 대비치를 맞췄다.
-- Kafka 토픽 파티션을 승인/정산/환불 6개, DLQ 3개로 확장하여 워커 스케일아웃 기반을 마련했다.
+- `/etc/os-release` 확인 결과 Rocky Linux 9.6 → `apt`가 없으므로 `dnf`/`yum`을 사용하도록 안내.
+- Codex CLI 설치 명령: `dnf update -y && dnf install -y curl unzip tar` → `curl -fsSL https://cli.openai.com/install.sh | bash`.
 
-### 1-3. docker-compose 연동
+### 1-3. DNS/Outbound 이슈
 
-- `docker-compose.yml`에서 인게스트 환경변수(Hikari·Tomcat·connect timeout 등)를 expose하고, MariaDB `--max-connections`를 600으로 늘렸다.
-- Monitoring 서비스 계정은 root로 실행하도록 수정해 k6/스크립트 호출 시 권한 문제를 없앴다.
+- `ping 8.8.8.8 -c 4`가 100% packet loss → outbound 자체가 막혀 있음을 확인.
+- 조치 순서: 보안그룹/NAT/프록시 정책 확인 → 필요 시 공용 DNS(8.8.8.8) 또는 프록시 설정 적용 → 외부 접근 불가 시 로컬에서 설치 파일을 받아 `scp`.
 
-## 2. Gateway & API 안정성
+## 2. 프런트엔드/포트 점검
 
-### 2-1. HTTP 클라이언트 타임아웃 기본값 지정
+- VM2에서 `docker compose ps frontend` 결과가 비어 있어 컨테이너가 내려가 있음을 확인했고, `docker compose up -d frontend` 또는 `--build` 옵션으로 재기동하는 절차를 공유했다.
+- 5173 포트는 KT 보안그룹에서 기본적으로 막혀 있으므로, 외부 노출이 필요하면 `TCP 5173` 인바운드 허용 또는 Gateway를 통해 reverse proxy 구성.
+- VM을 꺼도 컨테이너는 계속 뜨므로, 접속 불가 시 `docker compose ps`/`docker logs`로 상태를 확인하도록 안내.
 
-- `backend/gateway/src/main/resources/application.yml`에 `spring.cloud.gateway.httpclient` 블록을 추가하여 `connect-timeout=2s`, `response-timeout=20s`, `pool.max-connections=4000`, `pool.acquire-timeout=5s`를 기본값으로 준수하도록 했다.
-- 동일 파라미터를 `docker-compose.yml`에서도 환경변수로 노출해 KT Cloud 운영 시 동적으로 조절 가능하도록 했다.
+## 3. Compose 분리 & Git 관리
 
-### 2-2. 5173 포트 및 서비스 종속성 점검
+### 3-1. VM1(state) / VM2(app) 분리
 
-- VM2에서 `docker compose ps frontend` 결과를 확인해 컨테이너가 꺼져 있음을 안내하고, `docker compose up -d --build frontend`로 재기동하는 절차를 문서화했다.
-- 프런트엔드 접근은 보안그룹에 TCP 5173 인바운드를 추가하거나 Gateway 뒤에서 reverse proxy 하는 두 가지 옵션을 정리했다.
+- VM1: `docker-compose.state.yml`에 DB/Kafka/Redis/Eureka/ingest/monitoring/prometheus/grafana 서비스를 묶어 실행.
+- VM2: `docker-compose.app.yml`에 gateway/worker/frontend 등 애플리케이션 계층만 포함.
+- 각 VM에서 `git status -sb` 시 전용 파일이 계속 잡히지 않도록 `.git/info/exclude`에 해당 파일명을 추가.
 
-## 3. KT Cloud 운영 정비
+### 3-2. Prometheus 설정 전략
 
-### 3-1. VM1(state) / VM2(app) 역할 분리
+- Prometheus가 한 인스턴스에서 VM1 내부 컨테이너(gateway, ingest 등)와 VM2 IP(172.25.0.79:8080 등)를 동시에 모니터링해야 하므로, “컨테이너 이름 + IP 혼용”을 허용하기로 결정.
+- VM1 전용 설정은 `monitoring/prometheus/prometheus_cloud.yml`로 보관하고, `docker-compose.state.yml`에서 `./monitoring/prometheus/prometheus_cloud.yml:/etc/prometheus/prometheus.yml`로 마운트.
+- 해당 파일은 VM1 로컬에서만 필요하므로 `.git/info/exclude`에 등록하여 pull 시 충돌을 방지.
+- 공용 `prometheus.yml`은 필요 시 기본값으로 복구하거나 삭제 상태를 유지하고, 클라우드 버전만 운영.
 
-- VM1(172.25.0.37)은 DB/Kafka/Redis/Eureka/ingest/monitoring 전용 `docker-compose.state.yml`, VM2(172.25.0.79)는 Gateway/worker/frontend 전용 `docker-compose.app.yml`로 구성하도록 절차를 정의했다.
-- `git status` 오염을 막기 위해 각 VM에서 로컬 compose 파일과 Prometheus cloud 설정을 `.git/info/exclude`에 등록하고, pull 전에 `git stash`가 필요 없도록 했다.
+### 3-3. Git 상태 정리
 
-### 3-2. Prometheus 클라우드 구성
+- `git status`에 로컬 전용 파일이 계속 뜨는 문제 해결을 위해 `git status -sb` 확인 → `echo '<파일경로>' >> .git/info/exclude`.
+- Prometheus 기본 파일이 삭제 상태로 남지 않도록 `git checkout -- monitoring/prometheus/prometheus.yml`로 복원하거나, 삭제를 확정할 경우 커밋.
 
-- VM1에서만 필요한 IP 기반 타깃을 `monitoring/prometheus/prometheus_cloud.yml`로 분리하고, compose에서 해당 파일을 `/etc/prometheus/prometheus.yml`로 마운트하도록 했다.
-- 공용 `prometheus.yml`은 로컬/CI용 기본값으로 유지하여 환경별 충돌을 예방했다.
+## 4. 문서화 & 다음 액션
 
-### 3-3. 네트워크·CLI 지원
-
-- Rocky Linux 9.6 환경에서 Codex CLI 설치 시 DNS/핑 진단 절차(`ping 8.8.8.8`, `/etc/resolv.conf`, 프록시 설정`)를 정리했다.
-- SSH/Vite 포트 문제, Jenkins/프론트 접속, KT Console 계정 사용법 등을 구체적으로 가이드하여 원격 운영자가 즉시 참조할 수 있게 했다.
-
-## 4. 다음 주 우선과제
-
-1. Kafka Consumer/Worker 측도 `TaskExecutor` 기반으로 병렬 처리 전략을 정립하고, DLQ 처리 루틴을 코드로 반영.
-2. Gateway Timeout/Retry 지표를 Prometheus로 수집하고, Grafana 경보 룰을 구성.
-3. `docker-compose.state.yml`/`app.yml`을 공식 레포에 parameterized 템플릿 형태로 포함하여, Jenkins 파이프라인에서도 동일 구성을 재사용.
+1. `6Week.md`에 SSH/네트워크 진단, 프런트 포트 점검, compose 분리, Prometheus 관리 전략을 기록.
+2. VM1/VM2에서 `git pull origin main`이 바로 되도록 전용 파일을 ignore 했으며, 이후에도 동일 패턴을 유지.
+3. 다음 주에는 compose.state/app 구조를 공식 레포에 템플릿 형태로 추가하고, Prometheus cloud 파일을 자동 생성하는 스크립트를 준비 예정.
 
