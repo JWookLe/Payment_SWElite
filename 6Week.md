@@ -20,20 +20,20 @@
 
 ## 1. Compose 분리 & Git 관리
 
-### 3-1. VM1(state) / VM2(app) 분리
+### 1-1. VM1(state) / VM2(app) 분리
 
 - VM1: `docker-compose.state.yml`에 DB/Kafka/Redis/Eureka/ingest/monitoring/prometheus/grafana 서비스를 묶어 실행.
 - VM2: `docker-compose.app.yml`에 gateway/worker/frontend 등 애플리케이션 계층만 포함.
 - 각 VM에서 `git status -sb` 시 전용 파일이 계속 잡히지 않도록 `.git/info/exclude`에 해당 파일명을 추가.
 
-### 3-2. Prometheus 설정 전략
+### 1-2. Prometheus 설정 전략
 
 - Prometheus가 한 인스턴스에서 VM1 내부 컨테이너(gateway, ingest 등)와 VM2 IP(172.25.0.79:8080 등)를 동시에 모니터링해야 하므로, “컨테이너 이름 + IP 혼용”을 허용하기로 결정.
 - VM1 전용 설정은 `monitoring/prometheus/prometheus_cloud.yml`로 보관하고, `docker-compose.state.yml`에서 `./monitoring/prometheus/prometheus_cloud.yml:/etc/prometheus/prometheus.yml`로 마운트.
 - 해당 파일은 VM1 로컬에서만 필요하므로 `.git/info/exclude`에 등록하여 pull 시 충돌을 방지.
 - 공용 `prometheus.yml`은 필요 시 기본값으로 복구하거나 삭제 상태를 유지하고, 클라우드 버전만 운영.
 
-### 3-3. Git 상태 정리
+### 1-3. Git 상태 정리
 
 - `git status`에 로컬 전용 파일이 계속 뜨는 문제 해결을 위해 `git status -sb` 확인 → `echo '<파일경로>' >> .git/info/exclude`.
 - Prometheus 기본 파일이 삭제 상태로 남지 않도록 `git checkout -- monitoring/prometheus/prometheus.yml`로 복원하거나, 삭제를 확정할 경우 커밋.
