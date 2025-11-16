@@ -38,13 +38,13 @@ public class OutboxEventScheduler {
     private final PaymentEventPublisher eventPublisher;
     private final CircuitBreakerRegistry circuitBreakerRegistry;
 
-    @Value("${outbox.polling.batch-size:100}")
+    @Value("${outbox.polling.batch-size:1000}")
     private int batchSize;
 
-    @Value("${outbox.polling.max-retries:10}")
+    @Value("${outbox.polling.max-retries:20}")
     private int maxRetries;
 
-    @Value("${outbox.polling.retry-interval-seconds:30}")
+    @Value("${outbox.polling.retry-interval-seconds:5}")
     private int retryIntervalSeconds;
 
     public OutboxEventScheduler(OutboxEventRepository outboxEventRepository,
@@ -56,8 +56,8 @@ public class OutboxEventScheduler {
     }
 
     /**
-     * Poll and retry unpublished events every 10 seconds
-     * Uses fixed delay to ensure previous execution completes before next run
+     * Poll and retry unpublished events on a short fixed delay.
+     * Uses fixed delay to ensure previous execution completes before next run.
      */
     @Scheduled(fixedDelayString = "${outbox.polling.interval-ms:10000}",
                initialDelayString = "${outbox.polling.initial-delay-ms:15000}")
@@ -65,11 +65,8 @@ public class OutboxEventScheduler {
     public void pollAndRetryUnpublishedEvents() {
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
 
-        // Skip if circuit breaker is OPEN (Kafka is down)
-        if (circuitBreaker.getState() == CircuitBreaker.State.OPEN) {
-            log.debug("Outbox polling skipped - Circuit Breaker is OPEN");
-            return;
-        }
+        // Log circuit breaker state but don't skip - let the circuit breaker decide
+        log.debug("Outbox polling started - Circuit Breaker state: {}", circuitBreaker.getState());
 
         try {
             Instant retryThreshold = Instant.now().minus(Duration.ofSeconds(retryIntervalSeconds));
@@ -87,27 +84,20 @@ public class OutboxEventScheduler {
 
             log.info("Found {} unpublished events to retry", events.size());
 
-            int successCount = 0;
-            int failureCount = 0;
-
+            int queuedCount = 0;
             for (OutboxEvent event : events) {
                 try {
                     // Increment retry count before attempting
                     event.incrementRetryCount();
                     outboxEventRepository.save(event);
 
-                    // Attempt to publish
-                    String topic = eventPublisher.resolveTopicName(event.getEventType());
-                    eventPublisher.publishToKafkaWithCircuitBreaker(event, topic, event.getPayload());
-
-                    // If we reach here, publishing was successful
-                    successCount++;
-                    log.debug("Successfully retried event {} (retry count: {})",
-                             event.getId(), event.getRetryCount());
+                    eventPublisher.dispatchOutboxEventAsync(event.getId());
+                    queuedCount++;
+                    log.debug("Queued event {} for async retry (retry count: {})",
+                            event.getId(), event.getRetryCount());
 
                 } catch (Exception ex) {
-                    failureCount++;
-                    log.warn("Failed to retry event {} (retry count: {}): {}",
+                    log.warn("Failed to queue event {} for retry (retry count: {}): {}",
                             event.getId(), event.getRetryCount(), ex.getMessage());
 
                     // Check if event exceeded max retries
@@ -117,8 +107,8 @@ public class OutboxEventScheduler {
                 }
             }
 
-            if (successCount > 0 || failureCount > 0) {
-                log.info("Outbox polling completed: {} succeeded, {} failed", successCount, failureCount);
+            if (queuedCount > 0) {
+                log.info("Outbox polling queued {} events for async retry", queuedCount);
             }
 
         } catch (Exception ex) {

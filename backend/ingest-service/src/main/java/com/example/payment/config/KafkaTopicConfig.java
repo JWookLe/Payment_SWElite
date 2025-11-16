@@ -23,21 +23,21 @@ public class KafkaTopicConfig {
 
     @Bean
     public NewTopic paymentAuthorizedTopic() {
-        return TopicBuilder.name(authorizedTopic).partitions(1).replicas(1).build();
+        return TopicBuilder.name(authorizedTopic).partitions(6).replicas(1).build();
     }
 
     @Bean
     public NewTopic paymentCapturedTopic() {
-        return TopicBuilder.name(capturedTopic).partitions(1).replicas(1).build();
+        return TopicBuilder.name(capturedTopic).partitions(6).replicas(1).build();
     }
 
     @Bean
     public NewTopic paymentRefundedTopic() {
-        return TopicBuilder.name(refundedTopic).partitions(1).replicas(1).build();
+        return TopicBuilder.name(refundedTopic).partitions(6).replicas(1).build();
     }
 
     @Bean
     public NewTopic paymentDeadLetterTopic() {
-        return TopicBuilder.name(dlqTopic).partitions(1).replicas(1).build();
+        return TopicBuilder.name(dlqTopic).partitions(3).replicas(1).build();
     }
 }

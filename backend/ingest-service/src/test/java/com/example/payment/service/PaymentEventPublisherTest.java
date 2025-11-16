@@ -15,7 +15,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
+import java.util.function.Consumer;
 
 /**
  * PaymentEventPublisher 테스트
@@ -35,13 +39,30 @@ class PaymentEventPublisherTest {
     @Mock
     private CircuitBreakerRegistry circuitBreakerRegistry;
 
+    @Mock
+    private TransactionTemplate transactionTemplate;
+
     private PaymentEventPublisher publisher;
     private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        publisher = new PaymentEventPublisher(kafkaTemplate, outboxEventRepository, objectMapper, circuitBreakerRegistry);
+        var executor = new SyncTaskExecutor();
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            Consumer<TransactionStatus> callback = invocation.getArgument(0);
+            callback.accept(mock(TransactionStatus.class));
+            return null;
+        }).when(transactionTemplate).executeWithoutResult(any());
+        publisher = new PaymentEventPublisher(
+                kafkaTemplate,
+                outboxEventRepository,
+                objectMapper,
+                circuitBreakerRegistry,
+                executor,
+                transactionTemplate
+        );
     }
 
     @Test

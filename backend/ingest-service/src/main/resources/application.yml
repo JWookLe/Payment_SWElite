@@ -5,6 +5,13 @@ spring:
     url: jdbc:mariadb://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:3306}/${PAYMENT_DB_NAME:paydb}
     username: ${PAYMENT_DB_USER:payuser}
     password: ${PAYMENT_DB_PASSWORD:paypass}
+    hikari:
+      maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:300}      # Aligned with Tomcat threads
+      minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:60}                 # Keep 60 connections ready
+      connection-timeout: 10000   # 10 second connection timeout
+      idle-timeout: 300000        # 5 minutes idle timeout
+      max-lifetime: 1800000       # 30 minutes max connection lifetime
+      leak-detection-threshold: 60000  # Detect connection leaks after 60s
   jpa:
     hibernate:
       ddl-auto: update
@@ -13,6 +20,12 @@ spring:
         dialect: org.hibernate.dialect.MariaDBDialect
         jdbc:
           time_zone: UTC
+          batch_size: 50                        # Batch INSERT operations
+        order_inserts: true                     # Order INSERTs for better batching
+        order_updates: true                     # Order UPDATEs for better batching
+        generate_statistics: false              # Disable for performance
+        query:
+          in_clause_parameter_padding: true     # Optimize IN clause queries
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -21,11 +34,16 @@ spring:
       # Timeout configuration for Circuit Breaker to detect Kafka failures
       acks: all                    # Wait for all replicas to acknowledge
       retries: 1                   # Retry once on failure
-      request-timeout-ms: 10000    # 10 second timeout for send request
-      delivery-timeout-ms: 15000   # 15 second total timeout including retries
+      request-timeout-ms: 2000     # 2 second timeout for send request (optimized for load testing)
+      delivery-timeout-ms: 3000    # 3 second total timeout including retries
       # Batching configuration for performance
-      batch-size: 16384            # 16KB batch size
-      linger-ms: 10                # Wait up to 10ms for batching
+      batch-size: 32768            # 32KB batch size for better throughput
+      linger-ms: 5                 # Keep latency low while still batching
+      properties:
+        max.in.flight.requests.per.connection: 5  # Must be <=5 for idempotent producer
+        buffer.memory: 67108864
+        compression.type: lz4
+        enable.idempotence: true
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -37,7 +55,11 @@ server:
   port: ${SERVER_PORT:8080}
   tomcat:
     threads:
-      max: ${SERVER_TOMCAT_THREADS_MAX:200}
+      max: ${SERVER_TOMCAT_THREADS_MAX:400}       # Allow more worker threads under load
+      min-spare: ${SERVER_TOMCAT_THREADS_MIN_SPARE:50} # Keep 50 threads ready
+    accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:2000}   # Larger backlog for waiting sockets
+    max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:4000} # Higher concurrent connections
+    connection-timeout: ${SERVER_TOMCAT_CONNECTION_TIMEOUT:20000} # 20s socket timeout
 
 management:
   endpoints:
@@ -54,6 +76,8 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true
+    enable:
+      hikaricp: true
 
 app:
   cors:
@@ -76,17 +100,21 @@ app:
       wait-duration-in-open-state: ${APP_CB_KAFKA_WAIT_DURATION:30000}
       permitted-calls-in-half-open-state: ${APP_CB_KAFKA_HALF_OPEN_CALLS:3}
       minimum-number-of-calls: ${APP_CB_KAFKA_MIN_CALLS:5}
-      slow-call-duration-threshold: ${APP_CB_KAFKA_SLOW_CALL_THRESHOLD:5000}
+      slow-call-duration-threshold: ${APP_CB_KAFKA_SLOW_CALL_THRESHOLD:2000}
       slow-call-rate-threshold: ${APP_CB_KAFKA_SLOW_CALL_RATE:50}
 
 outbox:
   polling:
     enabled: true
-    interval-ms: 10000           # Poll every 10 seconds
-    initial-delay-ms: 15000      # Wait 15 seconds after startup
-    batch-size: 100              # Process 100 events per batch
-    max-retries: 10              # Max retry attempts before dead letter
-    retry-interval-seconds: 30   # Min 30 seconds between retries for same event
+    interval-ms: 250             # Poll 4 times per second for quick recovery
+    initial-delay-ms: 5000       # Short warm-up to let services stabilize
+    batch-size: 1000             # Process 1,000 events per batch
+    max-retries: 20              # Allow more retries before flagging dead letter
+    retry-interval-seconds: 5    # Retry after 5 seconds cooldown
+  dispatcher:
+    core-pool-size: 8
+    max-pool-size: 16
+    queue-capacity: 2000
   dead-letter:
     check-interval-ms: 300000    # Check for dead letters every 5 minutes
 
@@ -97,7 +125,7 @@ resilience4j:
         registerHealthIndicator: true
         failureRateThreshold: 50
         slowCallRateThreshold: 50
-        slowCallDurationThreshold: 5000ms
+        slowCallDurationThreshold: 2000ms  # 2초 이상을 느린 호출로 간주 (optimized for load testing)
         waitDurationInOpenState: 30s
         permittedNumberOfCallsInHalfOpenState: 3
         minimumNumberOfCalls: 5
@@ -108,7 +136,7 @@ resilience4j:
         registerHealthIndicator: true
         failureRateThreshold: 50          # 50% 실패율 시 OPEN
         slowCallRateThreshold: 50         # 50% 느린 호출 시 OPEN
-        slowCallDurationThreshold: 5000ms # 5초 이상을 느린 호출로 간주
+        slowCallDurationThreshold: 2000ms # 2초 이상을 느린 호출로 간주 (optimized for load testing)
         waitDurationInOpenState: 60s      # OPEN 상태 60초 유지 (Kafka보다 길게)
         permittedNumberOfCallsInHalfOpenState: 5  # HALF_OPEN에서 5번 테스트
         minimumNumberOfCalls: 10          # 최소 10번 호출 후 통계 계산

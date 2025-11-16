@@ -9,11 +9,16 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Publishes payment events to Kafka with Circuit Breaker protection.
@@ -39,15 +44,21 @@ public class PaymentEventPublisher {
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
     private final CircuitBreakerRegistry circuitBreakerRegistry;
+    private final TaskExecutor outboxDispatchExecutor;
+    private final TransactionTemplate transactionTemplate;
 
     public PaymentEventPublisher(KafkaTemplate<String, String> kafkaTemplate,
                                 OutboxEventRepository outboxEventRepository,
                                 ObjectMapper objectMapper,
-                                CircuitBreakerRegistry circuitBreakerRegistry) {
+                                CircuitBreakerRegistry circuitBreakerRegistry,
+                                @Qualifier("outboxDispatchExecutor") TaskExecutor outboxDispatchExecutor,
+                                TransactionTemplate transactionTemplate) {
         this.kafkaTemplate = kafkaTemplate;
         this.outboxEventRepository = outboxEventRepository;
         this.objectMapper = objectMapper;
         this.circuitBreakerRegistry = circuitBreakerRegistry;
+        this.outboxDispatchExecutor = outboxDispatchExecutor;
+        this.transactionTemplate = transactionTemplate;
 
         // Register event listeners for monitoring circuit breaker state changes
         registerCircuitBreakerEventListeners(circuitBreakerRegistry);
@@ -56,7 +67,7 @@ public class PaymentEventPublisher {
     /**
      * Publishes a payment event to Kafka with Circuit Breaker protection.
      *
-     * @param payment The payment domain object
+     * @param paymentId The payment aggregate identifier
      * @param eventType The type of payment event (PAYMENT_AUTHORIZED, PAYMENT_CAPTURED, etc.)
      * @param payload The event payload as a map
      */
@@ -68,18 +79,20 @@ public class PaymentEventPublisher {
             OutboxEvent outboxEvent = outboxEventRepository.save(
                     new OutboxEvent("payment", paymentId, eventType, jsonPayload));
 
-            // Attempt to publish to Kafka (protected by circuit breaker)
-            try {
-                publishToKafkaWithCircuitBreaker(outboxEvent, resolveTopicName(eventType), jsonPayload);
-            } catch (Exception ex) {
-                // Circuit breaker caught the exception, log and continue
-                log.warn("Circuit breaker prevented Kafka publish for paymentId={}, eventType={}", paymentId, eventType, ex);
-            }
+            // Dispatch asynchronously after the transaction commits so HTTP threads are not blocked
+            scheduleAsyncDispatch(outboxEvent.getId());
 
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize event payload for paymentId={}, eventType={}",
                     paymentId, eventType, e);
         }
+    }
+
+    /**
+     * Allows other components (e.g. outbox scheduler) to trigger asynchronous dispatch for an event id.
+     */
+    public void dispatchOutboxEventAsync(Long outboxEventId) {
+        outboxDispatchExecutor.execute(() -> processOutboxEvent(outboxEventId));
     }
 
     /**
@@ -90,15 +103,18 @@ public class PaymentEventPublisher {
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
 
         Runnable publishTask = () -> {
+            String messageKey = String.valueOf(outboxEvent.getAggregateId());
+
             Message<String> message = MessageBuilder
                     .withPayload(payload)
                     .setHeader(KafkaHeaders.TOPIC, topic)
+                    .setHeader(KafkaHeaders.KEY, messageKey)
                     .setHeader("eventId", String.valueOf(outboxEvent.getId()))
                     .build();
 
             try {
-                // Synchronous send to allow Circuit Breaker to catch exceptions
-                kafkaTemplate.send(message).get();
+                // Synchronous send with timeout to allow Circuit Breaker to catch exceptions
+                kafkaTemplate.send(message).get(3, java.util.concurrent.TimeUnit.SECONDS);
                 log.info("Event published to Kafka topic={}, eventId={}, paymentId={}",
                         topic, outboxEvent.getId(), outboxEvent.getAggregateId());
                 // Mark as published in outbox
@@ -122,6 +138,35 @@ public class PaymentEventPublisher {
             log.warn("Circuit Breaker caught error for topic={}, eventId={}. Error: {}",
                     topic, outboxEvent.getId(), ex.getMessage());
             // Event is already saved in outbox, so we don't throw
+        }
+    }
+
+    private void processOutboxEvent(Long outboxEventId) {
+        try {
+            transactionTemplate.executeWithoutResult(status ->
+                    outboxEventRepository.findById(outboxEventId).ifPresent(event -> {
+                        if (event.isPublished()) {
+                            return;
+                        }
+                        publishToKafkaWithCircuitBreaker(event, resolveTopicName(event.getEventType()), event.getPayload());
+                    })
+            );
+        } catch (Exception ex) {
+            log.warn("Async dispatch failed for eventId={}. It will be retried by the scheduler if necessary.",
+                    outboxEventId, ex);
+        }
+    }
+
+    private void scheduleAsyncDispatch(Long outboxEventId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    dispatchOutboxEventAsync(outboxEventId);
+                }
+            });
+        } else {
+            dispatchOutboxEventAsync(outboxEventId);
         }
     }
 

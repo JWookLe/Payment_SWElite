@@ -3,7 +3,7 @@ services:
     image: mariadb:11.4
     container_name: pay-mariadb
     command:
-      - --max-connections=200
+      - --max-connections=600
       - --innodb-buffer-pool-size=512M
       - --innodb-log-file-size=128M
       - --innodb-flush-log-at-trx-commit=2
@@ -82,9 +82,13 @@ services:
       APP_RATE_LIMIT_AUTHORIZE_CAPACITY: 24000
       APP_RATE_LIMIT_CAPTURE_CAPACITY: 24000
       APP_RATE_LIMIT_REFUND_CAPACITY: 24000
-      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 100
-      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 20
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 300
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 60
       SERVER_TOMCAT_THREADS_MAX: 400
+      SERVER_TOMCAT_THREADS_MIN_SPARE: 50
+      SERVER_TOMCAT_ACCEPT_COUNT: 2000
+      SERVER_TOMCAT_MAX_CONNECTIONS: 4000
+      SERVER_TOMCAT_CONNECTION_TIMEOUT: 20000
       # MockPG 부하테스트 모드 (false=일반모드 5% 실패, true=부하테스트모드 0.01% 실패)
       MOCK_PG_LOADTEST_MODE: ${MOCK_PG_LOADTEST_MODE:-false}
     depends_on:
@@ -175,6 +179,7 @@ services:
       dockerfile: Dockerfile
     image: monitoring-service:local
     container_name: pay-monitoring
+    user: root
     environment:
       SERVER_PORT: 8082
       PAYMENT_DB_HOST: mariadb
