@@ -223,6 +223,10 @@ services:
     container_name: pay-gateway
     environment:
       EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      GATEWAY_CONNECT_TIMEOUT: 2000
+      GATEWAY_RESPONSE_TIMEOUT: 20s
+      GATEWAY_MAX_CONNECTIONS: 4000
+      GATEWAY_POOL_ACQUIRE_TIMEOUT: 5000
     depends_on:
       eureka-server:
         condition: service_started

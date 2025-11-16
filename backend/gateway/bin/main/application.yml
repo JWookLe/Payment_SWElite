@@ -6,6 +6,12 @@ spring:
       discovery:
         locator:
           enabled: false
+      httpclient:
+        connect-timeout: ${GATEWAY_CONNECT_TIMEOUT:2000}
+        response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:20s}
+        pool:
+          max-connections: ${GATEWAY_MAX_CONNECTIONS:2000}
+          acquire-timeout: ${GATEWAY_POOL_ACQUIRE_TIMEOUT:5000}
       routes:
         - id: payments-api
           uri: lb://INGEST-SERVICE
