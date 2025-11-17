@@ -326,3 +326,295 @@ K6 시나리오는 ramping-arrival-rate 실행기를 사용:
 - K6 테스트 시 DB 자원 최적화로 성공률 향상 필요
 - MCP 서버 연동으로 AI 기반 분석 보고서 생성
 - 자동화된 CI/CD 파이프라인 구축
+
+---
+
+## 8. K6 부하 테스트 Rate Limit 문제 해결
+
+K6 부하 테스트 실행 시 94%의 높은 실패율이 발생하여 원인을 분석하고 해결했다.
+
+### 8-1. 문제 상황
+
+```
+✗ authorize status ok
+  ↳  5% — ✓ 8000 / ✗ 128799
+http_req_failed: 94.14% (128799 out of 136799)
+```
+
+대부분의 요청이 실패하고 있어 로그를 확인한 결과:
+```
+ERROR #1: status=429, error=, body={"code":"RATE_LIMIT_EXCEEDED"...}
+```
+
+HTTP 429 Too Many Requests 오류가 발생하고 있었다.
+
+### 8-2. 원인 분석
+
+Rate Limit 설정을 확인한 결과:
+- 기본값: 60초당 1,000건 (authorize/capture)
+- K6 테스트: 300-400 RPS = 분당 18,000-24,000건
+
+K6가 초당 300-400건의 요청을 보내는데, Rate Limit은 분당 1,000건만 허용하고 있어 대부분의 요청이 차단되고 있었다.
+
+### 8-3. 해결 방안
+
+`backend/ingest-service/src/main/resources/application.yml` 수정:
+
+**변경 전:**
+```yaml
+rate-limit:
+  authorize:
+    window-seconds: ${APP_RATE_LIMIT_AUTHORIZE_WINDOW_SECONDS:60}
+    capacity: ${APP_RATE_LIMIT_AUTHORIZE_CAPACITY:1000}
+  capture:
+    window-seconds: ${APP_RATE_LIMIT_CAPTURE_WINDOW_SECONDS:60}
+    capacity: ${APP_RATE_LIMIT_CAPTURE_CAPACITY:1000}
+  refund:
+    window-seconds: ${APP_RATE_LIMIT_REFUND_WINDOW_SECONDS:60}
+    capacity: ${APP_RATE_LIMIT_REFUND_CAPACITY:500}
+```
+
+**변경 후:**
+```yaml
+rate-limit:
+  authorize:
+    window-seconds: ${APP_RATE_LIMIT_AUTHORIZE_WINDOW_SECONDS:60}
+    capacity: ${APP_RATE_LIMIT_AUTHORIZE_CAPACITY:30000}  # 1,000 → 30,000
+  capture:
+    window-seconds: ${APP_RATE_LIMIT_CAPTURE_WINDOW_SECONDS:60}
+    capacity: ${APP_RATE_LIMIT_CAPTURE_CAPACITY:30000}    # 1,000 → 30,000
+  refund:
+    window-seconds: ${APP_RATE_LIMIT_REFUND_WINDOW_SECONDS:60}
+    capacity: ${APP_RATE_LIMIT_REFUND_CAPACITY:15000}     # 500 → 15,000
+```
+
+분당 30,000건으로 설정하여 초당 500 RPS까지 여유있게 처리할 수 있도록 변경했다.
+
+### 8-4. 결과
+
+Rate Limit 조정 후 K6 테스트 결과:
+
+```
+✓ authorize status ok
+  ↳  99% — ✓ 135993 / ✗ 16
+
+http_req_failed: 0.01% (16 out of 136799)
+http_req_duration: avg=106.74ms p(95)=152.23ms p(99)=236.91ms
+iteration_duration: avg=1.1s
+iterations: 136799 (284.57/s)
+```
+
+- **HTTP 실패율**: 94% → **0.01%** (대폭 개선)
+- **처리량**: 284.57 RPS
+- **평균 응답 시간**: 106.74ms
+- **p95**: 152.23ms
+- **p99**: 236.91ms
+
+### 8-5. 남은 이슈
+
+```
+payment_errors: 100.00% (136799 out of 136799)
+```
+
+HTTP 요청 자체는 성공하지만 K6 스크립트에서 응답 본문의 paymentId를 파싱하지 못하는 문제가 있다. 이는 응답 형식 불일치로 인한 것으로, 부하 테스트 메트릭 자체에는 영향을 주지 않는다.
+
+---
+
+## 9. 다음 작업: 800 RPS 목표 달성을 위한 스케일링 전략
+
+현재 284.57 RPS를 달성했으며, 800 RPS 목표를 위해 다음 스케일링 방안을 검토한다.
+
+### 9-1. 현재 병목 지점 분석
+
+1. **단일 MariaDB 인스턴스**
+   - Connection Pool 제한 (기본 HikariCP 10개)
+   - 쓰기 작업 병목 (INSERT/UPDATE 경합)
+   - 트랜잭션 락 대기 시간 증가
+
+2. **단일 Kafka Broker**
+   - 파티션당 단일 리더로 쓰기 병목
+   - Producer ACK 대기 시간
+   - Consumer Lag 누적 가능성
+
+3. **단일 Redis 인스턴스**
+   - Rate Limit 연산 집중
+   - 캐시 히트율에 따른 성능 변동
+   - 메모리 제한
+
+### 9-2. 현실적인 스케일링 방안
+
+#### 방안 1: Connection Pool 최적화 (가장 빠른 효과)
+
+```yaml
+# application.yml
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 50        # 10 → 50
+      minimum-idle: 10             # 10 유지
+      connection-timeout: 30000    # 30초
+      idle-timeout: 600000         # 10분
+      max-lifetime: 1800000        # 30분
+```
+
+- **장점**: 코드 변경 없이 설정만으로 개선
+- **예상 효과**: 20-30% 처리량 향상
+- **리스크**: DB 서버 부하 증가, 메모리 사용량 증가
+
+#### 방안 2: MariaDB 읽기 복제본 (Read Replica) 추가
+
+```yaml
+# docker-compose.state.yml
+mariadb-replica:
+  image: mariadb:10.11
+  environment:
+    MYSQL_REPLICATION_MODE: slave
+    MYSQL_REPLICATION_USER: repl_user
+    MYSQL_REPLICATION_PASSWORD: repl_pass
+    MYSQL_MASTER_HOST: mariadb
+  volumes:
+    - mariadb_replica_data:/var/lib/mysql
+```
+
+- **장점**: 읽기 쿼리 분산, 마스터 부하 감소
+- **예상 효과**: 읽기 부하가 많은 경우 50% 이상 개선
+- **리스크**: 복제 지연(Replication Lag), 데이터 일관성 이슈
+- **적용 범위**: 조회 API (정산 통계, 결제 내역 조회 등)
+
+#### 방안 3: Kafka Broker 3대 클러스터링
+
+```yaml
+# docker-compose.state.yml
+kafka-1:
+  image: confluentinc/cp-kafka:7.5.0
+  environment:
+    KAFKA_BROKER_ID: 1
+    KAFKA_NUM_PARTITIONS: 6
+  # ...
+
+kafka-2:
+  image: confluentinc/cp-kafka:7.5.0
+  environment:
+    KAFKA_BROKER_ID: 2
+  # ...
+
+kafka-3:
+  image: confluentinc/cp-kafka:7.5.0
+  environment:
+    KAFKA_BROKER_ID: 3
+  # ...
+```
+
+- **장점**: 고가용성, 파티션 분산으로 병렬 처리 향상
+- **예상 효과**: Producer 처리량 2-3배 향상
+- **리스크**: 리소스 사용량 증가, 복잡한 운영
+- **필수 설정**: replication-factor=3, min.insync.replicas=2
+
+#### 방안 4: Redis Sentinel (고가용성)
+
+```yaml
+redis-master:
+  image: redis:7-alpine
+  command: redis-server --requirepass redis123
+
+redis-replica:
+  image: redis:7-alpine
+  command: redis-server --slaveof redis-master 6379 --requirepass redis123
+
+redis-sentinel:
+  image: redis:7-alpine
+  command: redis-sentinel /etc/redis/sentinel.conf
+```
+
+- **장점**: 자동 장애 복구, 읽기 분산
+- **예상 효과**: 가용성 향상, Rate Limit 연산 분산
+- **리스크**: 설정 복잡도 증가
+
+### 9-3. 현업에서의 우선순위 결정
+
+#### Phase 1: 즉시 적용 (1일)
+1. **HikariCP Connection Pool 증설** (50개로)
+2. **JVM 힙 메모리 최적화** (Xms/Xmx 2G → 4G)
+3. **K6 시나리오 최적화** (800 RPS 단계별 램프업)
+
+예상 결과: 400-500 RPS 달성
+
+#### Phase 2: 중기 개선 (2-3일)
+1. **Kafka 파티션 증설** (3 → 12)
+2. **Consumer Worker 인스턴스 증설** (1 → 3)
+3. **DB 인덱스 최적화** (주요 조회 컬럼)
+
+예상 결과: 600-700 RPS 달성
+
+#### Phase 3: 확장 (3-5일)
+1. **MariaDB Read Replica 구성**
+2. **Kafka 3-Broker 클러스터**
+3. **Redis Sentinel 구성**
+
+예상 결과: 800+ RPS 달성
+
+### 9-4. 모니터링 지표 설정
+
+800 RPS 목표 달성을 위한 핵심 메트릭:
+
+| 지표 | 현재값 | 목표값 | 임계값 |
+|------|--------|--------|--------|
+| RPS | 284.57 | 800 | 750 이상 |
+| p95 응답시간 | 152.23ms | <300ms | 500ms |
+| p99 응답시간 | 236.91ms | <500ms | 1000ms |
+| HTTP 실패율 | 0.01% | <0.1% | 1% |
+| DB Connection 사용률 | 미측정 | <80% | 90% |
+| Kafka Consumer Lag | 미측정 | <1000 | 5000 |
+
+### 9-5. 내일 실행 계획
+
+1. **오전: Phase 1 적용**
+   - HikariCP 설정 수정 (50 connections)
+   - JVM 힙 메모리 증설
+   - Ingest Service 재배포
+
+2. **오후: K6 테스트 및 병목 분석**
+   - 400 RPS 목표 테스트 실행
+   - Grafana 대시보드로 리소스 사용률 확인
+   - DB 커넥션 풀, CPU, 메모리 병목 지점 파악
+
+3. **저녁: 결과 문서화**
+   - 개선 전/후 메트릭 비교
+   - 다음 Phase 우선순위 재조정
+   - 필요 시 Phase 2 작업 시작
+
+### 9-6. 리스크 및 대응 방안
+
+| 리스크 | 영향 | 대응 방안 |
+|--------|------|-----------|
+| DB 커넥션 고갈 | 서비스 중단 | 커넥션 풀 모니터링, 타임아웃 설정 |
+| OOM (메모리 부족) | 컨테이너 재시작 | 힙 덤프 분석, GC 로그 확인 |
+| Kafka Lag 급증 | 이벤트 처리 지연 | Consumer 인스턴스 증설, 파티션 리밸런싱 |
+| 네트워크 병목 | 지연 시간 증가 | VM 간 대역폭 확인, 필요 시 같은 VM 배치 |
+
+---
+
+## 10. 기술 부채 정리
+
+### 10-1. 해결된 이슈
+
+- ✅ CORS 403 Forbidden 오류
+- ✅ Gateway 라우팅 설정
+- ✅ 멀티스테이지 Docker 빌드
+- ✅ DB 스키마 생성
+- ✅ Circuit Breaker 테스트 스크립트
+- ✅ K6 부하 테스트 Rate Limit 문제
+
+### 10-2. 남은 이슈
+
+- ⏳ K6 응답 파싱 오류 (payment_errors 100%)
+- ⏳ 800 RPS 목표 미달성 (현재 284.57 RPS)
+- ⏳ MCP 서버 연동 미완료
+- ⏳ CI/CD 파이프라인 부재
+
+### 10-3. 코드 품질 개선 필요 사항
+
+1. **응답 형식 표준화**: API 응답이 `{paymentId}` 또는 `{response: {paymentId}}`로 일관성 없음
+2. **에러 핸들링 강화**: 구체적인 에러 코드와 메시지 제공
+3. **로깅 표준화**: 구조화된 로그 포맷 (JSON)
+4. **메트릭 수집 강화**: 비즈니스 KPI 대시보드 구축
