@@ -75,3 +75,7 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+gateway:
+  cors:
+    allowed-origins: ${GATEWAY_ALLOWED_ORIGINS:http://localhost:5173}

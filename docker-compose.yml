@@ -1,4 +1,4 @@
-services:
+﻿services:
   mariadb:
     image: mariadb:11.4
     container_name: pay-mariadb
@@ -89,7 +89,7 @@ services:
       SERVER_TOMCAT_ACCEPT_COUNT: 2000
       SERVER_TOMCAT_MAX_CONNECTIONS: 4000
       SERVER_TOMCAT_CONNECTION_TIMEOUT: 20000
-      # MockPG 부하테스트 모드 (false=일반모드 5% 실패, true=부하테스트모드 0.01% 실패)
+      # MockPG 遺?섑뀒?ㅽ듃 紐⑤뱶 (false=?쇰컲紐⑤뱶 5% ?ㅽ뙣, true=遺?섑뀒?ㅽ듃紐⑤뱶 0.01% ?ㅽ뙣)
       MOCK_PG_LOADTEST_MODE: ${MOCK_PG_LOADTEST_MODE:-false}
     depends_on:
       mariadb:
@@ -137,7 +137,7 @@ services:
       SERVER_PORT: 8084
       SETTLEMENT_MAX_RETRIES: 10
       SETTLEMENT_RETRY_INTERVAL: 30
-      # MockPG 부하테스트 모드
+      # MockPG 遺?섑뀒?ㅽ듃 紐⑤뱶
       MOCK_PG_LOADTEST_MODE: ${MOCK_PG_LOADTEST_MODE:-false}
     depends_on:
       mariadb:
@@ -163,7 +163,7 @@ services:
       SERVER_PORT: 8085
       REFUND_MAX_RETRIES: 10
       REFUND_RETRY_INTERVAL: 30
-      # MockPG 부하테스트 모드
+      # MockPG 遺?섑뀒?ㅽ듃 紐⑤뱶
       MOCK_PG_LOADTEST_MODE: ${MOCK_PG_LOADTEST_MODE:-false}
     depends_on:
       mariadb:
@@ -227,6 +227,7 @@ services:
       GATEWAY_RESPONSE_TIMEOUT: 20s
       GATEWAY_MAX_CONNECTIONS: 4000
       GATEWAY_POOL_ACQUIRE_TIMEOUT: 5000
+      GATEWAY_ALLOWED_ORIGINS: http://localhost:5173,http://210.104.76.136:5173
     depends_on:
       eureka-server:
         condition: service_started
@@ -320,3 +321,5 @@ services:
 volumes:
   mariadb-data:
   grafana-data:
+
+
