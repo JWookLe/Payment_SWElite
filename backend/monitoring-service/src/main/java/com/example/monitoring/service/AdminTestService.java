@@ -96,6 +96,10 @@ public class AdminTestService {
                 processBuilder.directory(new File(System.getProperty("user.dir")));
                 processBuilder.redirectErrorStream(true);
 
+                // Set BASE_URL to Gateway (VM2) - monitoring-service runs on VM1
+                processBuilder.environment().put("BASE_URL", gatewayBaseUrl + "/api");
+                logger.info("K6 test BASE_URL: {}", gatewayBaseUrl + "/api");
+
                 Process process = processBuilder.start();
 
                 StringBuilder output = new StringBuilder();
