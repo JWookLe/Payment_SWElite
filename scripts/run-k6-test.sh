@@ -12,7 +12,7 @@ RESULTS_FILE="$K6_DIR/summary.json"
 
 # Scenario configuration
 SCENARIO="${1:-authorize-only}"
-DEFAULT_BASE_URL="http://gateway:8080/api"
+DEFAULT_BASE_URL="http://172.25.0.79:8080/api"
 BASE_URL="${BASE_URL:-$DEFAULT_BASE_URL}"
 DOCKER_NETWORK="payment_swelite_default"
 FORCE_DOCKER_K6="${FORCE_DOCKER_K6:-false}"

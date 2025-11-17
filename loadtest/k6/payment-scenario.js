@@ -7,10 +7,17 @@ const MERCHANT_ID = __ENV.MERCHANT_ID || "K6-MERCHANT";
 const ENABLE_CAPTURE = ((__ENV.ENABLE_CAPTURE || "false").toLowerCase() === "true");
 const ENABLE_REFUND = ((__ENV.ENABLE_REFUND || "false").toLowerCase() === "true");
 
+// Debug: log configuration at startup
+console.log(`K6 Configuration: BASE_URL=${BASE_URL}, MERCHANT_ID=${MERCHANT_ID}`);
+
 const authorizeTrend = new Trend("payment_authorize_duration", true);
 const captureTrend = new Trend("payment_capture_duration", true);
 const refundTrend = new Trend("payment_refund_duration", true);
 const errorRate = new Rate("payment_errors");
+
+// Track error samples for debugging
+let errorSampleCount = 0;
+const MAX_ERROR_SAMPLES = 10;
 
 const thresholds = {
   http_req_failed: ["rate<0.05"],
@@ -84,6 +91,11 @@ export default function () {
 
     if (!authorizeOk) {
       errorRate.add(1);
+      // Log first few errors for debugging
+      if (errorSampleCount < MAX_ERROR_SAMPLES) {
+        errorSampleCount++;
+        console.error(`ERROR #${errorSampleCount}: status=${authorizeResponse.status}, error=${authorizeResponse.error}, body=${authorizeResponse.body?.substring(0, 200)}`);
+      }
       return;
     }
 
