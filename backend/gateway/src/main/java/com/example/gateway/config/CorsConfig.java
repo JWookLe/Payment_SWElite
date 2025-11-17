@@ -27,8 +27,13 @@ public class CorsConfig {
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration corsConfig = new CorsConfiguration();
         List<String> origins = allowedOriginPatterns.isEmpty()
-                ? List.of("http://localhost:5173")
+                ? List.of("*")
                 : allowedOriginPatterns;
+        // Add wildcard to allow all origins if not specifically configured
+        if (!origins.contains("*")) {
+            origins = new java.util.ArrayList<>(origins);
+            origins.add("*");
+        }
         corsConfig.setAllowedOriginPatterns(origins);
         corsConfig.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         corsConfig.setAllowedHeaders(List.of("*"));
