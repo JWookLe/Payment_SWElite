@@ -81,13 +81,14 @@ ingest_exec() {
 }
 
 ingest_curl() {
-  ingest_exec curl "$@"
+  # Use direct curl instead of docker exec for container-to-container communication
+  curl "$@"
 }
 
 check_api_health() {
   log_info "Waiting for API health endpoint..."
   for attempt in $(seq 1 "${MAX_RETRIES}"); do
-    if ingest_curl -s -f "${API_BASE_URL}/actuator/health" >/dev/null 2>&1; then
+    if curl -s -f "${API_BASE_URL}/actuator/health" >/dev/null 2>&1; then
       log_success "API is responsive."
       return 0
     fi
@@ -192,7 +193,8 @@ send_payment_request() {
   local timeout_seconds=${2:-15}
   local idempotency_key="${merchant_id}-$(date +%s%N)"
 
-  gateway_exec timeout "${timeout_seconds}" curl -sSf -X POST "${GATEWAY_BASE_URL}/payments/authorize" \
+  # Use direct curl for container-to-container communication (no need for gateway_exec)
+  timeout "${timeout_seconds}" curl -sSf -X POST "${GATEWAY_BASE_URL}/payments/authorize" \
     -H "Content-Type: application/json" \
     -d "{\"merchantId\":\"${merchant_id}\",\"amount\":50000,\"currency\":\"KRW\",\"idempotencyKey\":\"${idempotency_key}\"}" \
     >/dev/null
