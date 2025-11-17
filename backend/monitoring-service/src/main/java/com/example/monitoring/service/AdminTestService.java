@@ -39,12 +39,15 @@ public class AdminTestService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final MCPAnalysisService mcpAnalysisService;
+    private final String gatewayBaseUrl;
 
     @Autowired
-    public AdminTestService(RestTemplate restTemplate, ObjectMapper objectMapper, MCPAnalysisService mcpAnalysisService) {
+    public AdminTestService(RestTemplate restTemplate, ObjectMapper objectMapper, MCPAnalysisService mcpAnalysisService,
+                           @org.springframework.beans.factory.annotation.Value("${monitoring.gateway.base-url:http://localhost:8080}") String gatewayBaseUrl) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.mcpAnalysisService = mcpAnalysisService;
+        this.gatewayBaseUrl = gatewayBaseUrl;
     }
 
     /**
@@ -194,8 +197,8 @@ public class AdminTestService {
                 processBuilder.redirectErrorStream(true);
 
                 // Set environment variables for Docker network access
-                processBuilder.environment().put("API_BASE_URL", "http://ingest-service:8080");
-                processBuilder.environment().put("GATEWAY_BASE_URL", "http://gateway:8080/api");
+                processBuilder.environment().put("API_BASE_URL", "http://pay-ingest:8080");
+                processBuilder.environment().put("GATEWAY_BASE_URL", gatewayBaseUrl + "/api");
 
                 logger.info("Environment variables set for circuit breaker test:");
                 logger.info("  API_BASE_URL = {}", processBuilder.environment().get("API_BASE_URL"));
@@ -312,7 +315,7 @@ public class AdminTestService {
      */
     public TestReportDTO runDatabaseStatsTest(String testId, boolean generateReport) {
         return runMonitoringEndpointTest(testId, "Database Stats",
-                "http://gateway:8080/api/monitoring/database/stats", generateReport);
+                gatewayBaseUrl + "/api/monitoring/database/stats", generateReport);
     }
 
     /**
@@ -320,7 +323,7 @@ public class AdminTestService {
      */
     public TestReportDTO runRedisStatsTest(String testId, boolean generateReport) {
         return runMonitoringEndpointTest(testId, "Redis Stats",
-                "http://gateway:8080/api/monitoring/redis/stats", generateReport);
+                gatewayBaseUrl + "/api/monitoring/redis/stats", generateReport);
     }
 
     /**
@@ -328,7 +331,7 @@ public class AdminTestService {
      */
     public TestReportDTO runKafkaStatsTest(String testId, boolean generateReport) {
         return runMonitoringEndpointTest(testId, "Kafka Stats",
-                "http://gateway:8080/api/monitoring/kafka/stats", generateReport);
+                gatewayBaseUrl + "/api/monitoring/kafka/stats", generateReport);
     }
 
     /**
@@ -336,7 +339,7 @@ public class AdminTestService {
      */
     public TestReportDTO runSettlementStatsTest(String testId, boolean generateReport) {
         return runMonitoringEndpointTest(testId, "Settlement Stats",
-                "http://gateway:8080/api/stats/settlement", generateReport);
+                gatewayBaseUrl + "/api/stats/settlement", generateReport);
     }
 
     /**

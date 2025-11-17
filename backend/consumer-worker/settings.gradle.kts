@@ -9,4 +9,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "settlement-worker"
+rootProject.name = "consumer-worker"

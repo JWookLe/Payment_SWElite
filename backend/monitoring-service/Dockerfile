@@ -1,3 +1,11 @@
+# Build stage
+FROM gradle:8-jdk21 AS builder
+WORKDIR /build
+COPY build.gradle.kts settings.gradle.kts ./
+COPY src ./src
+RUN gradle build -x test --no-daemon
+
+# Runtime stage
 FROM eclipse-temurin:21-jre
 
 RUN useradd --system --create-home spring \
@@ -25,8 +33,7 @@ RUN useradd --system --create-home spring \
     && usermod -aG docker spring || true
 
 WORKDIR /app
-ARG JAR_FILE=build/libs/*.jar
-COPY --chown=spring:spring ${JAR_FILE} app.jar
+COPY --from=builder --chown=spring:spring /build/build/libs/*.jar app.jar
 EXPOSE 8082
 USER spring
 ENTRYPOINT ["java", "-jar", "app.jar"]
