@@ -34,6 +34,9 @@ RUN useradd --system --create-home spring \
 
 WORKDIR /app
 COPY --from=builder --chown=spring:spring /build/build/libs/*.jar app.jar
+COPY --chown=spring:spring scripts/ ./scripts/
+COPY --chown=spring:spring loadtest/ ./loadtest/
+RUN chmod +x ./scripts/*.sh || true
 EXPOSE 8082
 USER spring
 ENTRYPOINT ["java", "-jar", "app.jar"]

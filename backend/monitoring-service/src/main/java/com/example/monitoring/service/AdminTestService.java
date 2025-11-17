@@ -188,82 +188,42 @@ public class AdminTestService {
 
         new Thread(() -> {
             long startTime = System.currentTimeMillis();
-            StringBuilder output = new StringBuilder();
             try {
                 logger.info("Running Circuit Breaker test: testId={}", testId);
 
-                String ingestServiceUrl = "http://pay-ingest:8080";
-                String circuitBreakerEndpoint = ingestServiceUrl + "/circuit-breaker/kafka-publisher";
-                String paymentEndpoint = gatewayBaseUrl + "/api/payments/authorize";
+                ProcessBuilder processBuilder = new ProcessBuilder();
+                processBuilder.command("bash", "scripts/test-circuit-breaker.sh");
+                processBuilder.directory(new File(System.getProperty("user.dir")));
+                processBuilder.redirectErrorStream(true);
 
-                output.append("============================================================\n");
-                output.append(" Circuit Breaker Test Scenario\n");
-                output.append("============================================================\n\n");
+                // Set environment variables for Docker network access
+                processBuilder.environment().put("API_BASE_URL", "http://pay-ingest:8080");
+                processBuilder.environment().put("GATEWAY_BASE_URL", gatewayBaseUrl + "/api");
 
-                // Step 1: Check initial state
-                output.append("[INFO] Step 1: Checking initial circuit breaker state\n");
-                logger.info("Step 1: Checking initial circuit breaker state");
-                Map<String, Object> initialState = getCircuitBreakerState(circuitBreakerEndpoint);
-                output.append("  Initial state: ").append(initialState.get("state")).append("\n");
-                output.append("  Successful calls: ").append(initialState.get("numberOfSuccessfulCalls")).append("\n");
-                output.append("  Failed calls: ").append(initialState.get("numberOfFailedCalls")).append("\n\n");
+                logger.info("Environment variables set for circuit breaker test:");
+                logger.info("  API_BASE_URL = {}", processBuilder.environment().get("API_BASE_URL"));
+                logger.info("  GATEWAY_BASE_URL = {}", processBuilder.environment().get("GATEWAY_BASE_URL"));
 
-                // Step 2: Send healthy requests
-                output.append("[INFO] Step 2: Sending 5 healthy payment requests\n");
-                logger.info("Step 2: Sending 5 healthy payment requests");
-                int successCount = 0;
-                int failCount = 0;
-                for (int i = 1; i <= 5; i++) {
-                    try {
-                        sendPaymentRequest(paymentEndpoint, "CB_TEST_" + i);
-                        output.append("  Request ").append(i).append(": SUCCESS\n");
-                        successCount++;
-                        Thread.sleep(500);
-                    } catch (Exception e) {
-                        output.append("  Request ").append(i).append(": FAILED - ").append(e.getMessage()).append("\n");
-                        failCount++;
+                Process process = processBuilder.start();
+
+                StringBuilder output = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        output.append(line).append("\n");
+                        logger.info(line);
                     }
                 }
-                output.append("  Total: ").append(successCount).append(" success, ").append(failCount).append(" failed\n\n");
 
-                Thread.sleep(2000);
-
-                // Step 3: Check state after traffic
-                output.append("[INFO] Step 3: Checking circuit breaker state after traffic\n");
-                logger.info("Step 3: Checking circuit breaker state after traffic");
-                Map<String, Object> afterTrafficState = getCircuitBreakerState(circuitBreakerEndpoint);
-                output.append("  State: ").append(afterTrafficState.get("state")).append("\n");
-                output.append("  Successful calls: ").append(afterTrafficState.get("numberOfSuccessfulCalls")).append("\n");
-                output.append("  Failed calls: ").append(afterTrafficState.get("numberOfFailedCalls")).append("\n");
-                output.append("  Slow calls: ").append(afterTrafficState.get("numberOfSlowCalls")).append("\n");
-                output.append("  Failure rate: ").append(afterTrafficState.get("failureRate")).append("\n\n");
-
-                // Step 4: Final assessment
-                output.append("============================================================\n");
-                output.append(" Test Complete\n");
-                output.append("============================================================\n");
-
-                String finalState = (String) afterTrafficState.get("state");
-                boolean testPassed = "CLOSED".equals(finalState) && successCount > 0;
-
-                if (testPassed) {
-                    output.append("[SUCCESS] Circuit breaker is healthy. State: ").append(finalState).append("\n");
-                } else {
-                    output.append("[WARNING] Circuit breaker state: ").append(finalState).append("\n");
-                    output.append("  Note: Circuit breaker may be in OPEN or HALF_OPEN state due to previous failures.\n");
-                }
-
+                int exitCode = process.waitFor();
                 long duration = System.currentTimeMillis() - startTime;
 
                 Map<String, Object> rawData = new HashMap<>();
-                rawData.put("exitCode", testPassed ? 0 : 1);
+                rawData.put("exitCode", exitCode);
                 rawData.put("output", output.toString());
-                rawData.put("initialState", initialState);
-                rawData.put("finalState", afterTrafficState);
-                rawData.put("successfulRequests", successCount);
-                rawData.put("failedRequests", failCount);
 
-                String status = testPassed ? "success" : "failure";
+                String status = exitCode == 0 ? "success" : "failure";
 
                 TestReportDTO report = new TestReportDTO();
                 report.setReportId(runningReport.getReportId());
@@ -293,34 +253,6 @@ public class AdminTestService {
         }).start();
 
         return runningReport;
-    }
-
-    private Map<String, Object> getCircuitBreakerState(String endpoint) {
-        try {
-            ResponseEntity<Map> response = restTemplate.getForEntity(endpoint, Map.class);
-            return response.getBody() != null ? response.getBody() : new HashMap<>();
-        } catch (Exception e) {
-            logger.warn("Failed to get circuit breaker state: {}", e.getMessage());
-            Map<String, Object> errorState = new HashMap<>();
-            errorState.put("state", "UNKNOWN");
-            errorState.put("error", e.getMessage());
-            return errorState;
-        }
-    }
-
-    private void sendPaymentRequest(String endpoint, String merchantId) {
-        String idempotencyKey = merchantId + "-" + System.currentTimeMillis();
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("merchantId", merchantId);
-        payload.put("amount", 50000);
-        payload.put("currency", "KRW");
-        payload.put("idempotencyKey", idempotencyKey);
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
-
-        restTemplate.postForEntity(endpoint, request, Map.class);
     }
 
     /**
