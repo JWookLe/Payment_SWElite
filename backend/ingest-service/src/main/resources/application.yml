@@ -85,13 +85,13 @@ app:
   rate-limit:
     authorize:
       window-seconds: ${APP_RATE_LIMIT_AUTHORIZE_WINDOW_SECONDS:60}
-      capacity: ${APP_RATE_LIMIT_AUTHORIZE_CAPACITY:1000}
+      capacity: ${APP_RATE_LIMIT_AUTHORIZE_CAPACITY:30000}
     capture:
       window-seconds: ${APP_RATE_LIMIT_CAPTURE_WINDOW_SECONDS:60}
-      capacity: ${APP_RATE_LIMIT_CAPTURE_CAPACITY:1000}
+      capacity: ${APP_RATE_LIMIT_CAPTURE_CAPACITY:30000}
     refund:
       window-seconds: ${APP_RATE_LIMIT_REFUND_WINDOW_SECONDS:60}
-      capacity: ${APP_RATE_LIMIT_REFUND_CAPACITY:500}
+      capacity: ${APP_RATE_LIMIT_REFUND_CAPACITY:15000}
   idempotency-cache:
     ttl-seconds: ${APP_IDEMPOTENCY_CACHE_TTL_SECONDS:600}
   circuit-breaker:
