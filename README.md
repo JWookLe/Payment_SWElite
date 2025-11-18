@@ -68,6 +68,22 @@
 
 **상세 내역**: [5Week.md](./5Week.md)
 
+### 6주차
+
+- [X] KT Cloud VM 환경 구성 (VM1: State Services, VM2: App Services)
+- [X] Docker Compose 파일 분리 (state/app 전용) 및 Git 관리 전략 수립
+- [X] CORS 403 Forbidden 오류 해결 (Gateway 설정)
+- [X] 멀티스테이지 Docker 빌드 전환 (모든 백엔드 서비스)
+- [X] DB 스키마 생성 및 Admin Dashboard 연동
+- [X] Circuit Breaker 테스트 자동화 (Monitoring Service 통합)
+- [X] K6 부하 테스트 지원 추가 (Admin Dashboard 통합)
+- [X] K6 Rate Limit 문제 해결 (94% → 0.01% 실패율)
+- [X] Phase 1 성능 최적화 (JVM 4GB, HikariCP 300)
+- [X] Phase 2-A 스케일링 (Kafka 파티션 6→12)
+- [X] 284 RPS 안정적 처리 (p95: 152ms, HTTP 실패율 0.01%)
+
+**상세 내역**: [6Week.md](./6Week.md)
+
 ## 서비스 구성 요소
 
 | 구성                         | 설명                                                                                                                               |

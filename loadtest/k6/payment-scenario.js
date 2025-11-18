@@ -37,16 +37,16 @@ export const options = {
   scenarios: {
     authorize_flow: {
       executor: "ramping-arrival-rate",
-      startRate: 20,
+      startRate: 50,
       timeUnit: "1s",
-      preAllocatedVUs: 800,
-      maxVUs: 1600,
+      preAllocatedVUs: 1200,
+      maxVUs: 2400,
       stages: [
-        { duration: "30s", target: 100 },  // Warm-up: 100 RPS
-        { duration: "1m", target: 200 },   // Ramp-up: 200 RPS
-        { duration: "2m", target: 300 },   // Increase: 300 RPS
-        { duration: "2m", target: 400 },   // Target: 400 RPS
-        { duration: "2m", target: 400 },   // Sustain: 400 RPS
+        { duration: "30s", target: 200 },  // Warm-up: 200 RPS
+        { duration: "1m", target: 400 },   // Ramp-up: 400 RPS
+        { duration: "1m", target: 600 },   // Increase: 600 RPS
+        { duration: "2m", target: 800 },   // Target: 800 RPS
+        { duration: "2m", target: 800 },   // Sustain: 800 RPS
         { duration: "30s", target: 0 },    // Cool-down
       ],
     },
@@ -121,11 +121,10 @@ export default function () {
     }
 
     if (!ENABLE_CAPTURE && !ENABLE_REFUND) {
-      sleep(1);
       return;
     }
 
-    sleep(0.25);
+    sleep(0.1);
 
     if (ENABLE_CAPTURE) {
       const capturePayload = JSON.stringify({
@@ -144,11 +143,11 @@ export default function () {
       }
 
       if (!ENABLE_REFUND) {
-        sleep(0.75);
+        sleep(0.1);
         return;
       }
 
-      sleep(0.25);
+      sleep(0.1);
     }
 
     if (ENABLE_REFUND) {
@@ -169,6 +168,6 @@ export default function () {
       }
     }
 
-    sleep(0.75);
+    sleep(0.1);
   });
 }
