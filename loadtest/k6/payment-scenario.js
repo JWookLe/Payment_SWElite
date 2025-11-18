@@ -94,7 +94,8 @@ export default function () {
       // Log first few errors for debugging
       if (errorSampleCount < MAX_ERROR_SAMPLES) {
         errorSampleCount++;
-        console.error(`ERROR #${errorSampleCount}: status=${authorizeResponse.status}, error=${authorizeResponse.error}, body=${authorizeResponse.body?.substring(0, 200)}`);
+        const bodyPreview = authorizeResponse.body ? authorizeResponse.body.substring(0, 200) : 'N/A';
+        console.error(`ERROR #${errorSampleCount}: status=${authorizeResponse.status}, error=${authorizeResponse.error}, body=${bodyPreview}`);
       }
       return;
     }
