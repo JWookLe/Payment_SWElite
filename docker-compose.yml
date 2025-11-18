@@ -78,6 +78,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       REDIS_HOST: redis
       EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      # JVM Memory Settings (Phase 1 optimization)
+      JAVA_OPTS: "-Xms2g -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof"
       # Rate limit capacity defaults (Phase 1 baseline)
       APP_RATE_LIMIT_AUTHORIZE_CAPACITY: 24000
       APP_RATE_LIMIT_CAPTURE_CAPACITY: 24000
