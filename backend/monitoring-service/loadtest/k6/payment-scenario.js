@@ -168,6 +168,6 @@ export default function () {
       }
     }
 
-    sleep(0.1);
+    // sleep(0.1); // Removed for accurate RPS testing
   });
 }
