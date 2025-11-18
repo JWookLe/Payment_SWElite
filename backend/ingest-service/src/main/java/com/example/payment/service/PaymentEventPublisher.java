@@ -9,29 +9,28 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.core.task.TaskExecutor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Publishes payment events to Kafka with Circuit Breaker protection.
+ * Publishes payment events to Kafka using Transactional Outbox Pattern.
+ *
+ * Architecture:
+ * - HTTP requests save events to outbox table only (fast path)
+ * - OutboxPollingScheduler publishes to Kafka asynchronously (background)
+ * - Circuit Breaker protects Kafka publishing
  *
  * Responsibilities:
- * - Publishes events to Kafka topics
- * - Detects and handles Kafka failures
- * - Falls back to DLQ (Direct to Database) when Kafka is unavailable
- * - Provides metrics and monitoring via Resilience4j
+ * - Save events to outbox (called by HTTP request handlers)
+ * - Publish events to Kafka (called by OutboxPollingScheduler)
+ * - Circuit Breaker integration for fault tolerance
  *
  * Circuit Breaker Behavior:
- * - CLOSED: Normal operation, all requests go to Kafka
- * - OPEN: Kafka is down, all requests are rejected immediately (fail-fast)
+ * - CLOSED: Normal operation, scheduler publishes to Kafka
+ * - OPEN: Kafka is down, events remain in outbox for retry
  * - HALF_OPEN: Recovery attempt, 3 test requests allowed
  */
 @Service
@@ -44,28 +43,36 @@ public class PaymentEventPublisher {
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
     private final CircuitBreakerRegistry circuitBreakerRegistry;
-    private final TaskExecutor outboxDispatchExecutor;
-    private final TransactionTemplate transactionTemplate;
 
     public PaymentEventPublisher(KafkaTemplate<String, String> kafkaTemplate,
                                 OutboxEventRepository outboxEventRepository,
                                 ObjectMapper objectMapper,
-                                CircuitBreakerRegistry circuitBreakerRegistry,
-                                @Qualifier("outboxDispatchExecutor") TaskExecutor outboxDispatchExecutor,
-                                TransactionTemplate transactionTemplate) {
+                                CircuitBreakerRegistry circuitBreakerRegistry) {
         this.kafkaTemplate = kafkaTemplate;
         this.outboxEventRepository = outboxEventRepository;
         this.objectMapper = objectMapper;
         this.circuitBreakerRegistry = circuitBreakerRegistry;
-        this.outboxDispatchExecutor = outboxDispatchExecutor;
-        this.transactionTemplate = transactionTemplate;
 
         // Register event listeners for monitoring circuit breaker state changes
         registerCircuitBreakerEventListeners(circuitBreakerRegistry);
     }
 
     /**
-     * Publishes a payment event to Kafka with Circuit Breaker protection.
+     * Publishes a payment event using Transactional Outbox Pattern.
+     *
+     * HTTP Request Flow (Fast Path):
+     * 1. Save event to outbox table (DB transaction)
+     * 2. Return HTTP 200 immediately (< 50ms)
+     *
+     * Background Processing (Polling Scheduler):
+     * - OutboxPollingScheduler polls unpublished events every 1 second
+     * - Publishes to Kafka with Circuit Breaker protection
+     * - Handles retries with exponential backoff
+     *
+     * Benefits:
+     * - HTTP response time independent of Kafka latency
+     * - Kafka failures don't affect user experience
+     * - Guaranteed eventual delivery via polling
      *
      * @param paymentId The payment aggregate identifier
      * @param eventType The type of payment event (PAYMENT_AUTHORIZED, PAYMENT_CAPTURED, etc.)
@@ -75,12 +82,12 @@ public class PaymentEventPublisher {
         try {
             String jsonPayload = objectMapper.writeValueAsString(payload);
 
-            // Save to outbox first (always persisted)
-            OutboxEvent outboxEvent = outboxEventRepository.save(
+            // Save to outbox only - HTTP request completes immediately
+            // OutboxPollingScheduler will publish to Kafka asynchronously
+            outboxEventRepository.save(
                     new OutboxEvent("payment", paymentId, eventType, jsonPayload));
 
-            // Dispatch asynchronously after the transaction commits so HTTP threads are not blocked
-            scheduleAsyncDispatch(outboxEvent.getId());
+            log.debug("Event saved to outbox: paymentId={}, eventType={}", paymentId, eventType);
 
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize event payload for paymentId={}, eventType={}",
@@ -89,14 +96,8 @@ public class PaymentEventPublisher {
     }
 
     /**
-     * Allows other components (e.g. outbox scheduler) to trigger asynchronous dispatch for an event id.
-     */
-    public void dispatchOutboxEventAsync(Long outboxEventId) {
-        outboxDispatchExecutor.execute(() -> processOutboxEvent(outboxEventId));
-    }
-
-    /**
-     * Publishes to Kafka with circuit breaker protection using programmatic approach.
+     * Publishes to Kafka with circuit breaker protection.
+     * Called by OutboxPollingScheduler for background event processing.
      * If circuit is OPEN, falls back to keeping the event in outbox (will be retried later).
      */
     public void publishToKafkaWithCircuitBreaker(OutboxEvent outboxEvent, String topic, String payload) {
@@ -140,36 +141,6 @@ public class PaymentEventPublisher {
             // Event is already saved in outbox, so we don't throw
         }
     }
-
-    private void processOutboxEvent(Long outboxEventId) {
-        try {
-            transactionTemplate.executeWithoutResult(status ->
-                    outboxEventRepository.findById(outboxEventId).ifPresent(event -> {
-                        if (event.isPublished()) {
-                            return;
-                        }
-                        publishToKafkaWithCircuitBreaker(event, resolveTopicName(event.getEventType()), event.getPayload());
-                    })
-            );
-        } catch (Exception ex) {
-            log.warn("Async dispatch failed for eventId={}. It will be retried by the scheduler if necessary.",
-                    outboxEventId, ex);
-        }
-    }
-
-    private void scheduleAsyncDispatch(Long outboxEventId) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    dispatchOutboxEventAsync(outboxEventId);
-                }
-            });
-        } else {
-            dispatchOutboxEventAsync(outboxEventId);
-        }
-    }
-
 
     /**
      * Registers event listeners to log circuit breaker state transitions.

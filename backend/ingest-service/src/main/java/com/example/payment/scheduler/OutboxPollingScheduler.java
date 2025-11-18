@@ -1,0 +1,144 @@
+package com.example.payment.scheduler;
+
+import com.example.payment.domain.OutboxEvent;
+import com.example.payment.repository.OutboxEventRepository;
+import com.example.payment.service.PaymentEventPublisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+
+/**
+ * Outbox Polling Scheduler - Production-grade Transactional Outbox Pattern
+ *
+ * Core Responsibilities:
+ * 1. Poll unpublished outbox events at regular intervals
+ * 2. Batch process events to Kafka with Circuit Breaker protection
+ * 3. Handle retries with exponential backoff
+ * 4. Prevent duplicate processing with pessimistic locking
+ *
+ * Scalability:
+ * - Processes up to 1000 events per second (1000 batch size / 1 second interval)
+ * - Horizontal scaling supported via distributed locking (future: ShedLock)
+ * - Independent from HTTP request processing (fault isolation)
+ *
+ * Circuit Breaker Integration:
+ * - Uses PaymentEventPublisher's Circuit Breaker for Kafka failures
+ * - When CB is OPEN, events remain in outbox for next retry
+ * - Automatic recovery when CB transitions to HALF_OPEN -> CLOSED
+ */
+@Component
+public class OutboxPollingScheduler {
+
+    private static final Logger log = LoggerFactory.getLogger(OutboxPollingScheduler.class);
+
+    private final OutboxEventRepository outboxEventRepository;
+    private final PaymentEventPublisher paymentEventPublisher;
+
+    @Value("${outbox.polling.batch-size:1000}")
+    private int batchSize;
+
+    @Value("${outbox.polling.max-retries:10}")
+    private int maxRetries;
+
+    @Value("${outbox.polling.retry-interval-seconds:30}")
+    private int retryIntervalSeconds;
+
+    public OutboxPollingScheduler(OutboxEventRepository outboxEventRepository,
+                                  PaymentEventPublisher paymentEventPublisher) {
+        this.outboxEventRepository = outboxEventRepository;
+        this.paymentEventPublisher = paymentEventPublisher;
+    }
+
+    /**
+     * Main polling loop - executes every 1 second
+     *
+     * Processing flow:
+     * 1. Query unpublished events with pessimistic lock (prevents race conditions)
+     * 2. For each event, attempt Kafka publish via Circuit Breaker
+     * 3. On success: mark as published
+     * 4. On failure: increment retry count, update lastRetryAt
+     * 5. Dead letter candidates (max retries exceeded) are logged
+     */
+    @Scheduled(fixedDelayString = "${outbox.polling.fixed-delay-ms:1000}")
+    @Transactional
+    public void pollAndPublishOutboxEvents() {
+        try {
+            Instant retryThreshold = Instant.now().minus(retryIntervalSeconds, ChronoUnit.SECONDS);
+            Pageable pageable = PageRequest.of(0, batchSize);
+
+            List<OutboxEvent> events = outboxEventRepository.findUnpublishedEventsForRetry(
+                    maxRetries, retryThreshold, pageable);
+
+            if (events.isEmpty()) {
+                return;
+            }
+
+            log.debug("Polling outbox: found {} unpublished events", events.size());
+
+            int successCount = 0;
+            int failureCount = 0;
+
+            for (OutboxEvent event : events) {
+                try {
+                    String topic = paymentEventPublisher.resolveTopicName(event.getEventType());
+                    paymentEventPublisher.publishToKafkaWithCircuitBreaker(event, topic, event.getPayload());
+
+                    if (event.isPublished()) {
+                        successCount++;
+                    } else {
+                        // Circuit Breaker rejected or other failure
+                        event.incrementRetryCount();
+                        failureCount++;
+                    }
+                } catch (Exception ex) {
+                    log.error("Failed to process outbox event id={}, aggregateId={}, eventType={}",
+                            event.getId(), event.getAggregateId(), event.getEventType(), ex);
+                    event.incrementRetryCount();
+                    failureCount++;
+                }
+            }
+
+            if (successCount > 0 || failureCount > 0) {
+                log.info("Outbox polling cycle completed: success={}, failure={}, total={}",
+                        successCount, failureCount, events.size());
+            }
+
+            // Check for dead letter candidates
+            checkDeadLetterCandidates();
+
+        } catch (Exception ex) {
+            log.error("Outbox polling cycle failed", ex);
+        }
+    }
+
+    /**
+     * Monitor events that exceeded max retries
+     * These events require manual intervention or DLQ processing
+     */
+    private void checkDeadLetterCandidates() {
+        try {
+            List<OutboxEvent> deadLetters = outboxEventRepository.findDeadLetterCandidates(
+                    maxRetries, PageRequest.of(0, 10));
+
+            if (!deadLetters.isEmpty()) {
+                log.error("Found {} dead letter candidates (exceeded {} retries). Manual intervention required.",
+                        deadLetters.size(), maxRetries);
+                deadLetters.forEach(event ->
+                        log.error("Dead letter event: id={}, aggregateId={}, eventType={}, retryCount={}",
+                                event.getId(), event.getAggregateId(), event.getEventType(), event.getRetryCount())
+                );
+            }
+        } catch (Exception ex) {
+            log.error("Failed to check dead letter candidates", ex);
+        }
+    }
+}

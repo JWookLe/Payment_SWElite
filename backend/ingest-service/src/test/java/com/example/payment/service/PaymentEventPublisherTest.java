@@ -15,16 +15,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.transaction.TransactionStatus;
-import org.springframework.transaction.support.TransactionTemplate;
-import java.util.function.Consumer;
 
 /**
  * PaymentEventPublisher 테스트
  *
- * Circuit Breaker로 보호된 이벤트 발행 로직을 검증합니다.
+ * Transactional Outbox Pattern 구현을 검증합니다.
+ * - publishEvent()는 outbox에만 저장 (즉시 Kafka 발행 안 함)
+ * - publishToKafkaWithCircuitBreaker()는 Scheduler가 호출
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("PaymentEventPublisher Tests")
@@ -39,29 +37,17 @@ class PaymentEventPublisherTest {
     @Mock
     private CircuitBreakerRegistry circuitBreakerRegistry;
 
-    @Mock
-    private TransactionTemplate transactionTemplate;
-
     private PaymentEventPublisher publisher;
     private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        var executor = new SyncTaskExecutor();
-        doAnswer(invocation -> {
-            @SuppressWarnings("unchecked")
-            Consumer<TransactionStatus> callback = invocation.getArgument(0);
-            callback.accept(mock(TransactionStatus.class));
-            return null;
-        }).when(transactionTemplate).executeWithoutResult(any());
         publisher = new PaymentEventPublisher(
                 kafkaTemplate,
                 outboxEventRepository,
                 objectMapper,
-                circuitBreakerRegistry,
-                executor,
-                transactionTemplate
+                circuitBreakerRegistry
         );
     }
 

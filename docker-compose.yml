@@ -91,6 +91,11 @@ services:
       SERVER_TOMCAT_ACCEPT_COUNT: 2000
       SERVER_TOMCAT_MAX_CONNECTIONS: 4000
       SERVER_TOMCAT_CONNECTION_TIMEOUT: 20000
+      # Outbox polling scheduler (Transactional Outbox Pattern)
+      OUTBOX_POLLING_FIXED_DELAY_MS: 1000
+      OUTBOX_POLLING_BATCH_SIZE: 1000
+      OUTBOX_POLLING_MAX_RETRIES: 10
+      OUTBOX_POLLING_RETRY_INTERVAL_SECONDS: 30
       # MockPG loadtest mode (false=normal 5% failure, true=loadtest 0.01% failure)
       MOCK_PG_LOADTEST_MODE: ${MOCK_PG_LOADTEST_MODE:-false}
     depends_on:
