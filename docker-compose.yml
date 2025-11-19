@@ -70,11 +70,15 @@ services:
       dockerfile: Dockerfile
     image: ingest-service:local
     environment:
+      # Shard1 (기본 DB)
       PAYMENT_DB_HOST: mariadb
       PAYMENT_DB_PORT: 3306
       PAYMENT_DB_NAME: paydb
       PAYMENT_DB_USER: payuser
       PAYMENT_DB_PASSWORD: paypass
+      # Shard2 (VM2 DB) - 로컬에서는 동일 DB 사용
+      PAYMENT_DB_HOST_SHARD2: mariadb
+      PAYMENT_DB_PORT_SHARD2: 3306
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       REDIS_HOST: redis
       EUREKA_SERVER_URL: http://eureka-server:8761/eureka/

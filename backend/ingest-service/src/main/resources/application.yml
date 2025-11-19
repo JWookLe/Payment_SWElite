@@ -2,16 +2,29 @@ spring:
   application:
     name: ingest-service
   datasource:
-    url: jdbc:mariadb://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:3306}/${PAYMENT_DB_NAME:paydb}
-    username: ${PAYMENT_DB_USER:payuser}
-    password: ${PAYMENT_DB_PASSWORD:paypass}
-    hikari:
-      maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:300}      # Aligned with Tomcat threads
-      minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:60}                 # Keep 60 connections ready
-      connection-timeout: 10000   # 10 second connection timeout
-      idle-timeout: 300000        # 5 minutes idle timeout
-      max-lifetime: 1800000       # 30 minutes max connection lifetime
-      leak-detection-threshold: 60000  # Detect connection leaks after 60s
+    # 샤딩 설정: shard1 (VM1), shard2 (VM2)
+    shard1:
+      url: jdbc:mariadb://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:13306}/${PAYMENT_DB_NAME:paydb}
+      username: ${PAYMENT_DB_USER:payuser}
+      password: ${PAYMENT_DB_PASSWORD:paypass}
+      hikari:
+        maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:150}
+        minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:30}
+        connection-timeout: 10000
+        idle-timeout: 300000
+        max-lifetime: 1800000
+        leak-detection-threshold: 60000
+    shard2:
+      url: jdbc:mariadb://${PAYMENT_DB_HOST_SHARD2:localhost}:${PAYMENT_DB_PORT_SHARD2:13307}/${PAYMENT_DB_NAME:paydb}
+      username: ${PAYMENT_DB_USER:payuser}
+      password: ${PAYMENT_DB_PASSWORD:paypass}
+      hikari:
+        maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:150}
+        minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:30}
+        connection-timeout: 10000
+        idle-timeout: 300000
+        max-lifetime: 1800000
+        leak-detection-threshold: 60000
   jpa:
     hibernate:
       ddl-auto: update

@@ -12,6 +12,7 @@ import com.example.payment.web.dto.CapturePaymentRequest;
 import com.example.payment.web.dto.LedgerEntryResponse;
 import com.example.payment.web.dto.PaymentResponse;
 import com.example.payment.web.dto.RefundPaymentRequest;
+import com.example.payment.config.shard.ShardContextHolder;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -54,8 +55,14 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResult authorize(AuthorizePaymentRequest request) {
-        return idempotencyCacheService.findAuthorization(request.merchantId(), request.idempotencyKey())
-                .orElseGet(() -> createAuthorization(request));
+        // 샤딩: merchant ID 기반으로 샤드 선택
+        ShardContextHolder.setShardByMerchantId(request.merchantId());
+        try {
+            return idempotencyCacheService.findAuthorization(request.merchantId(), request.idempotencyKey())
+                    .orElseGet(() -> createAuthorization(request));
+        } finally {
+            ShardContextHolder.clear();
+        }
     }
 
     /**
@@ -65,6 +72,16 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResult capture(Long paymentId, CapturePaymentRequest request) {
+        // 샤딩: merchant ID 기반으로 샤드 선택
+        ShardContextHolder.setShardByMerchantId(request.merchantId());
+        try {
+            return captureInternal(paymentId, request);
+        } finally {
+            ShardContextHolder.clear();
+        }
+    }
+
+    private PaymentResult captureInternal(Long paymentId, CapturePaymentRequest request) {
         rateLimiter.verifyCaptureAllowed(request.merchantId());
 
         Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
@@ -101,6 +118,16 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResult refund(Long paymentId, RefundPaymentRequest request) {
+        // 샤딩: merchant ID 기반으로 샤드 선택
+        ShardContextHolder.setShardByMerchantId(request.merchantId());
+        try {
+            return refundInternal(paymentId, request);
+        } finally {
+            ShardContextHolder.clear();
+        }
+    }
+
+    private PaymentResult refundInternal(Long paymentId, RefundPaymentRequest request) {
         rateLimiter.verifyRefundAllowed(request.merchantId());
 
         Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
