@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
 import javax.sql.DataSource;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -71,8 +72,12 @@ public class ShardDataSourceConfig {
     @Bean
     @Primary
     public DataSource dataSource(
-            @Qualifier("shard1DataSource") DataSource shard1,
-            @Qualifier("shard2DataSource") DataSource shard2) {
+            @Qualifier("shard1DataSource") HikariDataSource shard1,
+            @Qualifier("shard2DataSource") HikariDataSource shard2) throws SQLException {
+
+        // 두 데이터소스 모두 초기화 (Lazy 초기화 방지)
+        shard1.getConnection().close();
+        shard2.getConnection().close();
 
         ShardRoutingDataSource routingDataSource = new ShardRoutingDataSource();
 
@@ -82,6 +87,7 @@ public class ShardDataSourceConfig {
 
         routingDataSource.setTargetDataSources(targetDataSources);
         routingDataSource.setDefaultTargetDataSource(shard1);
+        routingDataSource.afterPropertiesSet();
 
         return routingDataSource;
     }
