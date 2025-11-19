@@ -43,8 +43,9 @@ public class ShardDataSourceConfig {
      */
     @Bean
     @ConfigurationProperties("spring.datasource.shard1.hikari")
-    public HikariDataSource shard1DataSource() {
-        return shard1DataSourceProperties()
+    public HikariDataSource shard1DataSource(
+            @Qualifier("shard1DataSourceProperties") DataSourceProperties properties) {
+        return properties
                 .initializeDataSourceBuilder()
                 .type(HikariDataSource.class)
                 .build();
@@ -55,8 +56,9 @@ public class ShardDataSourceConfig {
      */
     @Bean
     @ConfigurationProperties("spring.datasource.shard2.hikari")
-    public HikariDataSource shard2DataSource() {
-        return shard2DataSourceProperties()
+    public HikariDataSource shard2DataSource(
+            @Qualifier("shard2DataSourceProperties") DataSourceProperties properties) {
+        return properties
                 .initializeDataSourceBuilder()
                 .type(HikariDataSource.class)
                 .build();
