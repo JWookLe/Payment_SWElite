@@ -3,12 +3,16 @@ import { check, group, sleep } from "k6";
 import { Trend, Rate } from "k6/metrics";
 
 const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
-const MERCHANT_ID = __ENV.MERCHANT_ID || "K6-MERCHANT";
 const ENABLE_CAPTURE = ((__ENV.ENABLE_CAPTURE || "false").toLowerCase() === "true");
 const ENABLE_REFUND = ((__ENV.ENABLE_REFUND || "false").toLowerCase() === "true");
 
+// 샤딩을 위한 랜덤 merchantId 생성 (1~1000 범위로 짝수/홀수 균등 분배)
+function getRandomMerchantId() {
+  return `MERCHANT-${Math.floor(Math.random() * 1000) + 1}`;
+}
+
 // Debug: log configuration at startup
-console.log(`K6 Configuration: BASE_URL=${BASE_URL}, MERCHANT_ID=${MERCHANT_ID}`);
+console.log(`K6 Configuration: BASE_URL=${BASE_URL}, SHARDING_ENABLED=true`);
 
 const authorizeTrend = new Trend("payment_authorize_duration", true);
 const captureTrend = new Trend("payment_capture_duration", true);
@@ -74,9 +78,10 @@ export default function () {
   group("authorize-capture-refund", () => {
     const idempotencyKey = buildIdempotencyKey();
     const amount = buildAmount();
+    const merchantId = getRandomMerchantId();  // 샤딩을 위한 랜덤 merchantId
 
     const authorizePayload = JSON.stringify({
-      merchantId: MERCHANT_ID,
+      merchantId: merchantId,
       amount,
       currency: "KRW",
       idempotencyKey,
@@ -128,7 +133,7 @@ export default function () {
 
     if (ENABLE_CAPTURE) {
       const capturePayload = JSON.stringify({
-        merchantId: MERCHANT_ID,
+        merchantId: merchantId,
       });
 
       const captureResponse = http.post(`${BASE_URL}/payments/capture/${paymentId}`, capturePayload, headers);
@@ -152,7 +157,7 @@ export default function () {
 
     if (ENABLE_REFUND) {
       const refundPayload = JSON.stringify({
-        merchantId: MERCHANT_ID,
+        merchantId: merchantId,
         reason: "k6 refund simulation",
       });
 
