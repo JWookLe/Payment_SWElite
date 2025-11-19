@@ -12,7 +12,6 @@ import com.example.payment.web.dto.CapturePaymentRequest;
 import com.example.payment.web.dto.LedgerEntryResponse;
 import com.example.payment.web.dto.PaymentResponse;
 import com.example.payment.web.dto.RefundPaymentRequest;
-import com.example.payment.config.shard.ShardContextHolder;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -55,14 +54,9 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResult authorize(AuthorizePaymentRequest request) {
-        // 샤딩: merchant ID 기반으로 샤드 선택
-        ShardContextHolder.setShardByMerchantId(request.merchantId());
-        try {
-            return idempotencyCacheService.findAuthorization(request.merchantId(), request.idempotencyKey())
-                    .orElseGet(() -> createAuthorization(request));
-        } finally {
-            ShardContextHolder.clear();
-        }
+        // 샤딩은 Controller에서 트랜잭션 시작 전에 설정됨
+        return idempotencyCacheService.findAuthorization(request.merchantId(), request.idempotencyKey())
+                .orElseGet(() -> createAuthorization(request));
     }
 
     /**
@@ -72,13 +66,8 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResult capture(Long paymentId, CapturePaymentRequest request) {
-        // 샤딩: merchant ID 기반으로 샤드 선택
-        ShardContextHolder.setShardByMerchantId(request.merchantId());
-        try {
-            return captureInternal(paymentId, request);
-        } finally {
-            ShardContextHolder.clear();
-        }
+        // 샤딩은 Controller에서 트랜잭션 시작 전에 설정됨
+        return captureInternal(paymentId, request);
     }
 
     private PaymentResult captureInternal(Long paymentId, CapturePaymentRequest request) {
@@ -118,13 +107,8 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResult refund(Long paymentId, RefundPaymentRequest request) {
-        // 샤딩: merchant ID 기반으로 샤드 선택
-        ShardContextHolder.setShardByMerchantId(request.merchantId());
-        try {
-            return refundInternal(paymentId, request);
-        } finally {
-            ShardContextHolder.clear();
-        }
+        // 샤딩은 Controller에서 트랜잭션 시작 전에 설정됨
+        return refundInternal(paymentId, request);
     }
 
     private PaymentResult refundInternal(Long paymentId, RefundPaymentRequest request) {

@@ -1,5 +1,6 @@
 package com.example.payment.web;
 
+import com.example.payment.config.shard.ShardContextHolder;
 import com.example.payment.service.PaymentService;
 import com.example.payment.service.PaymentResult;
 import com.example.payment.service.RateLimitExceededException;
@@ -21,40 +22,58 @@ public class PaymentController {
 
     @PostMapping("/authorize")
     public ResponseEntity<?> authorize(@Valid @RequestBody AuthorizePaymentRequest request) {
-        PaymentResult result = paymentService.authorize(request);
-        if (result.duplicate()) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(new ErrorResponse("DUPLICATE_REQUEST",
-                            "Idempotency key already used",
-                            result.response().paymentId()));
+        // 트랜잭션 시작 전에 샤드 선택 (중요!)
+        ShardContextHolder.setShardByMerchantId(request.merchantId());
+        try {
+            PaymentResult result = paymentService.authorize(request);
+            if (result.duplicate()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(new ErrorResponse("DUPLICATE_REQUEST",
+                                "Idempotency key already used",
+                                result.response().paymentId()));
+            }
+            return ResponseEntity.ok(result.response());
+        } finally {
+            ShardContextHolder.clear();
         }
-        return ResponseEntity.ok(result.response());
     }
 
     @PostMapping("/capture/{paymentId}")
     public ResponseEntity<?> capture(@PathVariable Long paymentId,
                                       @Valid @RequestBody CapturePaymentRequest request) {
-        PaymentResult result = paymentService.capture(paymentId, request);
-        if (result.duplicate()) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(new ErrorResponse("CAPTURE_CONFLICT",
-                            result.response().message(),
-                            result.response().paymentId()));
+        // 트랜잭션 시작 전에 샤드 선택 (중요!)
+        ShardContextHolder.setShardByMerchantId(request.merchantId());
+        try {
+            PaymentResult result = paymentService.capture(paymentId, request);
+            if (result.duplicate()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(new ErrorResponse("CAPTURE_CONFLICT",
+                                result.response().message(),
+                                result.response().paymentId()));
+            }
+            return ResponseEntity.ok(result.response());
+        } finally {
+            ShardContextHolder.clear();
         }
-        return ResponseEntity.ok(result.response());
     }
 
     @PostMapping("/refund/{paymentId}")
     public ResponseEntity<?> refund(@PathVariable Long paymentId,
                                      @Valid @RequestBody RefundPaymentRequest request) {
-        PaymentResult result = paymentService.refund(paymentId, request);
-        if (result.duplicate()) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(new ErrorResponse("REFUND_CONFLICT",
-                            result.response().message(),
-                            result.response().paymentId()));
+        // 트랜잭션 시작 전에 샤드 선택 (중요!)
+        ShardContextHolder.setShardByMerchantId(request.merchantId());
+        try {
+            PaymentResult result = paymentService.refund(paymentId, request);
+            if (result.duplicate()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(new ErrorResponse("REFUND_CONFLICT",
+                                result.response().message(),
+                                result.response().paymentId()));
+            }
+            return ResponseEntity.ok(result.response());
+        } finally {
+            ShardContextHolder.clear();
         }
-        return ResponseEntity.ok(result.response());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
