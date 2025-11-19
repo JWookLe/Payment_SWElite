@@ -3,7 +3,7 @@ services:
     image: mariadb:11.4
     container_name: pay-mariadb
     command:
-      - --max-connections=600
+      - --max-connections=1000
       - --innodb-buffer-pool-size=512M
       - --innodb-log-file-size=128M
       - --innodb-flush-log-at-trx-commit=2
