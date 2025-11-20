@@ -206,11 +206,13 @@ public class PaymentService {
                                                 "Payment authorized and capture requested - Approval: "
                                                                 + pgResponse.getApprovalNumber());
 
+                                // Save Idempotency Response within the same transaction
+                                idempotencyCacheService.storeAuthorization(request.merchantId(),
+                                                request.idempotencyKey(), 200,
+                                                res);
+
                                 return res;
                         });
-
-                        idempotencyCacheService.storeAuthorization(request.merchantId(), request.idempotencyKey(), 200,
-                                        response);
 
                         return new PaymentResult(response, false);
                 } catch (PgCircuitOpenException circuitEx) {

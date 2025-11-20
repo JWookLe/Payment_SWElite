@@ -29,16 +29,15 @@ public class IdempotencyCacheService {
     private final IdempotencyCacheProperties properties;
 
     public IdempotencyCacheService(IdemResponseCacheRepository repository,
-                                   StringRedisTemplate redisTemplate,
-                                   ObjectMapper objectMapper,
-                                   IdempotencyCacheProperties properties) {
+            StringRedisTemplate redisTemplate,
+            ObjectMapper objectMapper,
+            IdempotencyCacheProperties properties) {
         this.repository = repository;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.properties = properties;
     }
 
-    @Transactional(readOnly = true)
     public Optional<PaymentResult> findAuthorization(String merchantId, String idempotencyKey) {
         String key = cacheKey(merchantId, idempotencyKey);
         try {
@@ -48,15 +47,18 @@ public class IdempotencyCacheService {
                 return Optional.of(new PaymentResult(response, true));
             }
         } catch (JsonProcessingException ex) {
-            log.warn("Failed to deserialize idempotent response from Redis for merchant={}, key={}", merchantId, idempotencyKey, ex);
+            log.warn("Failed to deserialize idempotent response from Redis for merchant={}, key={}", merchantId,
+                    idempotencyKey, ex);
         } catch (DataAccessException ex) {
-            log.warn("Redis access failed when reading idempotent cache for merchant={}, key={}", merchantId, idempotencyKey, ex);
+            log.warn("Redis access failed when reading idempotent cache for merchant={}, key={}", merchantId,
+                    idempotencyKey, ex);
         }
 
         return repository.findById(new IdemResponseCacheId(merchantId, idempotencyKey))
                 .map(entity -> {
                     try {
-                        PaymentResponse response = objectMapper.readValue(entity.getResponseBody(), PaymentResponse.class);
+                        PaymentResponse response = objectMapper.readValue(entity.getResponseBody(),
+                                PaymentResponse.class);
                         putInRedis(key, entity.getResponseBody());
                         return new PaymentResult(response, true);
                     } catch (JsonProcessingException ex) {
