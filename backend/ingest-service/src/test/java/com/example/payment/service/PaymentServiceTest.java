@@ -37,118 +37,128 @@ import org.springframework.test.util.ReflectionTestUtils;
 @DisplayName("PaymentService Tests")
 class PaymentServiceTest {
 
-    @Mock
-    private PaymentRepository paymentRepository;
+        @Mock
+        private PaymentRepository paymentRepository;
 
-    @Mock
-    private IdempotencyCacheService idempotencyCacheService;
+        @Mock
+        private IdempotencyCacheService idempotencyCacheService;
 
-    @Mock
-    private RedisRateLimiter rateLimiter;
+        @Mock
+        private RedisRateLimiter rateLimiter;
 
-    @Mock
-    private PaymentEventPublisher eventPublisher;
+        @Mock
+        private PaymentEventPublisher eventPublisher;
 
-    @Mock
-    private PgAuthApiService pgAuthApiService;
+        @Mock
+        private PgAuthApiService pgAuthApiService;
 
-    private PaymentService paymentService;
+        @Mock
+        private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
-    @BeforeEach
-    void setUp() {
-        paymentService = new PaymentService(
-                paymentRepository,
-                idempotencyCacheService,
-                rateLimiter,
-                eventPublisher,
-                pgAuthApiService
-        );
-    }
+        private PaymentService paymentService;
 
-    @Test
-    @DisplayName("캐시에 있는 응답을 반환하고 레이트 제한을 체크하지 않아야 함")
-    void authorizeReturnsCachedResponseWithoutTriggeringRateLimiter() {
-        // Given: 캐시에 저장된 응답
-        AuthorizePaymentRequest request = new AuthorizePaymentRequest("M123", 1000L, "KRW", "key-1");
-        PaymentResponse cachedResponse = new PaymentResponse(
-                42L,
-                "REQUESTED",
-                1000L,
-                "KRW",
-                Instant.now(),
-                List.of(),
-                "cached"
-        );
+        @BeforeEach
+        void setUp() {
+                paymentService = new PaymentService(
+                                paymentRepository,
+                                idempotencyCacheService,
+                                rateLimiter,
+                                eventPublisher,
+                                pgAuthApiService,
+                                transactionManager);
 
-        when(idempotencyCacheService.findAuthorization("M123", "key-1"))
-                .thenReturn(Optional.of(new PaymentResult(cachedResponse, true)));
+                // TransactionTemplate mocking support
+                // When transactionTemplate.execute is called, it calls
+                // transactionManager.getTransaction and commit/rollback
+                // We need to ensure it executes the callback
+                org.springframework.transaction.TransactionStatus status = org.mockito.Mockito
+                                .mock(org.springframework.transaction.TransactionStatus.class);
+                org.mockito.Mockito.lenient().when(transactionManager.getTransaction(any())).thenReturn(status);
+        }
 
-        // When: authorize 호출
-        PaymentResult result = paymentService.authorize(request);
+        @Test
+        @DisplayName("캐시에 있는 응답을 반환하고 레이트 제한을 체크하지 않아야 함")
+        void authorizeReturnsCachedResponseWithoutTriggeringRateLimiter() {
+                // Given: 캐시에 저장된 응답
+                AuthorizePaymentRequest request = new AuthorizePaymentRequest("M123", 1000L, "KRW", "key-1");
+                PaymentResponse cachedResponse = new PaymentResponse(
+                                42L,
+                                "REQUESTED",
+                                1000L,
+                                "KRW",
+                                Instant.now(),
+                                List.of(),
+                                "cached");
 
-        // Then: 중복 응답이고 레이트 제한을 체크하지 않아야 함
-        assertThat(result.duplicate()).isTrue();
-        assertThat(result.response()).isEqualTo(cachedResponse);
-        verify(rateLimiter, never()).verifyAuthorizeAllowed(anyString());
-    }
+                when(idempotencyCacheService.findAuthorization("M123", "key-1"))
+                                .thenReturn(Optional.of(new PaymentResult(cachedResponse, true)));
 
-    @Test
-    @DisplayName("캐시 미스 시 PG API 호출 후 결제를 DB에 저장하고 이벤트를 발행해야 함")
-    void authorizePersistsAndPublishesEventWhenCacheMiss() throws Exception {
-        // Given: 캐시 미스
-        AuthorizePaymentRequest request = new AuthorizePaymentRequest("M123", 1000L, "KRW", "key-2");
+                // When: authorize 호출
+                PaymentResult result = paymentService.authorize(request);
 
-        when(idempotencyCacheService.findAuthorization("M123", "key-2"))
-                .thenReturn(Optional.empty());
+                // Then: 중복 응답이고 레이트 제한을 체크하지 않아야 함
+                assertThat(result.duplicate()).isTrue();
+                assertThat(result.response()).isEqualTo(cachedResponse);
+                verify(rateLimiter, never()).verifyAuthorizeAllowed(anyString());
+        }
 
-        when(paymentRepository.findByMerchantIdAndIdempotencyKey("M123", "key-2"))
-                .thenReturn(Optional.empty());
+        @Test
+        @DisplayName("캐시 미스 시 PG API 호출 후 결제를 DB에 저장하고 이벤트를 발행해야 함")
+        void authorizePersistsAndPublishesEventWhenCacheMiss() throws Exception {
+                // Given: 캐시 미스
+                AuthorizePaymentRequest request = new AuthorizePaymentRequest("M123", 1000L, "KRW", "key-2");
 
-        // Mock PG API 승인 응답
-        AuthorizationResponse pgResponse = new AuthorizationResponse(
-                "SUCCESS",
-                "txn_12345678",
-                "APP12345678",
-                "0000",
-                "승인 성공",
-                BigDecimal.valueOf(1000L),
-                Instant.now()
-        );
-        when(pgAuthApiService.requestAuthorization(
-                eq("M123"),
-                eq(BigDecimal.valueOf(1000L)),
-                eq("KRW"),
-                anyString()
-        )).thenReturn(pgResponse);
+                when(idempotencyCacheService.findAuthorization("M123", "key-2"))
+                                .thenReturn(Optional.empty());
 
-        // Payment 저장 시 ID를 설정하여 반환
-        when(paymentRepository.save(any(Payment.class)))
-                .thenAnswer(invocation -> {
-                    Payment payment = invocation.getArgument(0);
-                    ReflectionTestUtils.setField(payment, "id", 99L);  // 실제로는 auto-increment로 생성됨
-                    return payment;
-                });
+                when(paymentRepository.findByMerchantIdAndIdempotencyKey("M123", "key-2"))
+                                .thenReturn(Optional.empty());
 
-        // When: authorize 호출
-        PaymentResult result = paymentService.authorize(request);
+                // Mock PG API 승인 응답
+                AuthorizationResponse pgResponse = new AuthorizationResponse(
+                                "SUCCESS",
+                                "txn_12345678",
+                                "APP12345678",
+                                "0000",
+                                "승인 성공",
+                                BigDecimal.valueOf(1000L),
+                                Instant.now());
+                when(pgAuthApiService.requestAuthorization(
+                                eq("M123"),
+                                eq(BigDecimal.valueOf(1000L)),
+                                eq("KRW"),
+                                anyString())).thenReturn(pgResponse);
 
-        // Then: 중복이 아니고 PG API 호출 및 이벤트가 발행되어야 함
-        assertThat(result.duplicate()).isFalse();
-        verify(rateLimiter).verifyAuthorizeAllowed("M123");
-        verify(pgAuthApiService).requestAuthorization(
-                eq("M123"),
-                eq(BigDecimal.valueOf(1000L)),
-                eq("KRW"),
-                anyString()
-        );
-        verify(idempotencyCacheService).storeAuthorization(eq("M123"), eq("key-2"), eq(200), any(PaymentResponse.class));
+                // Payment 저장 시 ID를 설정하여 반환
+                when(paymentRepository.save(any(Payment.class)))
+                                .thenAnswer(invocation -> {
+                                        Payment payment = invocation.getArgument(0);
+                                        ReflectionTestUtils.setField(payment, "id", 99L); // 실제로는 auto-increment로 생성됨
+                                        return payment;
+                                });
 
-        // Circuit Breaker를 통해 이벤트가 발행되어야 함
-        ArgumentCaptor<Long> paymentIdCaptor = ArgumentCaptor.forClass(Long.class);
-        ArgumentCaptor<String> eventTypeCaptor = ArgumentCaptor.forClass(String.class);
-        verify(eventPublisher, times(2)).publishEvent(paymentIdCaptor.capture(), eventTypeCaptor.capture(), any());
+                // When: authorize 호출
+                PaymentResult result = paymentService.authorize(request);
 
-        assertThat(paymentIdCaptor.getAllValues()).containsExactly(99L, 99L);
-        assertThat(eventTypeCaptor.getAllValues()).containsExactly("PAYMENT_AUTHORIZED", "PAYMENT_CAPTURE_REQUESTED");
-    }
+                // Then: 중복이 아니고 PG API 호출 및 이벤트가 발행되어야 함
+                assertThat(result.duplicate()).isFalse();
+                verify(rateLimiter).verifyAuthorizeAllowed("M123");
+                verify(pgAuthApiService).requestAuthorization(
+                                eq("M123"),
+                                eq(BigDecimal.valueOf(1000L)),
+                                eq("KRW"),
+                                anyString());
+                verify(idempotencyCacheService).storeAuthorization(eq("M123"), eq("key-2"), eq(200),
+                                any(PaymentResponse.class));
+
+                // Circuit Breaker를 통해 이벤트가 발행되어야 함
+                ArgumentCaptor<Long> paymentIdCaptor = ArgumentCaptor.forClass(Long.class);
+                ArgumentCaptor<String> eventTypeCaptor = ArgumentCaptor.forClass(String.class);
+                verify(eventPublisher, times(2)).publishEvent(paymentIdCaptor.capture(), eventTypeCaptor.capture(),
+                                any());
+
+                assertThat(paymentIdCaptor.getAllValues()).containsExactly(99L, 99L);
+                assertThat(eventTypeCaptor.getAllValues()).containsExactly("PAYMENT_AUTHORIZED",
+                                "PAYMENT_CAPTURE_REQUESTED");
+        }
 }
