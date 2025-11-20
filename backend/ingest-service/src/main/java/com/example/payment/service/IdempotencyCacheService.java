@@ -16,6 +16,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class IdempotencyCacheService {
@@ -37,6 +38,7 @@ public class IdempotencyCacheService {
         this.properties = properties;
     }
 
+    @Transactional(readOnly = true)
     public Optional<PaymentResult> findAuthorization(String merchantId, String idempotencyKey) {
         String key = cacheKey(merchantId, idempotencyKey);
         try {
@@ -67,6 +69,7 @@ public class IdempotencyCacheService {
                 });
     }
 
+    @Transactional
     public void storeAuthorization(String merchantId, String idempotencyKey, int httpStatus, PaymentResponse response) {
         String serialized = serialize(response);
         try {
