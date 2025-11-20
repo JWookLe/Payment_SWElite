@@ -26,7 +26,7 @@ const MAX_ERROR_SAMPLES = 10;
 const thresholds = {
   http_req_failed: ["rate<0.05"],
   http_req_duration: ["p(95)<1000"],
-  payment_errors: ["rate<0.02"],
+  payment_errors: ["rate<0.002"],
   payment_authorize_duration: ["p(95)<500"],
 };
 
