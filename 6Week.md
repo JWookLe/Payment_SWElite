@@ -199,6 +199,52 @@ Admin Dashboard에서 Circuit Breaker 테스트를 실행할 수 있도록 기�
 
 ### 5-1. 초기 문제
 
+## 6. 11월 20일 대용량 부하 대응 정리
+
+### 6-1. DB 샤딩·커넥션 설계
+
+- **샤드 구성**: VM1 기본 DB(Shard1, 13306) + VM2 Shard2(13307)로 운영. merchantId 짝/홀에 따라 `ShardContextHolder`가 shard1/shard2를 선택하도록 이미 구현돼 있어 그대로 활용.
+- **커넥션 한도**:
+  - Shard1: `--max-connections=1200`까지 확대, ingest Hikari 350×1 + worker들을 모두 수용하도록 여유 확보.
+  - Shard2: `--max-connections=900`(필요 시 1000까지 상향)로 bump.
+- **애플리케이션 풀**:
+  - ingest-service(Hikari) 350/60, Tomcat 350(두 VM 동일). VM2 쪽도 같은 값으로 맞춰야 전체 RPS가 균형 있게 올라감.
+- **Rate Limit**: authorize/capture 48,000 req/min(=800 RPS)으로 확장, refund는 30,000 req/min.
+
+### 6-2. ingest-service 다중 배치
+
+- VM1은 상태 계층(docker-compose.state.yml)에서 기존 ingest를 유지.
+- VM2는 app 계층(docker-compose.app.yml)에 `pay-ingest-vm2`를 추가, DB shard2(컨테이너 mariadb-shard2)와 통신.
+- Gateway는 여전히 Eureka를 통해 두 ingest 인스턴스를 라운드로빈 하므로 추가 라우팅 수정 없음.
+
+### 6-3. Outbox Poller 구조 개선
+
+- `OutboxPollingScheduler` 전체에 붙었던 `@Transactional`을 제거하고 `TransactionTemplate`으로 **락 걸린 SELECT → 즉시 커넥션 반환** 구조로 변경.
+- Kafka 발행은 트랜잭션 밖에서 처리하고, 실패 시 `incrementRetryCount`만 짧은 트랜잭션으로 감싼다.
+- 배치 크기를 1000→200으로 줄여 HTTP 요청과 DB 커넥션을 경쟁하지 않도록 함.
+- compose 환경변수(`OUTBOX_POLLING_BATCH_SIZE: 200`)도 VM1/VM2 모두에 적용.
+
+### 6-4. loadtest 시나리오 및 Threshold 조정
+
+- `payment_errors` 임계값을 현실적인 `rate<0.002`로 완화(0.2% 초과 시 FAIL). PG Mock 실패 0.01% 수준은 PASS 처리.
+- k6 시나리오의 `preAllocatedVUs=600`, `maxVUs=1200`으로 확장해 800 RPS ramp-up 시 VU 부족이 발생하지 않도록 조정.
+- summary 파일 권한 문제는 `chmod 777 loadtest/k6`로 해결하여 Docker k6가 `/k6/summary.json`을 쓸 수 있게 함.
+
+### 6-5. 800 RPS 달성을 위한 추가 액션
+
+1. **VM2 Tomcat 정렬**: `SERVER_TOMCAT_THREADS_MAX`를 VM1과 동일하게 350까지 올리고 재배포.
+2. **DB 여유 확인**: shard2 `--max-connections`를 1000 수준으로 한 번 더 올리고, `SHOW STATUS LIKE 'Threads_connected'`로 여유를 체크.
+3. **리소스 모니터링**: 각 VM에서 `docker stats` 혹은 Grafana 대시보드로 CPU/메모리 여유를 확인. 필요 시 JVM `JAVA_OPTS -Xmx` 상향 또는 VM 스펙 업.
+4. **k6 스크립트 업데이트**: stage target을 800RPS로 유지(현재 설정)하고, 테스트 중 `http_reqs.rate`와 Hikari `connections.pending`이 0인지 확인.
+5. **결과 검증**: `loadtest/k6/summary.json`에서 `http_req_failed`가 0.05% 미만인지, payment_errors threshold가 PASS인지 확인.
+
+### 6-6. 남은 과제 (체크리스트)
+
+- [ ] VM2 compose에서 Tomcat/Hikari/RateLimit 값이 VM1과 완전히 동일한지 재확인
+- [ ] shard2 DB 재시작 후 `mariadb-admin ping`으로 정상 기동 여부 확인
+- [ ] `git push`로 오늘 수정한 ingest/outbox/k6 변경분을 원격 반영
+- [ ] Grafana/Prometheus 패널에 Hikari active/pending, Tomcat thread 사용률을 추가해 실시간 감시
+
 테스트 버튼을 누르면 즉시 실패로 표시되고, Grafana에서 request rate가 0으로 나타났다. 실제로 테스트가 실행되지 않고 있었다.
 
 ### 5-2. 원인 분석
