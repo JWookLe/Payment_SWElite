@@ -4,7 +4,7 @@ spring:
   datasource:
     # 샤딩 설정: shard1 (VM1), shard2 (VM2)
     shard1:
-      url: jdbc:mariadb://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:13306}/${PAYMENT_DB_NAME:paydb}
+      url: jdbc:mariadb://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:13306}/${PAYMENT_DB_NAME:paydb}?rewriteBatchedStatements=true
       username: ${PAYMENT_DB_USER:payuser}
       password: ${PAYMENT_DB_PASSWORD:paypass}
       hikari:
@@ -15,7 +15,7 @@ spring:
         max-lifetime: 1800000
         leak-detection-threshold: 60000
     shard2:
-      url: jdbc:mariadb://${PAYMENT_DB_HOST_SHARD2:localhost}:${PAYMENT_DB_PORT_SHARD2:13307}/${PAYMENT_DB_NAME:paydb}
+      url: jdbc:mariadb://${PAYMENT_DB_HOST_SHARD2:localhost}:${PAYMENT_DB_PORT_SHARD2:13307}/${PAYMENT_DB_NAME:paydb}?rewriteBatchedStatements=true
       username: ${PAYMENT_DB_USER:payuser}
       password: ${PAYMENT_DB_PASSWORD:paypass}
       hikari:

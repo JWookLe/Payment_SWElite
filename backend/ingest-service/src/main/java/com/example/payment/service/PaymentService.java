@@ -174,26 +174,38 @@ public class PaymentService {
 
                         // Step 2 & 3: DB 저장 및 이벤트 발행 (트랜잭션 내에서 실행)
                         PaymentResponse response = transactionTemplate.execute(status -> {
-                                // AUTHORIZED 상태로 저장 (승인 완료)
+                                // OPTIMIZATION: Save directly as CAPTURE_REQUESTED to avoid extra UPDATE
+                                // (Authorized -> Capture Requested transition happens immediately)
                                 Payment payment = new Payment(request.merchantId(), request.amount(),
-                                                request.currency(), PaymentStatus.AUTHORIZED, request.idempotencyKey());
+                                                request.currency(), PaymentStatus.CAPTURE_REQUESTED,
+                                                request.idempotencyKey());
                                 paymentRepository.save(payment);
 
-                                // payment.authorized 이벤트 발행 (ledger 기록 트리거)
+                                // Event 1: Payment Authorized (Fact)
                                 publishEvent(payment, "PAYMENT_AUTHORIZED", Map.of(
                                                 "paymentId", payment.getId(),
-                                                "status", payment.getStatus().name(),
+                                                "status", "AUTHORIZED", // Event payload keeps original semantic status
                                                 "amount", payment.getAmount(),
                                                 "currency", payment.getCurrency(),
                                                 "approvalNumber", pgResponse.getApprovalNumber(),
                                                 "transactionId", pgResponse.getTransactionId(),
                                                 "occurredAt", Instant.now().toString()));
 
+                                // Event 2: Capture Requested (Fact)
+                                publishEvent(payment, "PAYMENT_CAPTURE_REQUESTED", Map.of(
+                                                "paymentId", payment.getId(),
+                                                "status", payment.getStatus().name(),
+                                                "amount", payment.getAmount(),
+                                                "currency", payment.getCurrency(),
+                                                "merchantId", payment.getMerchantId(),
+                                                "approvalNumber", pgResponse.getApprovalNumber(),
+                                                "transactionId", pgResponse.getTransactionId(),
+                                                "occurredAt", Instant.now().toString()));
+
                                 PaymentResponse res = toResponse(payment, Collections.emptyList(),
-                                                "Payment authorized successfully - Approval: "
+                                                "Payment authorized and capture requested - Approval: "
                                                                 + pgResponse.getApprovalNumber());
 
-                                scheduleSettlement(payment, pgResponse);
                                 return res;
                         });
 
@@ -236,21 +248,6 @@ public class PaymentService {
                                         "Idempotency key already used");
                         return new PaymentResult(response, true);
                 }
-        }
-
-        private void scheduleSettlement(Payment payment, AuthorizationResponse pgResponse) {
-                payment.setStatus(PaymentStatus.CAPTURE_REQUESTED);
-                paymentRepository.save(payment);
-
-                publishEvent(payment, "PAYMENT_CAPTURE_REQUESTED", Map.of(
-                                "paymentId", payment.getId(),
-                                "status", payment.getStatus().name(),
-                                "amount", payment.getAmount(),
-                                "currency", payment.getCurrency(),
-                                "merchantId", payment.getMerchantId(),
-                                "approvalNumber", pgResponse.getApprovalNumber(),
-                                "transactionId", pgResponse.getTransactionId(),
-                                "occurredAt", Instant.now().toString()));
         }
 
         private void publishEvent(Payment payment, String eventType, Map<String, Object> payload) {
