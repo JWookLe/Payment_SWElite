@@ -10,7 +10,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -42,8 +43,9 @@ public class OutboxPollingScheduler {
 
     private final OutboxEventRepository outboxEventRepository;
     private final PaymentEventPublisher paymentEventPublisher;
+    private final TransactionTemplate transactionTemplate;
 
-    @Value("${outbox.polling.batch-size:1000}")
+    @Value("${outbox.polling.batch-size:200}")
     private int batchSize;
 
     @Value("${outbox.polling.max-retries:10}")
@@ -53,9 +55,11 @@ public class OutboxPollingScheduler {
     private int retryIntervalSeconds;
 
     public OutboxPollingScheduler(OutboxEventRepository outboxEventRepository,
-                                  PaymentEventPublisher paymentEventPublisher) {
+                                  PaymentEventPublisher paymentEventPublisher,
+                                  PlatformTransactionManager transactionManager) {
         this.outboxEventRepository = outboxEventRepository;
         this.paymentEventPublisher = paymentEventPublisher;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     /**
@@ -69,16 +73,14 @@ public class OutboxPollingScheduler {
      * 5. Dead letter candidates (max retries exceeded) are logged
      */
     @Scheduled(fixedDelayString = "${outbox.polling.fixed-delay-ms:1000}")
-    @Transactional
     public void pollAndPublishOutboxEvents() {
         try {
             Instant retryThreshold = Instant.now().minus(retryIntervalSeconds, ChronoUnit.SECONDS);
             Pageable pageable = PageRequest.of(0, batchSize);
 
-            List<OutboxEvent> events = outboxEventRepository.findUnpublishedEventsForRetry(
-                    maxRetries, retryThreshold, pageable);
+            List<OutboxEvent> events = fetchEventsWithLock(retryThreshold, pageable);
 
-            if (events.isEmpty()) {
+            if (events == null || events.isEmpty()) {
                 return;
             }
 
@@ -96,13 +98,13 @@ public class OutboxPollingScheduler {
                         successCount++;
                     } else {
                         // Circuit Breaker rejected or other failure
-                        event.incrementRetryCount();
+                        incrementRetryCount(event);
                         failureCount++;
                     }
                 } catch (Exception ex) {
                     log.error("Failed to process outbox event id={}, aggregateId={}, eventType={}",
                             event.getId(), event.getAggregateId(), event.getEventType(), ex);
-                    event.incrementRetryCount();
+                    incrementRetryCount(event);
                     failureCount++;
                 }
             }
@@ -118,6 +120,19 @@ public class OutboxPollingScheduler {
         } catch (Exception ex) {
             log.error("Outbox polling cycle failed", ex);
         }
+    }
+
+    private List<OutboxEvent> fetchEventsWithLock(Instant retryThreshold, Pageable pageable) {
+        return transactionTemplate.execute(status ->
+                outboxEventRepository.findUnpublishedEventsForRetry(
+                        maxRetries, retryThreshold, pageable));
+    }
+
+    private void incrementRetryCount(OutboxEvent event) {
+        transactionTemplate.executeWithoutResult(status -> {
+            event.incrementRetryCount();
+            outboxEventRepository.save(event);
+        });
     }
 
     /**

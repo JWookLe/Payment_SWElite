@@ -27,15 +27,18 @@ public class IdempotencyCacheService {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final IdempotencyCacheProperties properties;
+    private final boolean loadTestMode;
 
     public IdempotencyCacheService(IdemResponseCacheRepository repository,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
-            IdempotencyCacheProperties properties) {
+            IdempotencyCacheProperties properties,
+            @org.springframework.beans.factory.annotation.Value("${mock.pg.loadtest-mode:false}") boolean loadTestMode) {
         this.repository = repository;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.loadTestMode = loadTestMode;
     }
 
     public Optional<PaymentResult> findAuthorization(String merchantId, String idempotencyKey) {
@@ -52,6 +55,10 @@ public class IdempotencyCacheService {
         } catch (DataAccessException ex) {
             log.warn("Redis access failed when reading idempotent cache for merchant={}, key={}", merchantId,
                     idempotencyKey, ex);
+        }
+
+        if (loadTestMode) {
+            return Optional.empty();
         }
 
         return repository.findById(new IdemResponseCacheId(merchantId, idempotencyKey))

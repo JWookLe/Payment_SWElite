@@ -34,13 +34,15 @@ public class PaymentService {
         private final PaymentEventPublisher eventPublisher;
         private final PgAuthApiService pgAuthApiService;
         private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+        private final boolean loadTestMode;
 
         public PaymentService(PaymentRepository paymentRepository,
                         IdempotencyCacheService idempotencyCacheService,
                         RedisRateLimiter rateLimiter,
                         PaymentEventPublisher eventPublisher,
                         PgAuthApiService pgAuthApiService,
-                        org.springframework.transaction.PlatformTransactionManager transactionManager) {
+                        org.springframework.transaction.PlatformTransactionManager transactionManager,
+                        @org.springframework.beans.factory.annotation.Value("${mock.pg.loadtest-mode:false}") boolean loadTestMode) {
                 this.paymentRepository = paymentRepository;
                 this.idempotencyCacheService = idempotencyCacheService;
                 this.rateLimiter = rateLimiter;
@@ -48,6 +50,7 @@ public class PaymentService {
                 this.pgAuthApiService = pgAuthApiService;
                 this.transactionTemplate = new org.springframework.transaction.support.TransactionTemplate(
                                 transactionManager);
+                this.loadTestMode = loadTestMode;
         }
 
         /**
@@ -58,6 +61,9 @@ public class PaymentService {
          */
         // @Transactional 제거: PG API 호출을 트랜잭션 범위 밖으로 분리
         public PaymentResult authorize(AuthorizePaymentRequest request) {
+                if (loadTestMode) {
+                        return createAuthorization(request);
+                }
                 // 샤딩은 Controller에서 트랜잭션 시작 전에 설정됨
                 return idempotencyCacheService.findAuthorization(request.merchantId(), request.idempotencyKey())
                                 .orElseGet(() -> createAuthorization(request));
