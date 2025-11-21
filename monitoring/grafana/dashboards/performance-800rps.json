@@ -520,6 +520,24 @@
           "editorMode": "code",
           "expr": "sum(reactor_netty_http_server_pending_connections{application=\"ingest-service\"}) by (instance)",
           "legendFormat": "ingest(netty) {{instance}} pending"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(reactor_netty_http_server_connections_active) by (instance)",
+          "legendFormat": "ingest(netty) {{instance}} active (alt)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(reactor_netty_http_server_connections_pending) by (instance)",
+          "legendFormat": "ingest(netty) {{instance}} pending (alt)"
         }
       ],
       "title": "Ingest Tomcat Threads (busy/current)",
