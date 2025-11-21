@@ -2,6 +2,11 @@ pipeline {
   agent any
 
   parameters {
+    choice(
+      name: 'DEPLOYMENT_TARGET',
+      choices: ['LOCAL', 'VM1', 'VM2', 'BOTH_VMS'],
+      description: '배포 대상 선택'
+    )
     booleanParam(
       name: 'AUTO_CLEANUP',
       defaultValue: false,
@@ -11,6 +16,11 @@ pipeline {
 
   environment {
     FRONTEND_DIR = "frontend"
+    VM1_IP = "172.25.0.37"
+    VM1_USER = "root"
+    VM2_IP = "172.25.0.79"
+    VM2_USER = "root"
+    SSH_CREDENTIALS_ID = "payment-swelite-ssh"
   }
 
   triggers {
@@ -55,37 +65,106 @@ pipeline {
 
     stage('Docker Build & Compose') {
       steps {
-        sh '''
-          # Inspect Docker build context
-          pwd
-          ls -la monitoring/prometheus/
+        script {
+          if (params.DEPLOYMENT_TARGET == 'LOCAL') {
+            sh '''
+              # Inspect Docker build context
+              pwd
+              ls -la monitoring/prometheus/
 
-          echo "=== Step 1: 기존 컨테이너 정리 (포트 충돌 방지) ==="
-          # Jenkins와 ngrok을 제외한 모든 payment 관련 컨테이너 중지 및 제거
-          docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | grep -v "pay-jenkins" | grep -v "pay-ngrok" | xargs -r docker stop || true
-          docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | grep -v "pay-jenkins" | grep -v "pay-ngrok" | xargs -r docker rm || true
-          echo "✓ 기존 컨테이너 정리 완료 (Jenkins 제외)"
+              echo "=== Step 1: 기존 컨테이너 정리 (포트 충돌 방지) ==="
+              # Jenkins와 ngrok을 제외한 모든 payment 관련 컨테이너 중지 및 제거
+              docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | grep -v "pay-jenkins" | grep -v "pay-ngrok" | xargs -r docker stop || true
+              docker ps -a --format "{{.Names}}" | grep -E "pay-|payment-swelite" | grep -v "pay-jenkins" | grep -v "pay-ngrok" | xargs -r docker rm || true
+              echo "✓ 기존 컨테이너 정리 완료 (Jenkins 제외)"
 
-          echo ""
-          echo "=== Step 2: 인프라 서비스 시작 ==="
-          docker compose up -d --no-recreate mariadb redis zookeeper kafka
-          echo "✓ 인프라 서비스 안전하게 유지됨 (데이터 보존)"
-          sleep 3
+              echo ""
+              echo "=== Step 2: 인프라 서비스 시작 ==="
+              docker compose up -d --no-recreate mariadb redis zookeeper kafka
+              echo "✓ 인프라 서비스 안전하게 유지됨 (데이터 보존)"
+              sleep 3
 
-          echo ""
-          echo "=== Step 3: 전체 서비스 빌드 및 시작 (Jenkins 제외) ==="
-          docker compose build eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
-          docker compose up -d eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
-          echo "✓ 모든 서비스 기동 완료"
+              echo ""
+              echo "=== Step 3: 전체 서비스 빌드 및 시작 (Jenkins 제외) ==="
+              docker compose build eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
+              docker compose up -d eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
+              echo "✓ 모든 서비스 기동 완료"
 
-          echo ""
-          echo "=== 배포 완료 ==="
-          docker compose ps
-        '''
+              echo ""
+              echo "=== 배포 완료 ==="
+              docker compose ps
+            '''
+          } else {
+            sh '''
+              echo "=== 배포 대상: ${DEPLOYMENT_TARGET} ==="
+
+              # Docker 이미지 빌드만 수행
+              echo "=== Docker 이미지 빌드 중 ==="
+              docker compose build eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
+              echo "✓ Docker 이미지 빌드 완료"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Deploy to VM') {
+      when {
+        expression { params.DEPLOYMENT_TARGET != 'LOCAL' }
+      }
+      steps {
+        script {
+          withCredentials([sshUserPrivateKey(credentialsId: env.SSH_CREDENTIALS_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+            if (params.DEPLOYMENT_TARGET == 'VM1' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
+              echo "=== VM1 배포 중 (172.25.0.37) ==="
+              sh '''
+                ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${VM1_IP} << 'EOF'
+                  cd /opt/payment-swelite
+
+                  echo "=== 기존 컨테이너 중지 ==="
+                  docker compose -f docker-compose.state.yml down || true
+
+                  echo "=== 최신 이미지 가져오기 ==="
+                  docker compose -f docker-compose.state.yml pull || true
+
+                  echo "=== VM1 서비스 시작 (docker-compose.state.yml) ==="
+                  docker compose -f docker-compose.state.yml up -d
+
+                  echo "=== VM1 배포 완료 ==="
+                  docker compose -f docker-compose.state.yml ps
+                EOF
+              '''
+            }
+
+            if (params.DEPLOYMENT_TARGET == 'VM2' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
+              echo "=== VM2 배포 중 (172.25.0.79) ==="
+              sh '''
+                ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${VM2_IP} << 'EOF'
+                  cd /opt/payment-swelite
+
+                  echo "=== 기존 컨테이너 중지 ==="
+                  docker compose -f docker-compose.app.yml down || true
+
+                  echo "=== 최신 이미지 가져오기 ==="
+                  docker compose -f docker-compose.app.yml pull || true
+
+                  echo "=== VM2 서비스 시작 (docker-compose.app.yml) ==="
+                  docker compose -f docker-compose.app.yml up -d
+
+                  echo "=== VM2 배포 완료 ==="
+                  docker compose -f docker-compose.app.yml ps
+                EOF
+              '''
+            }
+          }
+        }
       }
     }
 
     stage('Wait for Services') {
+      when {
+        expression { params.DEPLOYMENT_TARGET == 'LOCAL' }
+      }
       steps {
         sh '''
           check_ready() {
@@ -115,6 +194,9 @@ pipeline {
     }
 
     stage('Smoke Test') {
+      when {
+        expression { params.DEPLOYMENT_TARGET == 'LOCAL' }
+      }
       steps {
         sh '''
           echo "Running smoke test..."
@@ -139,6 +221,9 @@ pipeline {
     }
 
     stage('Circuit Breaker Test') {
+      when {
+        expression { params.DEPLOYMENT_TARGET == 'LOCAL' }
+      }
       steps {
         sh '''
           echo ""
