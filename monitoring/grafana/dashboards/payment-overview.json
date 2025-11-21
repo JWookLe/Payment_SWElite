@@ -343,7 +343,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(0, avg(resilience4j_circuitbreaker_slow_call_rate{name=\"kafka-publisher\"}))",
+          "expr": "avg(resilience4j_circuitbreaker_slow_call_rate{name=\"kafka-publisher\"})",
           "legendFormat": "Rate"
         }
       ],
@@ -374,7 +374,14 @@
               }
             ]
           },
-          "min": 0
+          "min": 0,
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          }
         },
         "overrides": []
       },
@@ -408,7 +415,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(0, avg(resilience4j_circuitbreaker_failure_rate{name=\"kafka-publisher\"}))",
+          "expr": "avg(resilience4j_circuitbreaker_failure_rate{name=\"kafka-publisher\"})",
           "legendFormat": "Rate"
         }
       ],
@@ -439,7 +446,14 @@
               }
             ]
           },
-          "min": 0
+          "min": 0,
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          }
         },
         "overrides": []
       },
