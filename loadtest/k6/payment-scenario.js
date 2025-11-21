@@ -40,17 +40,13 @@ if (ENABLE_REFUND) {
 export const options = {
   scenarios: {
     authorize_flow: {
-      executor: "ramping-arrival-rate",
-      startRate: 50,
+      // Drive a constant 800 RPS for a clearer steady-state measurement
+      executor: "constant-arrival-rate",
+      rate: 800,
       timeUnit: "1s",
-      preAllocatedVUs: 600,
-      maxVUs: 1200,
-      stages: [
-        { duration: "30s", target: 400 },  // Quick warm-up
-        { duration: "30s", target: 800 },  // Rapid ramp to target
-        { duration: "4m", target: 800 },   // Sustain target
-        { duration: "30s", target: 0 },    // Cool-down
-      ],
+      duration: "6m",
+      preAllocatedVUs: 800,
+      maxVUs: 1500,
     },
   },
   thresholds,
