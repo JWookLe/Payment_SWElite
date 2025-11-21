@@ -65,7 +65,8 @@ class PaymentServiceTest {
                                 rateLimiter,
                                 eventPublisher,
                                 pgAuthApiService,
-                                transactionManager);
+                                transactionManager,
+                                false);
 
                 // TransactionTemplate mocking support
                 // When transactionTemplate.execute is called, it calls

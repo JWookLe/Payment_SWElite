@@ -705,3 +705,106 @@ redis-sentinel:
 - [ ] shard2 DB 재시작 후 `mariadb-admin ping`으로 정상 기동 여부 확인
 - [ ] `git push`로 오늘 수정한 ingest/outbox/k6 변경분을 원격 반영
 - [ ] Grafana/Prometheus 패널에 Hikari active/pending, Tomcat thread 사용률을 추가해 실시간 감시
+
+---
+
+## 12. 11월 21일 800 RPS 안정화 & 대시보드 정리
+
+### 12-1. 오늘 작업
+
+- k6를 `constant-arrival-rate` 800 RPS, 6분 지속으로 조정(p95 153ms, HTTP 오류율 0.01%); `payment_errors` 성공 시 0 기록으로 지표 신뢰성 확보.
+- Grafana 대시보드 "Performance - 800 RPS" 추가: RPS, Error Rate, Gateway/Ingest 평균 레이턴시, Ingest Hikari, Ingest 동시성(HTTP active/Executor queue), Kafka, CPU/Heap 패널 구성.
+- Settlement/Refund Status Distribution을 1분 버킷 집계로 변경해 누적 증가 문제 해소, 시간대별 성공/실패 흐름 파악.
+
+### 12-2. 대시보드 패널 역할 (상세)
+
+**1. HTTP RPS (gateway & ingest)**
+- **목적**: 1분 단위 요청 처리량 실시간 모니터링
+- **메트릭**: `sum(rate(http_server_requests_seconds_count[1m]))`
+- **임계값**: 800 RPS 이상 시 빨강 표시
+- **용도**: Gateway와 Ingest-Service의 처리량을 동시에 추적하여 부하 분산 상태 확인
+- **정상 범위**: 800±50 RPS 유지
+
+**2. Error Rate (5xx)**
+- **목적**: 서버 측 에러 발생률 모니터링
+- **메트릭**: `(5xx 요청 수) / (전체 요청 수)` (1분 평균)
+- **임계값**: 0.05% 초과 시 빨강 표시
+- **용도**: Gateway/Ingest에서 내부 에러 발생 여부 감지
+- **정상 범위**: 0.01% 이하 (HTTP 성공률 99.99%)
+
+**3. Gateway Latency (avg, ms)**
+- **목적**: Gateway의 평균 응답 시간 추적
+- **메트릭**: `(http_server_requests_seconds_sum / count) * 1000`
+- **임계값**: 300ms 주황, 500ms 빨강
+- **용도**: API Gateway의 라우팅 성능 평가
+- **정상 범위**: 50~150ms (Ingest로의 라우팅 오버헤드 포함)
+
+**4. Ingest Latency (p95/p99, ms)**
+- **목적**: Ingest-Service의 응답 시간 분포 추적
+- **메트릭**:
+  - `p95`: 95 percentile (상위 5% 응답 시간)
+  - `p99`: 99 percentile (상위 1% 응답 시간)
+  - `avg`: 평균 응답 시간
+- **임계값**: p95 300ms, p99 500ms
+- **용도**: 결제 API 자체의 성능 평가 (DB 쿼리, PG API 호출 포함)
+- **정상 범위**: p95 < 300ms, p99 < 500ms
+
+**5. Ingest Hikari Connections (active/pending)**
+- **목적**: DB 커넥션 풀 상태 모니터링
+- **메트릭**:
+  - `hikaricp_connections_active`: 현재 사용 중인 커넥션 수
+  - `hikaricp_connections_pending`: 대기 중인 요청 수
+- **임계값**: 300 초과 시 빨강 표시
+- **용도**: DB 커넥션 고갈 여부 조기 감지
+- **정상 범위**: active < 280, pending = 0
+- **병목 신호**: pending이 증가하면 DB 커넥션 부족 상태
+
+**6. Ingest Tomcat Threads (busy/current)**
+- **목적**: 톰캣 스레드 풀 상태 및 네트워크 연결 상태 모니터링
+- **메트릭**:
+  - `http_server_requests_active`: HTTP 요청을 처리 중인 요청 수
+  - `executor_active_threads`: 스레드 풀에서 활성 스레드 수
+  - `executor_queue_remaining_tasks`: 큐에 대기 중인 작업 수
+  - `executor_queued_tasks`: 스케줄된 작업 수
+  - `reactor_netty_*`: Netty 기반 HTTP 서버 연결 상태
+- **임계값**: 250 주황, 350 빨강
+- **용도**:
+  - 요청 처리 능력 평가
+  - 큐에 대기 중인 작업 누적 감지
+  - 스레드 스톨(정지) 여부 판단
+- **정상 범위**: http_active < 280, queue_remaining = 0
+- **경고 신호**: queue_remaining > 0이면 처리 능력 부족
+
+**7. Kafka (send ratio & consumer lag)**
+- **목적**: 메시지 브로커의 건강도 및 이벤트 처리 현황 모니터링
+- **메트릭**:
+  - `kafka_producer_record_error_total`: Producer 에러율 (%)
+  - `kafka_consumergroup_lag_sum`: Consumer Lag (처리되지 않은 메시지 수)
+- **임계값**: 70% 주황, 90% 빨강
+- **용도**:
+  - Kafka 전송 신뢰성 확인
+  - Consumer Worker의 메시지 처리 진행률 추적
+  - 정산/환불 이벤트 백로그 감지
+- **정상 범위**: error rate 0%, lag < 1000 메시지
+- **병목 신호**: lag가 증가하면 Consumer Worker 인스턴스 부족
+
+**8. Service CPU / Heap MB (gateway | ingest)**
+- **목적**: JVM 서비스의 리소스 사용량 모니터링
+- **메트릭**:
+  - `process_cpu_usage`: 프로세스 CPU 사용률 (%)
+  - `jvm_memory_used_bytes{area="heap"}`: JVM 힙 메모리 사용량 (MB)
+- **임계값**: CPU 70% 주황, 90% 빨강 / Heap 메모리는 동적 임계값
+- **용도**:
+  - 서비스별 리소스 경합 여부 판단
+  - GC(Garbage Collection) 압박 추적
+  - VM 성능 한계점 감지
+- **정상 범위**: CPU < 60%, Heap < 2000MB (4GB 할당 시)
+- **경고 신호**: CPU 지속 상승 또는 Heap 급증 → GC 스톨 가능성
+
+### 12-3. 1000 RPS 확장 계획
+
+1) k6: rate 1000, duration 6~10m, preAllocatedVUs/maxVUs 1000/1800으로 재측정.
+2) JVM/스레드: gateway/ingest GC·executor 큐 모니터링 후 `-Xmx`·스레드 설정 재조정(큐 적체 기준).
+3) DB: shard2 `--max-connections` 1000 상향, Hikari 350 유지, Threads_connected 모니터링.
+4) Kafka: producer error rate 0% 유지, lag 증가 시 consumer 스케일아웃/파티션 재분배.
+5) 대시보드 기반 튜닝: Hikari pending, executor queue, HTTP active 중심으로 병목 시점 기록.

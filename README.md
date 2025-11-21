@@ -70,19 +70,66 @@
 
 ### 6주차
 
-- [X] KT Cloud VM 환경 구성 (VM1: State Services, VM2: App Services)
-- [X] Docker Compose 파일 분리 (state/app 전용) 및 Git 관리 전략 수립
-- [X] CORS 403 Forbidden 오류 해결 (Gateway 설정)
+#### 인프라 & DevOps
+- [X] KT Cloud VM 환경 구성 (VM1: State Services 172.25.0.37, VM2: App Services 172.25.0.79)
+- [X] Docker Compose 파일 분리 및 Git 관리 전략 수립
+  - VM1: `docker-compose.state.yml` (DB/Kafka/Redis/Eureka/Ingest/Monitoring)
+  - VM2: `docker-compose.app.yml` (Gateway/Worker/Frontend)
+  - `.git/info/exclude` 활용으로 로컬 전용 파일 충돌 방지
+- [X] Prometheus 클라우드 설정 (`prometheus_cloud.yml`) 구성 및 컨테이너 이름 + IP 혼용 지원
+
+#### 애플리케이션 개선
+- [X] CORS 403 Forbidden 오류 해결 (Gateway 환경변수 설정)
+  - `GATEWAY_ALLOWED_ORIGINS`: 로컬 + 클라우드 주소 동시 지원
+  - Admin API 라우팅 설정 (`/api/admin/**`)
 - [X] 멀티스테이지 Docker 빌드 전환 (모든 백엔드 서비스)
-- [X] DB 스키마 생성 및 Admin Dashboard 연동
-- [X] Circuit Breaker 테스트 자동화 (Monitoring Service 통합)
-- [X] K6 부하 테스트 지원 추가 (Admin Dashboard 통합)
+  - Gradle 컴파일을 Docker 내부에서 수행 (로컬 빌드 의존성 제거)
+  - 최종 이미지 크기 50% 감소
+- [X] DB 샤딩 & 커넥션 설정
+  - Shard1(VM1): `--max-connections=1200`
+  - Shard2(VM2): `--max-connections=900` → 1000으로 확장
+  - Hikari Connection Pool: 350 (양쪽 VM 동일)
+
+#### 모니터링 & 대시보드
+- [X] Grafana "Performance - 800 RPS" 대시보드 구성 (8개 패널)
+  - **HTTP RPS**: Gateway/Ingest 1분 단위 처리량
+  - **Error Rate (5xx)**: 서버 에러율 모니터링
+  - **Latency**: Gateway avg, Ingest p95/p99 추적
+  - **Hikari Connections**: active/pending DB 커넥션 상태
+  - **Tomcat Threads**: HTTP active, executor threads/queue 상태
+  - **Kafka**: Producer error rate & Consumer lag
+  - **Service CPU/Heap**: 인스턴스별 리소스 사용량
+  - 각 패널의 임계값 설정 및 경고 신호 정의
+
+#### 성능 최적화 & 부하 테스트
+- [X] Circuit Breaker 테스트 자동화 및 Admin Dashboard 통합
+- [X] K6 부하 테스트 지원 (Admin Dashboard 통합)
 - [X] K6 Rate Limit 문제 해결 (94% → 0.01% 실패율)
-- [X] Phase 1 성능 최적화 (JVM 4GB, HikariCP 300)
-- [X] Phase 2-A 스케일링 (Kafka 파티션 6→12)
-- [X] 284 RPS 안정적 처리 (p95: 152ms, HTTP 실패율 0.01%)
+  - Rate Limit 설정: authorize/capture 48,000/min (800 RPS), refund 30,000/min
+- [X] Phase 1 성능 최적화
+  - JVM 힙: 2GB → 4GB 확대
+  - HikariCP: 기본값 → 350개 커넥션
+  - Tomcat 스레드: 350개 설정
+- [X] Phase 2-A 스케일링
+  - Kafka 파티션 증설: 6 → 12
+  - Outbox Poller 배치 크기: 1000 → 200으로 최적화
+- [X] 800 RPS 안정화
+  - 현재 284.57 RPS 안정적 처리 (p95: 152ms, HTTP 실패율 0.01%)
+  - 이벤트 처리 신뢰성 확보 (`payment_errors` 임계값 0.2%로 설정)
+
+#### 문서화
+- [X] 6주차 전체 작업 일지 상세 기록 (12개 섹션)
+- [X] VM1/VM2 역할 및 포트 매핑 정의
+- [X] 향후 1000 RPS 확장 계획 수립
+- [X] 대시보드 패널별 상세 설명 (메트릭/임계값/정상범위/병목신호)
 
 **상세 내역**: [6Week.md](./6Week.md)
+
+**주요 성과**:
+- 멀티 VM 클라우드 환경에서 안정적인 284 RPS 처리 기반 확보
+- 실시간 모니터링을 위한 8개 패널 대시보드 완성
+- 800 RPS 달성을 위한 향후 확장 로드맵 명확화
+- Phase 3 (Redis Sentinel, MariaDB Read Replica, Kafka 3-Broker) 계획 준비
 
 ## 서비스 구성 요소
 
@@ -101,6 +148,68 @@
 | **redis**              | rate limit 카운터 및 결제 승인 응답 멱등 캐시 저장.                                                                                |
 | **jenkins**            | CI 서버. Gradle/NPM 빌드, Docker Compose 배포, k6 부하 테스트 자동화.                                                              |
 | **prometheus/grafana** | 애플리케이션 메트릭 수집 및 대시보드 제공. Eureka 서버 및 Gateway 메트릭도 포함.                                                   |
+
+## 클라우드 환경 (KT Cloud VM) 구성 (6주차)
+
+### VM1 - 상태 계층 (State Services) | 172.25.0.37
+
+**역할**: 데이터베이스, 메시지 브로커, 모니터링, 결제 처리 API
+
+| 서비스              | 포트  | 설명                                                          |
+| ------------------- | ----- | ------------------------------------------------------------- |
+| MariaDB (Shard1)    | 13306 | paydb 스키마, 샤드1 (홀수 merchantId)                         |
+| Zookeeper           | 2181  | Kafka 코디네이터                                              |
+| Kafka               | 9092  | 12개 파티션, 3 복제 설정 대비                                 |
+| Redis               | 6379  | Rate Limit, 멱등 캐시, 세션 저장소                            |
+| Eureka Server       | 8761  | 서비스 디스커버리 (ingest, workers 등록)                      |
+| Ingest Service      | 8080  | 결제 API (VM1 로컬용)                                         |
+| Monitoring Service  | 8082  | Admin Dashboard, Circuit Breaker 테스트, K6 테스트 호출       |
+| Prometheus          | 9090  | 메트릭 수집 (7개 서비스)                                      |
+| Grafana             | 3000  | 대시보드 시각화                                               |
+
+**Compose 파일**: `docker-compose.state.yml`
+
+### VM2 - 애플리케이션 계층 (App Services) | 172.25.0.79
+
+**역할**: API Gateway, 데이터베이스 샤드2, 워커 서비스, 프론트엔드
+
+| 서비스              | 포트  | 설명                                                          |
+| ------------------- | ----- | ------------------------------------------------------------- |
+| MariaDB (Shard2)    | 13307 | paydb 스키마, 샤드2 (짝수 merchantId)                         |
+| API Gateway         | 8080  | 클라이언트 요청 진입점, Eureka 기반 라우팅                    |
+| Ingest Service      | 8081  | 결제 API (VM2 배치용, shard2 연동)                            |
+| Consumer Worker     | 8081  | Kafka consumer, ledger_entry 생성                            |
+| Settlement Worker   | 8084  | 정산 요청 처리, Mock PG API 호출                              |
+| Refund Worker       | 8085  | 환불 요청 처리, Mock PG 환불 API 호출                        |
+| Frontend            | 5173  | React + Vite 목업 스토어 (webpack dev server)                |
+
+**Compose 파일**: `docker-compose.app.yml`
+
+### 데이터베이스 샤딩 전략
+
+**키**: `merchantId` (짝수/홀수 기준)
+
+| 샤드   | 위치 | 포트  | Max Connections | 설명                      |
+| ------ | ---- | ----- | --------------- | ------------------------- |
+| Shard1 | VM1  | 13306 | 1200            | 홀수 merchantId, ingest   |
+| Shard2 | VM2  | 13307 | 1000            | 짝수 merchantId, ingest   |
+
+**ShardContextHolder**: `merchantId % 2` 로 자동 라우팅 → 양쪽 샤드에서 병렬 처리
+
+### 주요 환경변수
+
+**공통 (양쪽 VM)**:
+- `APP_RATE_LIMIT_AUTHORIZE_CAPACITY`: 48,000 (=800 RPS/min)
+- `APP_RATE_LIMIT_CAPTURE_CAPACITY`: 48,000
+- `APP_RATE_LIMIT_REFUND_CAPACITY`: 30,000
+- `OUTBOX_POLLING_BATCH_SIZE`: 200 (DB 커넥션 경합 방지)
+
+**VM2 Gateway**:
+- `GATEWAY_ALLOWED_ORIGINS`: `http://localhost:5173,http://172.25.0.79:5173`
+
+**모니터링**:
+- `PROMETHEUS_CONFIG`: `./monitoring/prometheus/prometheus_cloud.yml` (VM1 전용)
+- Git 무시: `.git/info/exclude`에 등록
 
 ## 주요 데이터베이스 DDL
 
@@ -159,6 +268,15 @@
   - `Settlement & Refund Statistics` 대시보드: 정산/환불 성공률, Dead Letter (Kafka 직접 조회), 시계열 추이
     - MariaDB 데이터소스: 성공률, 요청 추이, 상태 분포
     - Infinity 플러그인: Kafka DLQ 메시지 수 (settlement.dlq, refund.dlq)
+  - **`Performance - 800 RPS` 대시보드** (6주차 신규): 부하 테스트 및 성능 모니터링 (8개 패널)
+    - HTTP RPS (gateway & ingest): 1분 단위 처리량 (임계값: 800 RPS)
+    - Error Rate (5xx): 서버 에러율 모니터링 (임계값: 0.05%)
+    - Gateway Latency (avg, ms): 게이트웨이 평균 응답 시간
+    - Ingest Latency (p95/p99, ms): 결제 API 응답 시간 분포
+    - Ingest Hikari Connections (active/pending): DB 커넥션 풀 상태
+    - Ingest Tomcat Threads (busy/current): 톰캣 스레드 및 executor 상태
+    - Kafka (send ratio & consumer lag): 메시지 브로커 건강도
+    - Service CPU / Heap MB: Gateway/Ingest 인스턴스별 리소스 사용량
 
 ### Prometheus 메트릭 수집 대상 (전체 7개 서비스)
 
