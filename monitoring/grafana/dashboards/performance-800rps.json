@@ -158,7 +158,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_server_requests_seconds_count{application=\"gateway\",status=~\"5..\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"gateway\"}[1m]))",
+          "expr": "(sum(rate(http_server_requests_seconds_count{application=\"gateway\",status=~\"5..\"}[1m])) or on() vector(0)) / sum(rate(http_server_requests_seconds_count{application=\"gateway\"}[1m]))",
           "legendFormat": "gateway 5xx"
         },
         {
@@ -167,7 +167,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_server_requests_seconds_count{application=\"ingest-service\",status=~\"5..\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"ingest-service\"}[1m]))",
+          "expr": "(sum(rate(http_server_requests_seconds_count{application=\"ingest-service\",status=~\"5..\"}[1m])) or on() vector(0)) / sum(rate(http_server_requests_seconds_count{application=\"ingest-service\"}[1m]))",
           "legendFormat": "ingest 5xx"
         }
       ],
@@ -247,9 +247,18 @@
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application=\"gateway\",uri!~\".*/actuator/.*\"}[1m])) by (le)) * 1000",
           "legendFormat": "gateway p99"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(rate(http_server_requests_seconds_sum{application=\"gateway\",uri!~\".*/actuator/.*\"}[1m]) / rate(http_server_requests_seconds_count{application=\"gateway\",uri!~\".*/actuator/.*\"}[1m])) * 1000",
+          "legendFormat": "gateway avg"
         }
       ],
-      "title": "Gateway Latency (p95/p99, ms)",
+      "title": "Gateway Latency (avg/p95/p99, ms)",
       "type": "timeseries"
     },
     {
@@ -464,8 +473,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(tomcat_threads_busy_threads{application=\"gateway\"}) by (instance)",
-          "legendFormat": "{{instance}} busy"
+          "expr": "sum(tomcat_threads_busy_threads{application=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest {{instance}} busy"
         },
         {
           "datasource": {
@@ -473,11 +482,11 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(tomcat_threads_current_threads{application=\"gateway\"}) by (instance)",
-          "legendFormat": "{{instance}} current"
+          "expr": "sum(tomcat_threads_current_threads{application=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest {{instance}} current"
         }
       ],
-      "title": "Gateway Tomcat Threads (busy/current)",
+      "title": "Ingest Tomcat Threads (busy/current)",
       "type": "timeseries"
     },
     {
@@ -542,7 +551,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(sum(rate(kafka_producer_record_error_total{application=\"ingest-service\"}[1m])) / sum(rate(kafka_producer_record_send_total{application=\"ingest-service\"}[1m]) + 1e-9)) * 100",
+          "expr": "((sum(rate(kafka_producer_record_error_total{application=\"ingest-service\"}[1m])) or on() vector(0)) / (sum(rate(kafka_producer_record_send_total{application=\"ingest-service\"}[1m])) + 1e-9)) * 100",
           "legendFormat": "producer error rate %"
         },
         {
@@ -589,7 +598,7 @@
               },
               {
                 "color": "red",
-                "value": 85
+                "value": 90
               }
             ]
           },
@@ -620,8 +629,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(container_cpu_usage_seconds_total{container=~\"pay-(gateway|ingest).*\"}[1m])) by (container) * 100",
-          "legendFormat": "{{container}} CPU%"
+          "expr": "process_cpu_usage{application=~\"gateway|ingest-service\"} * 100",
+          "legendFormat": "{{application}} {{instance}} CPU%"
         },
         {
           "datasource": {
@@ -629,11 +638,11 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(container_memory_usage_bytes{container=~\"pay-(gateway|ingest).*\"}) by (container)",
-          "legendFormat": "{{container}} mem bytes"
+          "expr": "(jvm_memory_used_bytes{application=~\"gateway|ingest-service\",area=\"heap\"}) / 1024 / 1024",
+          "legendFormat": "{{application}} {{instance}} heap MB"
         }
       ],
-      "title": "Service CPU / Memory (gateway | ingest)",
+      "title": "Service CPU / Heap MB (gateway | ingest)",
       "type": "timeseries"
     }
   ],
