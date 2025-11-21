@@ -474,7 +474,7 @@
           },
           "editorMode": "code",
           "expr": "sum(http_server_requests_active{application=\"ingest-service\"}) by (instance)",
-          "legendFormat": "http active"
+          "legendFormat": "{{instance}} http active"
         },
         {
           "datasource": {
@@ -483,7 +483,7 @@
           },
           "editorMode": "code",
           "expr": "sum(executor_active_threads{application=\"ingest-service\"}) by (instance)",
-          "legendFormat": "executor active threads"
+          "legendFormat": "{{instance}} executor active threads"
         },
         {
           "datasource": {
@@ -492,7 +492,7 @@
           },
           "editorMode": "code",
           "expr": "sum(executor_queue_remaining_tasks{application=\"ingest-service\"}) by (instance)",
-          "legendFormat": "executor queue remaining"
+          "legendFormat": "{{instance}} executor queue remaining"
         },
         {
           "datasource": {
@@ -501,7 +501,7 @@
           },
           "editorMode": "code",
           "expr": "sum(executor_queued_tasks{application=\"ingest-service\"}) by (instance)",
-          "legendFormat": "executor queued tasks"
+          "legendFormat": "{{instance}} executor queued tasks"
         },
         {
           "datasource": {
