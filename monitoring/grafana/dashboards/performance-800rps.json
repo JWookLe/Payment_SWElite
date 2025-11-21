@@ -484,6 +484,24 @@
           "editorMode": "code",
           "expr": "sum(tomcat_threads_current_threads{application=\"ingest-service\"}) by (instance)",
           "legendFormat": "ingest {{instance}} current"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(tomcat_threads_busy_threads{job=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest(job) {{instance}} busy"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(tomcat_threads_current_threads{job=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest(job) {{instance}} current"
         }
       ],
       "title": "Ingest Tomcat Threads (busy/current)",
@@ -638,7 +656,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(jvm_memory_used_bytes{application=~\"gateway|ingest-service\",area=\"heap\"}) / 1024 / 1024",
+          "expr": "sum by (application, instance)(jvm_memory_used_bytes{application=~\"gateway|ingest-service\",area=\"heap\"}) / 1024 / 1024",
           "legendFormat": "{{application}} {{instance}} heap MB"
         }
       ],
