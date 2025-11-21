@@ -473,8 +473,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(tomcat_threads_busy_threads{application=\"ingest-service\"}) by (instance)",
-          "legendFormat": "ingest(app) {{instance}} busy"
+          "expr": "sum(http_server_requests_active{application=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest http active"
         },
         {
           "datasource": {
@@ -482,8 +482,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(tomcat_threads_current_threads{application=\"ingest-service\"}) by (instance)",
-          "legendFormat": "ingest(app) {{instance}} current"
+          "expr": "sum(executor_active{application=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest executor active"
         },
         {
           "datasource": {
@@ -491,8 +491,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(tomcat_threads_busy_threads{job=\"ingest-service\"}) by (instance)",
-          "legendFormat": "ingest(job) {{instance}} busy"
+          "expr": "sum(executor_queue_remaining{application=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest executor queue remaining"
         },
         {
           "datasource": {
@@ -500,8 +500,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(tomcat_threads_current_threads{job=\"ingest-service\"}) by (instance)",
-          "legendFormat": "ingest(job) {{instance}} current"
+          "expr": "sum(executor_queued{application=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest executor queued"
         },
         {
           "datasource": {
