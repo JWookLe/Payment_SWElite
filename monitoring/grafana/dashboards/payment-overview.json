@@ -343,7 +343,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "avg(resilience4j_circuitbreaker_slow_call_rate{name=\"kafka-publisher\"})",
+          "expr": "max(0, avg(resilience4j_circuitbreaker_slow_call_rate{name=\"kafka-publisher\"}))",
           "legendFormat": "Rate"
         }
       ],
@@ -408,7 +408,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "avg(resilience4j_circuitbreaker_failure_rate{name=\"kafka-publisher\"})",
+          "expr": "max(0, avg(resilience4j_circuitbreaker_failure_rate{name=\"kafka-publisher\"}))",
           "legendFormat": "Rate"
         }
       ],
