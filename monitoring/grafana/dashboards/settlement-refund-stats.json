@@ -296,12 +296,12 @@
       "targets": [
         {
           "refId": "SUCCESS",
-          "rawSql": "SELECT $__timeGroupAlias(requested_at, '1m') AS time,\n       SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) AS value,\n       'SUCCESS' AS metric\nFROM settlement_request\nWHERE $__timeFilter(requested_at)\nGROUP BY 1,3\nORDER BY 1",
+          "rawSql": "SELECT COUNT(*) as value, 'SUCCESS' as metric FROM settlement_request WHERE status = 'SUCCESS' AND requested_at > NOW() - INTERVAL 7 DAY",
           "format": "time_series"
         },
         {
           "refId": "FAILED",
-          "rawSql": "SELECT $__timeGroupAlias(requested_at, '1m') AS time,\n       SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END) AS value,\n       'FAILED' AS metric\nFROM settlement_request\nWHERE $__timeFilter(requested_at)\nGROUP BY 1,3\nORDER BY 1",
+          "rawSql": "SELECT COUNT(*) as value, 'FAILED' as metric FROM settlement_request WHERE status = 'FAILED' AND requested_at > NOW() - INTERVAL 7 DAY",
           "format": "time_series"
         }
       ],
