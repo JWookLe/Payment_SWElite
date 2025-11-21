@@ -256,6 +256,15 @@
           "editorMode": "code",
           "expr": "(rate(http_server_requests_seconds_sum{application=\"gateway\",uri!~\".*/actuator/.*\"}[1m]) / rate(http_server_requests_seconds_count{application=\"gateway\",uri!~\".*/actuator/.*\"}[1m])) * 1000",
           "legendFormat": "gateway avg"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(rate(http_server_requests_seconds_sum{job=\"gateway\"}[1m]) / rate(http_server_requests_seconds_count{job=\"gateway\"}[1m])) * 1000",
+          "legendFormat": "gateway avg (job)"
         }
       ],
       "title": "Gateway Latency (avg/p95/p99, ms)",
@@ -334,6 +343,24 @@
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application=\"ingest-service\",uri!~\".*/actuator/.*\"}[1m])) by (le)) * 1000",
           "legendFormat": "ingest p99"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(rate(http_server_requests_seconds_sum{application=\"ingest-service\",uri!~\".*/actuator/.*\"}[1m]) / rate(http_server_requests_seconds_count{application=\"ingest-service\",uri!~\".*/actuator/.*\"}[1m])) * 1000",
+          "legendFormat": "ingest avg"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(rate(http_server_requests_seconds_sum{job=\"ingest-service\"}[1m]) / rate(http_server_requests_seconds_count{job=\"ingest-service\"}[1m])) * 1000",
+          "legendFormat": "ingest avg (job)"
         }
       ],
       "title": "Ingest Latency (p95/p99, ms)",
@@ -502,6 +529,24 @@
           "editorMode": "code",
           "expr": "sum(tomcat_threads_current_threads{job=\"ingest-service\"}) by (instance)",
           "legendFormat": "ingest(job) {{instance}} current"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(tomcat_threads_busy_threads) by (instance)",
+          "legendFormat": "any {{instance}} busy"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(tomcat_threads_current_threads) by (instance)",
+          "legendFormat": "any {{instance}} current"
         }
       ],
       "title": "Ingest Tomcat Threads (busy/current)",
