@@ -236,29 +236,20 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application=\"gateway\",uri!~\".*/actuator/.*\"}[1m])) by (le)) * 1000",
-          "legendFormat": "gateway p95"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application=\"gateway\",uri!~\".*/actuator/.*\"}[1m])) by (le)) * 1000",
-          "legendFormat": "gateway p99"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
           "expr": "(sum(rate(http_server_requests_seconds_sum{application=\"gateway\",uri!~\".*/actuator/.*\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=\"gateway\",uri!~\".*/actuator/.*\"}[1m]))) * 1000",
-          "legendFormat": "gateway avg"
+          "legendFormat": "gateway avg (application)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(sum(rate(http_server_requests_seconds_sum{job=\"gateway\"}[1m])) / sum(rate(http_server_requests_seconds_count{job=\"gateway\"}[1m]))) * 1000",
+          "legendFormat": "gateway avg (job)"
         }
       ],
-      "title": "Gateway Latency (avg/p95/p99, ms)",
+      "title": "Gateway Latency (avg, ms)",
       "type": "timeseries"
     },
     {
@@ -482,8 +473,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(tomcat_threads_busy_threads{application=\"ingest-service\"} or tomcat_threads_busy_threads{job=\"ingest-service\"}) by (instance)",
-          "legendFormat": "ingest {{instance}} busy"
+          "expr": "sum(tomcat_threads_busy_threads{application=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest(app) {{instance}} busy"
         },
         {
           "datasource": {
@@ -491,8 +482,26 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(tomcat_threads_current_threads{application=\"ingest-service\"} or tomcat_threads_current_threads{job=\"ingest-service\"}) by (instance)",
-          "legendFormat": "ingest {{instance}} current"
+          "expr": "sum(tomcat_threads_current_threads{application=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest(app) {{instance}} current"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(tomcat_threads_busy_threads{job=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest(job) {{instance}} busy"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(tomcat_threads_current_threads{job=\"ingest-service\"}) by (instance)",
+          "legendFormat": "ingest(job) {{instance}} current"
         }
       ],
       "title": "Ingest Tomcat Threads (busy/current)",
