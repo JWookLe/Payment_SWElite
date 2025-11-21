@@ -296,12 +296,12 @@
       "targets": [
         {
           "refId": "SUCCESS",
-          "rawSql": "SELECT COUNT(*) as value, 'SUCCESS' as metric FROM settlement_request WHERE status = 'SUCCESS' AND requested_at > NOW() - INTERVAL 7 DAY",
+          "rawSql": "SELECT UNIX_TIMESTAMP(NOW()) as time_sec, COUNT(*) as value, 'SUCCESS' as metric FROM settlement_request WHERE status = 'SUCCESS' AND requested_at > NOW() - INTERVAL 7 DAY",
           "format": "time_series"
         },
         {
           "refId": "FAILED",
-          "rawSql": "SELECT COUNT(*) as value, 'FAILED' as metric FROM settlement_request WHERE status = 'FAILED' AND requested_at > NOW() - INTERVAL 7 DAY",
+          "rawSql": "SELECT UNIX_TIMESTAMP(NOW()) as time_sec, COUNT(*) as value, 'FAILED' as metric FROM settlement_request WHERE status = 'FAILED' AND requested_at > NOW() - INTERVAL 7 DAY",
           "format": "time_series"
         }
       ],
@@ -329,12 +329,12 @@
       "targets": [
         {
           "refId": "SUCCESS",
-          "rawSql": "SELECT NOW() as time, COUNT(*) as value, 'SUCCESS' as metric FROM refund_request WHERE status = 'SUCCESS'",
+          "rawSql": "SELECT UNIX_TIMESTAMP(NOW()) as time_sec, COUNT(*) as value, 'SUCCESS' as metric FROM refund_request WHERE status = 'SUCCESS' AND requested_at > NOW() - INTERVAL 7 DAY",
           "format": "time_series"
         },
         {
           "refId": "FAILED",
-          "rawSql": "SELECT NOW() as time, COUNT(*) as value, 'FAILED' as metric FROM refund_request WHERE status = 'FAILED'",
+          "rawSql": "SELECT UNIX_TIMESTAMP(NOW()) as time_sec, COUNT(*) as value, 'FAILED' as metric FROM refund_request WHERE status = 'FAILED' AND requested_at > NOW() - INTERVAL 7 DAY",
           "format": "time_series"
         }
       ],
