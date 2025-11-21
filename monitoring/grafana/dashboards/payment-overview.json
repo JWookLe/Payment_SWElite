@@ -373,7 +373,8 @@
                 "value": 75
               }
             ]
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -382,7 +383,12 @@
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
-        "orientation": "auto"
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
       },
       "gridPos": {
         "h": 4,
@@ -432,7 +438,8 @@
                 "value": 50
               }
             ]
-          }
+          },
+          "min": 0
         },
         "overrides": []
       },
@@ -441,7 +448,12 @@
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
-        "orientation": "auto"
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
       },
       "gridPos": {
         "h": 4,
