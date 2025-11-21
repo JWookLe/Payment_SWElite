@@ -46,11 +46,9 @@ export const options = {
       preAllocatedVUs: 600,
       maxVUs: 1200,
       stages: [
-        { duration: "30s", target: 200 },  // Warm-up: 200 RPS
-        { duration: "1m", target: 400 },   // Ramp-up: 400 RPS
-        { duration: "1m", target: 600 },   // Increase: 600 RPS
-        { duration: "2m", target: 800 },   // Target: 800 RPS
-        { duration: "2m", target: 800 },   // Sustain: 800 RPS
+        { duration: "30s", target: 400 },  // Quick warm-up
+        { duration: "30s", target: 800 },  // Rapid ramp to target
+        { duration: "4m", target: 800 },   // Sustain target
         { duration: "30s", target: 0 },    // Cool-down
       ],
     },
@@ -126,6 +124,7 @@ export default function () {
     }
 
     if (!ENABLE_CAPTURE && !ENABLE_REFUND) {
+      errorRate.add(0);
       return;
     }
 
@@ -173,6 +172,8 @@ export default function () {
       }
     }
 
+    // Mark successful iteration when all enabled steps passed
+    errorRate.add(0);
     // sleep(0.1); // Removed for accurate RPS testing
   });
 }
