@@ -5,8 +5,7 @@ pipeline {
     choice(
       name: 'DEPLOYMENT_TARGET',
       choices: ['LOCAL', 'VM1', 'VM2', 'BOTH_VMS'],
-      defaultValue: 'LOCAL',
-      description: '배포 대상 선택'
+      description: '배포 대상 선택 (GitHub push는 LOCAL으로 트리거됨)'
     )
     booleanParam(
       name: 'AUTO_CLEANUP',
