@@ -5,6 +5,7 @@ pipeline {
     choice(
       name: 'DEPLOYMENT_TARGET',
       choices: ['LOCAL', 'VM1', 'VM2', 'BOTH_VMS'],
+      defaultValue: 'LOCAL',
       description: '배포 대상 선택'
     )
     booleanParam(
