@@ -12,7 +12,7 @@
 ### Circuit Breaker 모니터링
 
 #### GET `/monitoring/circuit-breaker/status`
-현재 Circuit Breaker 상태와 분석 결과를 조회합니다.
+현재 Circuit Breaker 상태와 분석 결과를 조회합니다
 
 **응답 예시:**
 ```json
