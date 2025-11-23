@@ -1,7 +1,8 @@
 # Build stage
 FROM gradle:8-jdk21 AS builder
 WORKDIR /build
-COPY backend/monitoring-service/build.gradle.kts backend/monitoring-service/settings.gradle.kts ./
+COPY backend/monitoring-service/build.gradle.kts ./build.gradle.kts
+COPY backend/monitoring-service/settings.gradle.kts ./settings.gradle.kts
 COPY backend/monitoring-service/src ./src
 RUN gradle build -x test --no-daemon
 
