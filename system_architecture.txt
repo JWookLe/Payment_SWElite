@@ -1,0 +1,225 @@
+╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║                              결제 MSA 시뮬레이션 - 시스템 구성도                                       ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+
+┌────────────────┐   ┌──────────────┐   ┌─────────────┐
+│  Browser       │   │  GitHub      │   │  Figma      │
+│  (사용자)       │   │  (코드저장)  │   │  Slack      │
+└────────┬────────┘   └──────┬───────┘   └─────────────┘
+         │                   │
+         │                   │ Webhook
+         │               ┌───▼────────┐
+         │               │   NGROK    │
+         │               │  (4040)    │
+         │               └───┬────────┘
+         │                   │
+         │    ┌──────────────┴──────────────┐
+         │    │                             │
+         │    ▼                             ▼
+    ┌────▼─────────────────────────────────────────────────────────────────────────────────┐
+    │                                   FRONTEND LAYER                                      │
+    │  ┌──────────────────────────────┐  ┌───────────────────────────────────────────────┐ │
+    │  │  NGINX (Reverse Proxy)       │  │  React + Vite (SPA)                         │ │
+    │  │  ├─ Static File Serving      │  │  ├─ Pages                                   │ │
+    │  │  ├─ Load Balancing           │  │  │  ├─ Payment Authorization Form          │ │
+    │  │  └─ SSL/TLS Termination      │  │  │  ├─ Transaction History                 │ │
+    │  │                              │  │  │  └─ Admin Dashboard                     │ │
+    │  │  Port: 5173                  │  │  ├─ API Integration                        │ │
+    │  └──────────────┬───────────────┘  │  └─ State Management                       │ │
+    │                │                   │                                            │ │
+    │                └──────────┬────────►│  (5173:80)                                │ │
+    │                           │        └───────────────────────────────────────────┘ │
+    └─────────────────────┬─────┼───────────────────────────────────────────────────────┘
+                          │     │
+                          │     └─────────────────┐
+                          │                       │ HTTP/REST
+                          │                       ▼
+    ┌─────────────────────┴─────────────────────────────────────────────────────────────┐
+    │                            GATEWAY LAYER                                          │
+    │  ┌──────────────────────────────────────────────────────────────────────────────┐ │
+    │  │  Spring Cloud Gateway (8080)                                                 │ │
+    │  │  ├─ Dynamic Routing (Eureka 기반)                                            │ │
+    │  │  ├─ Load Balancing (Round Robin)                                             │ │
+    │  │  ├─ Circuit Breaker (Resilience4j)                                           │ │
+    │  │  │  ├─ CLOSED → OPEN (실패율 50%)                                            │ │
+    │  │  │  ├─ OPEN → HALF_OPEN (30초)                                              │ │
+    │  │  │  └─ HALF_OPEN → CLOSED (3회 성공)                                        │ │
+    │  │  └─ 라우팅 경로:                                                              │ │
+    │  │     /api/payments/** → Ingest Service                                        │ │
+    │  │     /api/admin/** → Monitoring Service                                       │ │
+    │  └──────────────────────────────────────────────────────────────────────────────┘ │
+    └────────────┬──────────────────────────────────────────────────────────────────────┘
+                 │
+                 │ Service Discovery (Eureka)
+                 │
+    ┌────────────┴──────────────────────────────────────────────────────────────────────┐
+    │                          SERVICE DISCOVERY                                        │
+    │  ┌──────────────────────────────────────────────────────────────────────────────┐ │
+    │  │  Eureka Server (8761)                                                        │ │
+    │  │  ├─ Service Registration                                                     │ │
+    │  │  │  ├─ Ingest Service (8081, 8083)                                           │ │
+    │  │  │  ├─ Consumer-Worker (8081)                                                │ │
+    │  │  │  ├─ Settlement-Worker (8084)                                              │ │
+    │  │  │  ├─ Refund-Worker (8085)                                                  │ │
+    │  │  │  └─ Monitoring Service (8082)                                             │ │
+    │  │  └─ Health Check                                                             │ │
+    │  └──────────────────────────────────────────────────────────────────────────────┘ │
+    └─────────────────────┬────────────────────────────────────────────────────────────┘
+                          │
+        ┌─────────────────┴─────────────────┐
+        │                                   │
+        ▼                                   ▼
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                         APPLICATION LAYER (Business Logic)                           │
+│                                                                                       │
+│  ┌────────────────────────┐  ┌────────────────────────┐  ┌─────────────────────────┐│
+│  │  INGEST SERVICE        │  │  CONSUMER WORKER       │  │  SETTLEMENT WORKER     ││
+│  │  (8081 / 8083)         │  │  (8081)                │  │  (8084)                ││
+│  │  ├─ Payment Auth       │  │  ├─ Kafka Consumer     │  │  ├─ Kafka Consumer     ││
+│  │  ├─ Mock PG API Call   │  │  │  (payment.captured) │  │  │  (payment.capture)  ││
+│  │  ├─ Rate Limiting      │  │  ├─ Ledger 생성        │  │  ├─ Mock PG Settlement││
+│  │  │  (Redis)            │  │  ├─ DB 저장            │  │  ├─ Kafka Publish      ││
+│  │  ├─ Outbox Pattern     │  │  │  (MariaDB)          │  │  │  (payment.captured) ││
+│  │  │  ├─ Event 저장      │  │  └─ DLQ 처리           │  │  ├─ Retry Logic        ││
+│  │  │  └─ 폴링 재발행     │  │     (payment.dlq)      │  │  │  (Max 10회)         ││
+│  │  ├─ Kafka Publish      │  │                        │  │  └─ DLQ: settlement.dlq││
+│  │  │  (payment.auth)     │  │                        │  │                        ││
+│  │  │  (payment.capture)  │  │                        │  │                        ││
+│  │  │  (payment.refund)   │  │                        │  │                        ││
+│  │  └─ DB 저장            │  │                        │  │                        ││
+│  │     (MariaDB)          │  │                        │  │                        ││
+│  └────────────────────────┘  └────────────────────────┘  └─────────────────────────┘│
+│                                                                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────────────┐│
+│  │  REFUND WORKER                          MONITORING SERVICE                      ││
+│  │  (8085)                                 (8082)                                   ││
+│  │  ├─ Kafka Consumer                      ├─ Metrics Aggregation                  ││
+│  │  │  (payment.refund-req)                ├─ Admin Dashboard                      ││
+│  │  ├─ Mock PG Refund API                  ├─ 8종 테스트 API:                      ││
+│  │  ├─ Kafka Publish                       │  ├─ K6 부하테스트 실행                ││
+│  │  │  (payment.refunded)                  │  ├─ Circuit Breaker 테스트            ││
+│  │  ├─ Retry Logic                         │  ├─ Health Check                      ││
+│  │  │  (Max 10회)                          │  ├─ DB/Redis/Kafka 통계                ││
+│  │  └─ DLQ: refund.dlq                     │  ├─ DLQ 모니터링                       ││
+│  │                                         │  └─ 정산 통계                          ││
+│  │                                         ├─ AI 분석 (Claude API)                  ││
+│  │                                         │  ├─ 이상 감지                          ││
+│  │                                         │  ├─ 권장사항 생성                      ││
+│  │                                         │  └─ 테스트 결과 분석                   ││
+│  │                                         └─ Prometheus 메트릭 질의                ││
+│  └─────────────────────────────────────────────────────────────────────────────────┘│
+│                                                                                       │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+                  │                    │                      │
+                  │ DB Read/Write      │ Metrics              │ Kafka Consume
+                  │                    │                      │
+        ┌─────────┼────────────────────┼──────────────────────┼───────┐
+        │         │                    │                      │       │
+        ▼         ▼                    ▼                      ▼       ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│                           DATA & MESSAGE LAYER                                     │
+│                                                                                     │
+│  ┌──────────────────────┐  ┌──────────────────────┐  ┌────────────────────────────┐│
+│  │  MariaDB Shard 1     │  │  MariaDB Shard 2     │  │  Redis Cache               ││
+│  │  (13306)             │  │  (13307)             │  │  (6379)                    ││
+│  │  ├─ payments         │  │  ├─ payments         │  │  ├─ Rate Limiting          ││
+│  │  ├─ ledgers          │  │  ├─ ledgers          │  │  │  └─ 초당 요청 제한     ││
+│  │  ├─ outbox           │  │  ├─ outbox           │  │  ├─ Idempotency Keys       ││
+│  │  ├─ settlements      │  │  ├─ settlements      │  │  ├─ Session Data           ││
+│  │  ├─ refunds          │  │  ├─ refunds          │  │  └─ 메트릭 캐싱            ││
+│  │  ├─ Shard Key:       │  │  ├─ Shard Key:       │  │                            ││
+│  │  │  merchantId       │  │  │  merchantId       │  │                            ││
+│  │  │  (2-way)          │  │  │  (2-way)          │  │                            ││
+│  │  └─ Max Conn: 1000   │  │  └─ Max Conn: 800    │  │                            ││
+│  └──────────────────────┘  └──────────────────────┘  └────────────────────────────┘│
+│                                                                                     │
+│  ┌───────────────────────────────────────────────────────────────────────────────┐ │
+│  │  Kafka Message Broker (9092) + Zookeeper (2181)                             │ │
+│  │  ├─ 8개 Topics:                                                             │ │
+│  │  │  ├─ payment.authorized (결제 승인)                                       │ │
+│  │  │  ├─ payment.captured (결제 정산)                                         │ │
+│  │  │  ├─ payment.refunded (결제 환불)                                        │ │
+│  │  │  ├─ payment.refund-requested (환불 요청)                                │ │
+│  │  │  ├─ payment.capture-requested (정산 요청)                                │ │
+│  │  │  ├─ payment.dlq (결제 실패 DLQ)                                          │ │
+│  │  │  ├─ refund.dlq (환불 실패 DLQ)                                          │ │
+│  │  │  └─ settlement.dlq (정산 실패 DLQ)                                       │ │
+│  │  ├─ Event-Driven 아키텍처:                                                  │ │
+│  │  │  ├─ Async Processing                                                    │ │
+│  │  │  ├─ Decoupling Services                                                 │ │
+│  │  │  └─ Message Guarantee (Outbox Pattern)                                  │ │
+│  │  └─ 6개 Partition, 1 Replica                                               │ │
+│  └───────────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                     │
+└──────────────────┬──────────────────────────────────────────────┬──────────────────┘
+                   │                                              │
+                   │ 메트릭 수집                                  │ Kafka 메시지 구독
+                   │                                              │
+        ┌──────────┴────────────────────────────────────────────┬┴────────┐
+        │                                                        │         │
+        ▼                                                        ▼         ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│                        MONITORING & OBSERVABILITY                                  │
+│                                                                                     │
+│  ┌─────────────────────────────────┐  ┌──────────────────────────────────────────┐│
+│  │  Prometheus (9090)              │  │  Grafana (3000)                          ││
+│  │  ├─ Metrics Collection          │  │  ├─ Data Source: Prometheus              ││
+│  │  ├─ Time Series Database        │  │  ├─ Dashboards (3종):                   ││
+│  │  ├─ Scrape Targets:             │  │  │  ├─ System (CPU/Memory/Disk)        ││
+│  │  │  ├─ Gateway                  │  │  │  ├─ Application (요청/응답시간)      ││
+│  │  │  ├─ All Microservices        │  │  │  └─ Business (결제/환불/정산)       ││
+│  │  │  └─ Infrastructure (DB/Kafka)│  │  ├─ Real-time Alerting                  ││
+│  │  ├─ Metric Types (40+):         │  │  ├─ Historical Analysis                 ││
+│  │  │  ├─ JVM                      │  │  └─ Custom Queries (PromQL)             ││
+│  │  │  ├─ HTTP                     │  │                                          ││
+│  │  │  ├─ Database Pool            │  │                                          ││
+│  │  │  ├─ Circuit Breaker          │  │                                          ││
+│  │  │  ├─ Kafka                    │  │                                          ││
+│  │  │  ├─ System (CPU/Memory)      │  │                                          ││
+│  │  │  └─ Business Metrics         │  │                                          ││
+│  │  └─ Retention: 15 days          │  │                                          ││
+│  └─────────────────────────────────┘  └──────────────────────────────────────────┘│
+│                                                                                     │
+└────────────────────────────────────────────────────────────────────────────────────┘
+    
+
+
+═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+                               [핵심 기술 및 역할]
+
+┌─────────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐  ┌──────────────┐
+│  Frontend       │  │  API Gateway │  │  Discovery   │  │  Microservices  │  │  Messaging   │
+│  (NGINX/React)  │  │  (Spring     │  │  (Eureka)    │  │  (Spring Boot)  │  │  (Kafka)     │
+│  • User UI      │  │   Gateway)   │  │  • Register  │  │  • Auth         │  │  • Events    │
+│  • Pages        │  │  • Routing   │  │  • Discover  │  │  • Process      │  │  • DLQ       │
+│  • Integration  │  │  • LB        │  │  • HC        │  │  • Outbox       │  │  • Resilience│
+└─────────────────┘  └──────────────┘  └──────────────┘  └─────────────────┘  └──────────────┘
+
+┌──────────────────┐  ┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│  Database        │  │  Cache          │  │  Monitoring      │  │  CI/CD           │
+│  (MariaDB)       │  │  (Redis)        │  │  (Prometheus)    │  │  (Jenkins)       │
+│  • Shard 1,2     │  │  • Rate Limit   │  │  • Metrics (40+) │  │  • Build         │
+│  • ACID          │  │  • Idempotency  │  │  • Dashboard     │  │  • Deploy        │
+│  • Transactions  │  │  • Session      │  │  • Analysis      │  │  • Test          │
+└──────────────────┘  └─────────────────┘  └──────────────────┘  └──────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│  Resilience Features:                                                                │
+│  • Circuit Breaker (CLOSED/OPEN/HALF_OPEN)                                          │
+│  • Outbox Pattern (메시지 손실 방지)                                                 │
+│  • Retry Logic (Settlement/Refund: Max 10회)                                        │
+│  • DLQ (Dead Letter Queue: 최종 실패 처리)                                          │
+│  • Health Check (자동 모니터링)                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│  Performance Optimization:                                                           │
+│  • K6 부하 테스트: ~800 RPS (목표 100 RPS 대비 8배)                                  │
+│  • p95 응답시간: ≈ 153ms                                                            │
+│  • Hikari CP: 10→50 connections                                                     │
+│  • Tomcat Threads: 200→500                                                          │
+│  • DB Sharding: merchantId 기반 2-way                                               │
+│  • Docker Build: 14분→8-10분 (70% 단축)                                             │
+└──────────────────────────────────────────────────────────────────────────────────────┘

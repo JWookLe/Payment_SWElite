@@ -14,14 +14,15 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
-ENV GRADLE_VERSION=8.10.2
+ENV GRADLE_VERSION=8.13
 ENV GRADLE_HOME=/opt/gradle
 ENV PATH="$GRADLE_HOME/bin:${PATH}"
 
 RUN curl -fsSL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o /tmp/gradle.zip \
     && unzip /tmp/gradle.zip -d /opt \
     && mv "/opt/gradle-${GRADLE_VERSION}" "${GRADLE_HOME}" \
-    && rm /tmp/gradle.zip
+    && rm /tmp/gradle.zip \
+    && chmod +x ${GRADLE_HOME}/bin/gradle
 
 RUN jenkins-plugin-cli --plugins "workflow-aggregator git git-client"
 
