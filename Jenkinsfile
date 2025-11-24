@@ -156,9 +156,9 @@ echo "=== Docker 이미지 로드 중 ==="
 docker load < /tmp/images.tar
 rm /tmp/images.tar
 echo "=== VM2 서비스 시작 (pre-built 이미지 사용) ==="
-docker compose -f docker-compose.state.yml up -d --remove-orphans
+docker compose -f docker-compose.app.yml up -d --remove-orphans
 echo "=== VM2 배포 완료 ==="
-docker compose -f docker-compose.state.yml ps
+docker compose -f docker-compose.app.yml ps
 ENDSSH
               '''
             }
