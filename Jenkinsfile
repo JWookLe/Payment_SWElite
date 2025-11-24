@@ -119,16 +119,12 @@ pipeline {
             sh '''
               ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.37 << 'EOF'
                 cd /root/Payment_SWElite
-
                 echo "=== 기존 컨테이너 중지 ==="
-                docker compose -f docker-compose.state.yml down || true
-
+                docker compose -f docker-compose.state.yml down -t 30 || true
                 echo "=== 최신 코드 가져오기 ==="
                 git pull
-
-                echo "=== VM1 서비스 시작 (docker-compose.state.yml) ==="
+                echo "=== VM1 서비스 시작 ==="
                 docker compose -f docker-compose.state.yml up -d --build
-
                 echo "=== VM1 배포 완료 ==="
                 docker compose -f docker-compose.state.yml ps
               EOF
@@ -140,16 +136,12 @@ pipeline {
             sh '''
               ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.79 << 'EOF'
                 cd /root/Payment_SWElite
-
                 echo "=== 기존 컨테이너 중지 ==="
-                docker compose -f docker-compose.state.yml down || true
-
+                docker compose -f docker-compose.state.yml down -t 30 || true
                 echo "=== 최신 코드 가져오기 ==="
                 git pull
-
-                echo "=== VM2 서비스 시작 (docker-compose.state.yml) ==="
+                echo "=== VM2 서비스 시작 ==="
                 docker compose -f docker-compose.state.yml up -d --build
-
                 echo "=== VM2 배포 완료 ==="
                 docker compose -f docker-compose.state.yml ps
               EOF
