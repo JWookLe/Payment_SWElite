@@ -114,60 +114,54 @@ pipeline {
       }
       steps {
         script {
-          if (params.DEPLOYMENT_TARGET == 'VM1' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
-            echo "=== VM1 배포 중 (172.25.0.37) ==="
-            sh '''
-              echo "Docker 이미지를 tar 파일로 저장 중..."
-              docker save eureka-server:local gateway:local ingest-service:local consumer-worker:local settlement-worker:local refund-worker:local monitoring-service:local pay-prometheus:local pay-grafana:local mock-frontend:local > /tmp/images.tar
+          withCredentials([sshUserPrivateKey(credentialsId: 'payment-swelite-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+            if (params.DEPLOYMENT_TARGET == 'VM1' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
+              echo "=== VM1 배포 중 (172.25.0.37) ==="
+              sh '''
+                echo "Docker 이미지를 tar 파일로 저장 중..."
+                docker save eureka-server:local gateway:local ingest-service:local consumer-worker:local settlement-worker:local refund-worker:local monitoring-service:local pay-prometheus:local pay-grafana:local mock-frontend:local > /tmp/images.tar
 
-              ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.37 << 'EOF'
-                cd /root/Payment_SWElite
-                echo "=== 최신 코드 가져오기 ==="
-                git pull
-              EOF
+                ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@172.25.0.37 "cd /root/Payment_SWElite && git pull"
 
-              echo "이미지 tar 파일을 VM1으로 전송 중..."
-              scp -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no /tmp/images.tar root@172.25.0.37:/tmp/images.tar
+                echo "이미지 tar 파일을 VM1으로 전송 중..."
+                scp -i $SSH_KEY -o StrictHostKeyChecking=no /tmp/images.tar root@172.25.0.37:/tmp/images.tar
 
-              ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.37 << 'EOF'
-                cd /root/Payment_SWElite
-                echo "=== Docker 이미지 로드 중 ==="
-                docker load < /tmp/images.tar
-                rm /tmp/images.tar
-                echo "=== VM1 서비스 시작 (pre-built 이미지 사용) ==="
-                docker compose -f docker-compose.state.yml up -d --remove-orphans
-                echo "=== VM1 배포 완료 ==="
-                docker compose -f docker-compose.state.yml ps
-              EOF
-            '''
-          }
+                ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@172.25.0.37 << 'ENDSSH'
+cd /root/Payment_SWElite
+echo "=== Docker 이미지 로드 중 ==="
+docker load < /tmp/images.tar
+rm /tmp/images.tar
+echo "=== VM1 서비스 시작 (pre-built 이미지 사용) ==="
+docker compose -f docker-compose.state.yml up -d --remove-orphans
+echo "=== VM1 배포 완료 ==="
+docker compose -f docker-compose.state.yml ps
+ENDSSH
+              '''
+            }
 
-          if (params.DEPLOYMENT_TARGET == 'VM2' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
-            echo "=== VM2 배포 중 (172.25.0.79) ==="
-            sh '''
-              echo "Docker 이미지를 tar 파일로 저장 중..."
-              docker save eureka-server:local gateway:local ingest-service:local consumer-worker:local settlement-worker:local refund-worker:local monitoring-service:local pay-prometheus:local pay-grafana:local mock-frontend:local > /tmp/images.tar
+            if (params.DEPLOYMENT_TARGET == 'VM2' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
+              echo "=== VM2 배포 중 (172.25.0.79) ==="
+              sh '''
+                echo "Docker 이미지를 tar 파일로 저장 중..."
+                docker save eureka-server:local gateway:local ingest-service:local consumer-worker:local settlement-worker:local refund-worker:local monitoring-service:local pay-prometheus:local pay-grafana:local mock-frontend:local > /tmp/images.tar
 
-              ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.79 << 'EOF'
-                cd /root/Payment_SWElite
-                echo "=== 최신 코드 가져오기 ==="
-                git pull
-              EOF
+                ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@172.25.0.79 "cd /root/Payment_SWElite && git pull"
 
-              echo "이미지 tar 파일을 VM2로 전송 중..."
-              scp -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no /tmp/images.tar root@172.25.0.79:/tmp/images.tar
+                echo "이미지 tar 파일을 VM2로 전송 중..."
+                scp -i $SSH_KEY -o StrictHostKeyChecking=no /tmp/images.tar root@172.25.0.79:/tmp/images.tar
 
-              ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.79 << 'EOF'
-                cd /root/Payment_SWElite
-                echo "=== Docker 이미지 로드 중 ==="
-                docker load < /tmp/images.tar
-                rm /tmp/images.tar
-                echo "=== VM2 서비스 시작 (pre-built 이미지 사용) ==="
-                docker compose -f docker-compose.state.yml up -d --remove-orphans
-                echo "=== VM2 배포 완료 ==="
-                docker compose -f docker-compose.state.yml ps
-              EOF
-            '''
+                ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@172.25.0.79 << 'ENDSSH'
+cd /root/Payment_SWElite
+echo "=== Docker 이미지 로드 중 ==="
+docker load < /tmp/images.tar
+rm /tmp/images.tar
+echo "=== VM2 서비스 시작 (pre-built 이미지 사용) ==="
+docker compose -f docker-compose.state.yml up -d --remove-orphans
+echo "=== VM2 배포 완료 ==="
+docker compose -f docker-compose.state.yml ps
+ENDSSH
+              '''
+            }
           }
         }
       }
