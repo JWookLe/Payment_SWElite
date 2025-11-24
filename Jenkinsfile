@@ -125,6 +125,9 @@ pipeline {
 
                 ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@172.25.0.37 "cd /root/Payment_SWElite && git pull"
 
+                echo ".env 파일을 VM1으로 전송 중..."
+                scp -i $SSH_KEY -o StrictHostKeyChecking=no .env root@172.25.0.37:/root/Payment_SWElite/.env
+
                 echo "이미지 tar 파일을 VM1으로 전송 중..."
                 scp -i $SSH_KEY -o StrictHostKeyChecking=no /tmp/images.tar root@172.25.0.37:/tmp/images.tar
 
