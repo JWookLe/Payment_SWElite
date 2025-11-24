@@ -114,48 +114,46 @@ pipeline {
       }
       steps {
         script {
-          withCredentials([sshUserPrivateKey(credentialsId: env.SSH_CREDENTIALS_ID, keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
-            if (params.DEPLOYMENT_TARGET == 'VM1' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
-              echo "=== VM1 배포 중 (172.25.0.37) ==="
-              sh '''
-                ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${VM1_IP} << 'EOF'
-                  cd /opt/payment-swelite
+          if (params.DEPLOYMENT_TARGET == 'VM1' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
+            echo "=== VM1 배포 중 (172.25.0.37) ==="
+            sh '''
+              ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.37 << 'EOF'
+                cd /root/Payment_SWElite
 
-                  echo "=== 기존 컨테이너 중지 ==="
-                  docker compose -f docker-compose.state.yml down || true
+                echo "=== 기존 컨테이너 중지 ==="
+                docker compose -f docker-compose.state.yml down || true
 
-                  echo "=== 최신 이미지 가져오기 ==="
-                  docker compose -f docker-compose.state.yml pull || true
+                echo "=== 최신 코드 가져오기 ==="
+                git pull
 
-                  echo "=== VM1 서비스 시작 (docker-compose.state.yml) ==="
-                  docker compose -f docker-compose.state.yml up -d
+                echo "=== VM1 서비스 시작 (docker-compose.state.yml) ==="
+                docker compose -f docker-compose.state.yml up -d --build
 
-                  echo "=== VM1 배포 완료 ==="
-                  docker compose -f docker-compose.state.yml ps
-                EOF
-              '''
-            }
+                echo "=== VM1 배포 완료 ==="
+                docker compose -f docker-compose.state.yml ps
+              EOF
+            '''
+          }
 
-            if (params.DEPLOYMENT_TARGET == 'VM2' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
-              echo "=== VM2 배포 중 (172.25.0.79) ==="
-              sh '''
-                ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${VM2_IP} << 'EOF'
-                  cd /opt/payment-swelite
+          if (params.DEPLOYMENT_TARGET == 'VM2' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
+            echo "=== VM2 배포 중 (172.25.0.79) ==="
+            sh '''
+              ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.79 << 'EOF'
+                cd /root/Payment_SWElite
 
-                  echo "=== 기존 컨테이너 중지 ==="
-                  docker compose -f docker-compose.app.yml down || true
+                echo "=== 기존 컨테이너 중지 ==="
+                docker compose -f docker-compose.state.yml down || true
 
-                  echo "=== 최신 이미지 가져오기 ==="
-                  docker compose -f docker-compose.app.yml pull || true
+                echo "=== 최신 코드 가져오기 ==="
+                git pull
 
-                  echo "=== VM2 서비스 시작 (docker-compose.app.yml) ==="
-                  docker compose -f docker-compose.app.yml up -d
+                echo "=== VM2 서비스 시작 (docker-compose.state.yml) ==="
+                docker compose -f docker-compose.state.yml up -d --build
 
-                  echo "=== VM2 배포 완료 ==="
-                  docker compose -f docker-compose.app.yml ps
-                EOF
-              '''
-            }
+                echo "=== VM2 배포 완료 ==="
+                docker compose -f docker-compose.state.yml ps
+              EOF
+            '''
           }
         }
       }
