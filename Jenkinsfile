@@ -125,9 +125,6 @@ pipeline {
 
                 ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@172.25.0.37 "cd /root/Payment_SWElite && git pull"
 
-                echo ".env 파일을 VM1으로 전송 중..."
-                scp -i $SSH_KEY -o StrictHostKeyChecking=no /var/jenkins_home/workspace/Payment-SWElite-Pipeline/.env root@172.25.0.37:/root/Payment_SWElite/.env
-
                 echo "이미지 tar 파일을 VM1으로 전송 중..."
                 scp -i $SSH_KEY -o StrictHostKeyChecking=no /tmp/images.tar root@172.25.0.37:/tmp/images.tar
 
@@ -151,9 +148,6 @@ ENDSSH
                 docker save eureka-server:local gateway:local ingest-service:local consumer-worker:local settlement-worker:local refund-worker:local monitoring-service:local pay-prometheus:local pay-grafana:local mock-frontend:local > /tmp/images.tar
 
                 ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@172.25.0.79 "cd /root/Payment_SWElite && git pull"
-
-                echo ".env 파일을 VM2로 전송 중..."
-                scp -i $SSH_KEY -o StrictHostKeyChecking=no /var/jenkins_home/workspace/Payment-SWElite-Pipeline/.env root@172.25.0.79:/root/Payment_SWElite/.env
 
                 echo "이미지 tar 파일을 VM2로 전송 중..."
                 scp -i $SSH_KEY -o StrictHostKeyChecking=no /tmp/images.tar root@172.25.0.79:/tmp/images.tar
