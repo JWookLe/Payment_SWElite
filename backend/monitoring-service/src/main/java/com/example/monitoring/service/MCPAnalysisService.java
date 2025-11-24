@@ -13,13 +13,13 @@ import org.springframework.web.client.RestTemplate;
 import java.util.*;
 
 /**
- * Google Gemini API를 직접 호출하여 AI 분석 수행
+ * Anthropic Claude API를 직접 호출하여 AI 분석 수행
  */
 @Service
 public class MCPAnalysisService {
 
     private static final Logger logger = LoggerFactory.getLogger(MCPAnalysisService.class);
-    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent";
+    private static final String CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 
     @Value("${mcp.ai-analyzer.enabled:true}")
     private boolean mcpEnabled;
@@ -42,10 +42,10 @@ public class MCPAnalysisService {
         }
 
         try {
-            logger.info("Calling Gemini API for K6 analysis: testId={}, scenario={}", testId, scenario);
+            logger.info("Calling Claude API for K6 analysis: testId={}, scenario={}", testId, scenario);
 
             String prompt = buildK6AnalysisPrompt(scenario, rawData);
-            String analysis = callGeminiAPI(prompt);
+            String analysis = callClaudeAPI(prompt);
             return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
@@ -63,10 +63,10 @@ public class MCPAnalysisService {
         }
 
         try {
-            logger.info("Calling Gemini API for Circuit Breaker analysis: testId={}", testId);
+            logger.info("Calling Claude API for Circuit Breaker analysis: testId={}", testId);
 
             String prompt = buildCircuitBreakerAnalysisPrompt(rawData);
-            String analysis = callGeminiAPI(prompt);
+            String analysis = callClaudeAPI(prompt);
             return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
@@ -84,10 +84,10 @@ public class MCPAnalysisService {
         }
 
         try {
-            logger.info("Calling Gemini API for Health Check analysis: testId={}", testId);
+            logger.info("Calling Claude API for Health Check analysis: testId={}", testId);
 
             String prompt = buildHealthCheckAnalysisPrompt(rawData);
-            String analysis = callGeminiAPI(prompt);
+            String analysis = callClaudeAPI(prompt);
             return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
@@ -105,10 +105,10 @@ public class MCPAnalysisService {
         }
 
         try {
-            logger.info("Calling Gemini API for {} stats analysis: testId={}", testType, testId);
+            logger.info("Calling Claude API for {} stats analysis: testId={}", testType, testId);
 
             String prompt = buildMonitoringStatsAnalysisPrompt(testType, rawData);
-            String analysis = callGeminiAPI(prompt);
+            String analysis = callClaudeAPI(prompt);
             return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
@@ -118,59 +118,53 @@ public class MCPAnalysisService {
     }
 
     /**
-     * Google Gemini API 호출
+     * Anthropic Claude API 호출
      */
-    private String callGeminiAPI(String prompt) throws Exception {
-        String apiKey = System.getenv("GEMINI_API_KEY");
+    private String callClaudeAPI(String prompt) throws Exception {
+        String apiKey = System.getenv("CLAUDE_API_KEY");
         if (apiKey == null || apiKey.isEmpty()) {
-            throw new RuntimeException("GEMINI_API_KEY environment variable is not set");
+            throw new RuntimeException("CLAUDE_API_KEY environment variable is not set");
         }
 
         Map<String, Object> requestBody = new HashMap<>();
 
-        // Gemini API 요청 형식
-        Map<String, Object> content = new HashMap<>();
-        List<Map<String, Object>> parts = new ArrayList<>();
-        parts.add(Map.of("text", prompt));
-        content.put("parts", parts);
+        // Claude API 요청 형식
+        List<Map<String, Object>> messages = new ArrayList<>();
+        Map<String, Object> message = new HashMap<>();
+        message.put("role", "user");
+        message.put("content", prompt);
+        messages.add(message);
 
-        requestBody.put("contents", List.of(content));
-        requestBody.put("generationConfig", Map.of(
-            "maxOutputTokens", 2048,
-            "temperature", 0.7
-        ));
+        requestBody.put("model", "claude-3-5-haiku-20241022");
+        requestBody.put("max_tokens", 2048);
+        requestBody.put("messages", messages);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("x-api-key", apiKey);
+        headers.set("anthropic-version", "2023-06-01");
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
         try {
-            String urlWithKey = GEMINI_API_URL + "?key=" + apiKey;
-            var response = restTemplate.postForObject(urlWithKey, request, Map.class);
+            var response = restTemplate.postForObject(CLAUDE_API_URL, request, Map.class);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> responseMap = (Map<String, Object>) response;
 
-            if (response != null && responseMap.containsKey("candidates")) {
+            if (response != null && responseMap.containsKey("content")) {
                 @SuppressWarnings("unchecked")
-                List<Map<String, Object>> candidates = (List<Map<String, Object>>) responseMap.get("candidates");
-                if (candidates != null && !candidates.isEmpty()) {
-                    Map<String, Object> candidate = candidates.get(0);
-                    if (candidate.containsKey("content")) {
-                        Map<String, Object> contentResp = (Map<String, Object>) candidate.get("content");
-                        if (contentResp.containsKey("parts")) {
-                            List<Map<String, Object>> partsResp = (List<Map<String, Object>>) contentResp.get("parts");
-                            if (partsResp != null && !partsResp.isEmpty()) {
-                                return (String) partsResp.get(0).get("text");
-                            }
-                        }
+                List<Map<String, Object>> content = (List<Map<String, Object>>) responseMap.get("content");
+                if (content != null && !content.isEmpty()) {
+                    Map<String, Object> firstContent = content.get(0);
+                    if (firstContent.containsKey("text")) {
+                        return (String) firstContent.get("text");
                     }
                 }
             }
-            throw new RuntimeException("Invalid Gemini API response");
+            throw new RuntimeException("Invalid Claude API response");
         } catch (Exception e) {
-            logger.error("Gemini API call failed", e);
+            logger.error("Claude API call failed", e);
             throw e;
         }
     }
@@ -311,12 +305,12 @@ public class MCPAnalysisService {
             }
         }
 
-        summary.append("상세 분석을 위해서는 Google Gemini API 연동이 필요합니다.\n");
-        summary.append("GEMINI_API_KEY 환경 변수를 설정하세요.");
+        summary.append("상세 분석을 위해서는 Claude API 연동이 필요합니다.\n");
+        summary.append("CLAUDE_API_KEY 환경 변수를 설정하세요.");
 
         result.put("aiSummary", summary.toString());
         result.put("metrics", Map.of("Status", "Data Collected"));
-        result.put("recommendations", List.of("Google Gemini API를 활성화하여 AI 분석을 받으세요."));
+        result.put("recommendations", List.of("Claude API를 활성화하여 AI 분석을 받으세요."));
 
         return result;
     }
