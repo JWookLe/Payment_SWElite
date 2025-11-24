@@ -4,29 +4,32 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
-import java.io.*;
 import java.util.*;
 
 /**
- * MCP 서버와 통신하여 AI 분석 수행
+ * Claude API를 직접 호출하여 AI 분석 수행
  */
 @Service
 public class MCPAnalysisService {
 
     private static final Logger logger = LoggerFactory.getLogger(MCPAnalysisService.class);
+    private static final String ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 
     @Value("${mcp.ai-analyzer.enabled:true}")
     private boolean mcpEnabled;
 
-    @Value("${mcp.ai-analyzer.path:mcp-servers/ai-test-analyzer}")
-    private String mcpServerPath;
-
     private final ObjectMapper objectMapper;
+    private final RestTemplate restTemplate;
 
-    public MCPAnalysisService(ObjectMapper objectMapper) {
+    public MCPAnalysisService(ObjectMapper objectMapper, RestTemplate restTemplate) {
         this.objectMapper = objectMapper;
+        this.restTemplate = restTemplate;
     }
 
     /**
@@ -34,29 +37,19 @@ public class MCPAnalysisService {
      */
     public Map<String, Object> analyzeK6Test(String testId, String scenario, Map<String, Object> rawData) {
         if (!mcpEnabled) {
-            logger.info("MCP analysis is disabled, using fallback");
+            logger.info("AI analysis is disabled, using fallback");
             return generateFallbackAnalysis(rawData);
         }
 
         try {
-            logger.info("Calling MCP server for K6 analysis: testId={}, scenario={}", testId, scenario);
+            logger.info("Calling Claude API for K6 analysis: testId={}, scenario={}", testId, scenario);
 
-            Map<String, Object> request = new HashMap<>();
-            request.put("method", "tools/call");
-            request.put("params", Map.of(
-                "name", "analyze_k6_test",
-                "arguments", Map.of(
-                    "testId", testId,
-                    "scenario", scenario,
-                    "rawData", rawData
-                )
-            ));
-
-            String response = callMCPServer(request);
-            return parseResponse(response);
+            String prompt = buildK6AnalysisPrompt(scenario, rawData);
+            String analysis = callClaudeAPI(prompt);
+            return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
-            logger.error("Failed to call MCP server for K6 analysis", e);
+            logger.error("Failed to call Claude API for K6 analysis", e);
             return generateFallbackAnalysis(rawData);
         }
     }
@@ -70,23 +63,14 @@ public class MCPAnalysisService {
         }
 
         try {
-            logger.info("Calling MCP server for Circuit Breaker analysis: testId={}", testId);
+            logger.info("Calling Claude API for Circuit Breaker analysis: testId={}", testId);
 
-            Map<String, Object> request = new HashMap<>();
-            request.put("method", "tools/call");
-            request.put("params", Map.of(
-                "name", "analyze_circuit_breaker_test",
-                "arguments", Map.of(
-                    "testId", testId,
-                    "rawData", rawData
-                )
-            ));
-
-            String response = callMCPServer(request);
-            return parseResponse(response);
+            String prompt = buildCircuitBreakerAnalysisPrompt(rawData);
+            String analysis = callClaudeAPI(prompt);
+            return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
-            logger.error("Failed to call MCP server for Circuit Breaker analysis", e);
+            logger.error("Failed to call Claude API for Circuit Breaker analysis", e);
             return generateFallbackAnalysis(rawData);
         }
     }
@@ -100,23 +84,14 @@ public class MCPAnalysisService {
         }
 
         try {
-            logger.info("Calling MCP server for Health Check analysis: testId={}", testId);
+            logger.info("Calling Claude API for Health Check analysis: testId={}", testId);
 
-            Map<String, Object> request = new HashMap<>();
-            request.put("method", "tools/call");
-            request.put("params", Map.of(
-                "name", "analyze_health_check",
-                "arguments", Map.of(
-                    "testId", testId,
-                    "rawData", rawData
-                )
-            ));
-
-            String response = callMCPServer(request);
-            return parseResponse(response);
+            String prompt = buildHealthCheckAnalysisPrompt(rawData);
+            String analysis = callClaudeAPI(prompt);
+            return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
-            logger.error("Failed to call MCP server for Health Check analysis", e);
+            logger.error("Failed to call Claude API for Health Check analysis", e);
             return generateFallbackAnalysis(rawData);
         }
     }
@@ -130,110 +105,169 @@ public class MCPAnalysisService {
         }
 
         try {
-            logger.info("Calling MCP server for {} stats analysis: testId={}", testType, testId);
+            logger.info("Calling Claude API for {} stats analysis: testId={}", testType, testId);
 
-            Map<String, Object> request = new HashMap<>();
-            request.put("method", "tools/call");
-            request.put("params", Map.of(
-                "name", "analyze_monitoring_stats",
-                "arguments", Map.of(
-                    "testId", testId,
-                    "testType", testType,
-                    "rawData", rawData
-                )
-            ));
-
-            String response = callMCPServer(request);
-            return parseResponse(response);
+            String prompt = buildMonitoringStatsAnalysisPrompt(testType, rawData);
+            String analysis = callClaudeAPI(prompt);
+            return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
-            logger.error("Failed to call MCP server for {} stats analysis", testType, e);
+            logger.error("Failed to call Claude API for {} stats analysis", testType, e);
             return generateFallbackAnalysis(rawData);
         }
     }
 
     /**
-     * MCP 서버 호출 (stdio 기반)
+     * Claude API 호출
      */
-    private String callMCPServer(Map<String, Object> request) throws Exception {
-        File serverDir = new File(mcpServerPath);
-        if (!serverDir.exists()) {
-            throw new RuntimeException("MCP server directory not found: " + mcpServerPath);
-        }
-
-        // Node.js로 MCP 서버 실행
-        ProcessBuilder pb = new ProcessBuilder(
-            "node",
-            "dist/index.js"
-        );
-        pb.directory(serverDir);
-
-        // 환경 변수 설정
-        Map<String, String> env = pb.environment();
+    private String callClaudeAPI(String prompt) throws Exception {
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
-        if (apiKey != null) {
-            env.put("ANTHROPIC_API_KEY", apiKey);
+        if (apiKey == null || apiKey.isEmpty()) {
+            throw new RuntimeException("ANTHROPIC_API_KEY environment variable is not set");
         }
 
-        pb.redirectErrorStream(false);
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("model", "claude-3-5-sonnet-20241022");
+        requestBody.put("max_tokens", 2048);
+        requestBody.put("messages", List.of(
+            Map.of("role", "user", "content", prompt)
+        ));
 
-        Process process = pb.start();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("x-api-key", apiKey);
+        headers.set("anthropic-version", "2023-06-01");
 
-        // 요청 전송
-        try (OutputStream stdin = process.getOutputStream();
-             OutputStreamWriter writer = new OutputStreamWriter(stdin)) {
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
-            String requestJson = objectMapper.writeValueAsString(request);
-            logger.debug("Sending to MCP: {}", requestJson);
+        try {
+            var response = restTemplate.postForObject(ANTHROPIC_API_URL, request, Map.class);
 
-            writer.write(requestJson);
-            writer.write("\n");
-            writer.flush();
-        }
-
-        // 응답 수신
-        StringBuilder response = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                response.append(line);
-                break; // 첫 번째 줄만 읽기 (JSON 응답)
+            if (response != null && response.containsKey("content")) {
+                List<Map<String, Object>> content = (List<Map<String, Object>>) response.get("content");
+                if (content != null && !content.isEmpty()) {
+                    return (String) content.get(0).get("text");
+                }
             }
+            throw new RuntimeException("Invalid Claude API response");
+        } catch (Exception e) {
+            logger.error("Claude API call failed", e);
+            throw e;
         }
-
-        // 에러 로그 읽기
-        try (BufferedReader errorReader = new BufferedReader(
-                new InputStreamReader(process.getErrorStream()))) {
-            String errorLine;
-            while ((errorLine = errorReader.readLine()) != null) {
-                logger.debug("MCP stderr: {}", errorLine);
-            }
-        }
-
-        process.destroy();
-
-        String responseStr = response.toString();
-        logger.debug("Received from MCP: {}", responseStr);
-
-        return responseStr;
     }
 
     /**
-     * MCP 응답 파싱
+     * 분석 결과 파싱
      */
-    private Map<String, Object> parseResponse(String response) throws Exception {
-        Map<String, Object> responseMap = objectMapper.readValue(response, Map.class);
+    private Map<String, Object> parseAnalysisResult(String analysisText, Map<String, Object> rawData) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("aiSummary", analysisText);
+        result.put("metrics", extractMetrics(rawData));
+        result.put("recommendations", extractRecommendations(analysisText));
+        return result;
+    }
 
-        // MCP 응답 구조: { content: [{ type: "text", text: "..." }] }
-        List<Map<String, Object>> content = (List<Map<String, Object>>) responseMap.get("content");
-        if (content != null && !content.isEmpty()) {
-            String textContent = (String) content.get(0).get("text");
-            // JSON 형태로 파싱
-            return objectMapper.readValue(textContent, Map.class);
+    /**
+     * 메트릭 추출
+     */
+    private Map<String, String> extractMetrics(Map<String, Object> rawData) {
+        Map<String, String> metrics = new HashMap<>();
+        if (rawData.containsKey("k6Summary")) {
+            Map<String, Object> k6Summary = (Map<String, Object>) rawData.get("k6Summary");
+            if (k6Summary.containsKey("metrics")) {
+                Map<String, Object> k6Metrics = (Map<String, Object>) k6Summary.get("metrics");
+                if (k6Metrics.containsKey("http_reqs")) {
+                    Map<String, Object> httpReqs = (Map<String, Object>) k6Metrics.get("http_reqs");
+                    if (httpReqs.containsKey("values")) {
+                        Map<String, Object> values = (Map<String, Object>) httpReqs.get("values");
+                        metrics.put("Total Requests", String.valueOf(values.getOrDefault("count", "N/A")));
+                    }
+                }
+            }
+        }
+        if (metrics.isEmpty()) {
+            metrics.put("Status", "Data Collected");
+        }
+        return metrics;
+    }
+
+    /**
+     * 권장사항 추출
+     */
+    private List<String> extractRecommendations(String analysisText) {
+        List<String> recommendations = new ArrayList<>();
+        String[] lines = analysisText.split("\n");
+        boolean inRecommendations = false;
+
+        for (String line : lines) {
+            if (line.toLowerCase().contains("recommendation")) {
+                inRecommendations = true;
+                continue;
+            }
+            if (inRecommendations && (line.trim().startsWith("-") || line.trim().startsWith("•") || line.trim().matches("^\\d+\\..*"))) {
+                String rec = line.trim().replaceAll("^[-•]\\s*", "").replaceAll("^\\d+\\.\\s*", "");
+                if (!rec.isEmpty()) {
+                    recommendations.add(rec);
+                }
+            }
         }
 
-        throw new RuntimeException("Invalid MCP response format");
+        if (recommendations.isEmpty()) {
+            recommendations.add("AI 분석을 참고하세요.");
+        }
+        return recommendations;
+    }
+
+    /**
+     * K6 분석 프롬프트 생성
+     */
+    private String buildK6AnalysisPrompt(String scenario, Map<String, Object> rawData) {
+        return "You are an expert performance testing analyst. Analyze the following K6 load test results and provide:\n\n" +
+               "1. **Executive Summary** (2-3 sentences)\n" +
+               "2. **Performance Metrics Analysis**\n" +
+               "3. **Bottlenecks & Issues**\n" +
+               "4. **Recommendations** (3-5 bullet points)\n\n" +
+               "Test Scenario: " + scenario + "\n\n" +
+               "Raw Data:\n" + objectMapper.writeValueAsString(rawData);
+    }
+
+    /**
+     * Circuit Breaker 분석 프롬프트 생성
+     */
+    private String buildCircuitBreakerAnalysisPrompt(Map<String, Object> rawData) {
+        return "You are a resilience engineering expert. Analyze the following Circuit Breaker test results:\n\n" +
+               "Provide:\n" +
+               "1. **Summary**: Did the circuit breaker function correctly?\n" +
+               "2. **State Transitions**: Analyze CLOSED → OPEN → HALF_OPEN → CLOSED transitions\n" +
+               "3. **Recovery Behavior**: Evaluate system recovery\n" +
+               "4. **Recommendations**: Tuning suggestions\n\n" +
+               "Test Data:\n" + objectMapper.writeValueAsString(rawData);
+    }
+
+    /**
+     * Health Check 분석 프롬프트 생성
+     */
+    private String buildHealthCheckAnalysisPrompt(Map<String, Object> rawData) {
+        return "You are a DevOps engineer analyzing system health checks. Review the following health check results:\n\n" +
+               "Provide:\n" +
+               "1. **Summary**: Overall system health status\n" +
+               "2. **Service Status**: Breakdown of each service (UP/DOWN)\n" +
+               "3. **Dependencies**: Evaluate connectivity\n" +
+               "4. **Recommendations**: Actions needed\n\n" +
+               "Health Check Data:\n" + objectMapper.writeValueAsString(rawData);
+    }
+
+    /**
+     * 모니터링 통계 분석 프롬프트 생성
+     */
+    private String buildMonitoringStatsAnalysisPrompt(String testType, Map<String, Object> rawData) {
+        return "You are a monitoring and observability expert. Analyze the following " + testType + " statistics:\n\n" +
+               "Provide:\n" +
+               "1. **Summary**: Key insights from the data\n" +
+               "2. **Metrics Analysis**: Evaluate performance and health metrics\n" +
+               "3. **Trends**: Identify concerning trends or anomalies\n" +
+               "4. **Recommendations**: Optimization suggestions\n\n" +
+               "Monitoring Data:\n" + objectMapper.writeValueAsString(rawData);
     }
 
     /**
