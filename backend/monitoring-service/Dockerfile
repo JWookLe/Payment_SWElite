@@ -39,7 +39,7 @@ RUN mkdir -p ./scripts ./loadtest && chown -R spring:spring /app
 
 # Install MCP server dependencies
 COPY --chown=spring:spring mcp-servers ./mcp-servers
-RUN cd /app/mcp-servers/ai-test-analyzer && npm install --production && npm run build
+RUN cd /app/mcp-servers/ai-test-analyzer && npm install && npm run build
 
 EXPOSE 8082
 USER spring
