@@ -221,53 +221,57 @@ public class MCPAnalysisService {
     /**
      * K6 분석 프롬프트 생성
      */
-    private String buildK6AnalysisPrompt(String scenario, Map<String, Object> rawData) {
+    private String buildK6AnalysisPrompt(String scenario, Map<String, Object> rawData) throws Exception {
+        String rawDataJson = objectMapper.writeValueAsString(rawData);
         return "You are an expert performance testing analyst. Analyze the following K6 load test results and provide:\n\n" +
                "1. **Executive Summary** (2-3 sentences)\n" +
                "2. **Performance Metrics Analysis**\n" +
                "3. **Bottlenecks & Issues**\n" +
                "4. **Recommendations** (3-5 bullet points)\n\n" +
                "Test Scenario: " + scenario + "\n\n" +
-               "Raw Data:\n" + objectMapper.writeValueAsString(rawData);
+               "Raw Data:\n" + rawDataJson;
     }
 
     /**
      * Circuit Breaker 분석 프롬프트 생성
      */
-    private String buildCircuitBreakerAnalysisPrompt(Map<String, Object> rawData) {
+    private String buildCircuitBreakerAnalysisPrompt(Map<String, Object> rawData) throws Exception {
+        String rawDataJson = objectMapper.writeValueAsString(rawData);
         return "You are a resilience engineering expert. Analyze the following Circuit Breaker test results:\n\n" +
                "Provide:\n" +
                "1. **Summary**: Did the circuit breaker function correctly?\n" +
                "2. **State Transitions**: Analyze CLOSED → OPEN → HALF_OPEN → CLOSED transitions\n" +
                "3. **Recovery Behavior**: Evaluate system recovery\n" +
                "4. **Recommendations**: Tuning suggestions\n\n" +
-               "Test Data:\n" + objectMapper.writeValueAsString(rawData);
+               "Test Data:\n" + rawDataJson;
     }
 
     /**
      * Health Check 분석 프롬프트 생성
      */
-    private String buildHealthCheckAnalysisPrompt(Map<String, Object> rawData) {
+    private String buildHealthCheckAnalysisPrompt(Map<String, Object> rawData) throws Exception {
+        String rawDataJson = objectMapper.writeValueAsString(rawData);
         return "You are a DevOps engineer analyzing system health checks. Review the following health check results:\n\n" +
                "Provide:\n" +
                "1. **Summary**: Overall system health status\n" +
                "2. **Service Status**: Breakdown of each service (UP/DOWN)\n" +
                "3. **Dependencies**: Evaluate connectivity\n" +
                "4. **Recommendations**: Actions needed\n\n" +
-               "Health Check Data:\n" + objectMapper.writeValueAsString(rawData);
+               "Health Check Data:\n" + rawDataJson;
     }
 
     /**
      * 모니터링 통계 분석 프롬프트 생성
      */
-    private String buildMonitoringStatsAnalysisPrompt(String testType, Map<String, Object> rawData) {
+    private String buildMonitoringStatsAnalysisPrompt(String testType, Map<String, Object> rawData) throws Exception {
+        String rawDataJson = objectMapper.writeValueAsString(rawData);
         return "You are a monitoring and observability expert. Analyze the following " + testType + " statistics:\n\n" +
                "Provide:\n" +
                "1. **Summary**: Key insights from the data\n" +
                "2. **Metrics Analysis**: Evaluate performance and health metrics\n" +
                "3. **Trends**: Identify concerning trends or anomalies\n" +
                "4. **Recommendations**: Optimization suggestions\n\n" +
-               "Monitoring Data:\n" + objectMapper.writeValueAsString(rawData);
+               "Monitoring Data:\n" + rawDataJson;
     }
 
     /**
