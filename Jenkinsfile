@@ -117,12 +117,25 @@ pipeline {
           if (params.DEPLOYMENT_TARGET == 'VM1' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
             echo "=== VM1 배포 중 (172.25.0.37) ==="
             sh '''
+              echo "Docker 이미지를 tar 파일로 저장 중..."
+              docker save eureka-server:local gateway:local ingest-service:local consumer-worker:local settlement-worker:local refund-worker:local monitoring-service:local pay-prometheus:local pay-grafana:local mock-frontend:local > /tmp/images.tar
+
               ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.37 << 'EOF'
                 cd /root/Payment_SWElite
                 echo "=== 최신 코드 가져오기 ==="
                 git pull
-                echo "=== VM1 서비스 시작 (기존 컨테이너 자동 업데이트) ==="
-                docker compose -f docker-compose.state.yml up -d --build --remove-orphans
+              EOF
+
+              echo "이미지 tar 파일을 VM1으로 전송 중..."
+              scp -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no /tmp/images.tar root@172.25.0.37:/tmp/images.tar
+
+              ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.37 << 'EOF'
+                cd /root/Payment_SWElite
+                echo "=== Docker 이미지 로드 중 ==="
+                docker load < /tmp/images.tar
+                rm /tmp/images.tar
+                echo "=== VM1 서비스 시작 (pre-built 이미지 사용) ==="
+                docker compose -f docker-compose.state.yml up -d --remove-orphans
                 echo "=== VM1 배포 완료 ==="
                 docker compose -f docker-compose.state.yml ps
               EOF
@@ -132,12 +145,25 @@ pipeline {
           if (params.DEPLOYMENT_TARGET == 'VM2' || params.DEPLOYMENT_TARGET == 'BOTH_VMS') {
             echo "=== VM2 배포 중 (172.25.0.79) ==="
             sh '''
+              echo "Docker 이미지를 tar 파일로 저장 중..."
+              docker save eureka-server:local gateway:local ingest-service:local consumer-worker:local settlement-worker:local refund-worker:local monitoring-service:local pay-prometheus:local pay-grafana:local mock-frontend:local > /tmp/images.tar
+
               ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.79 << 'EOF'
                 cd /root/Payment_SWElite
                 echo "=== 최신 코드 가져오기 ==="
                 git pull
-                echo "=== VM2 서비스 시작 (기존 컨테이너 자동 업데이트) ==="
-                docker compose -f docker-compose.state.yml up -d --build --remove-orphans
+              EOF
+
+              echo "이미지 tar 파일을 VM2로 전송 중..."
+              scp -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no /tmp/images.tar root@172.25.0.79:/tmp/images.tar
+
+              ssh -i /var/jenkins_home/.ssh/id_rsa -o StrictHostKeyChecking=no root@172.25.0.79 << 'EOF'
+                cd /root/Payment_SWElite
+                echo "=== Docker 이미지 로드 중 ==="
+                docker load < /tmp/images.tar
+                rm /tmp/images.tar
+                echo "=== VM2 서비스 시작 (pre-built 이미지 사용) ==="
+                docker compose -f docker-compose.state.yml up -d --remove-orphans
                 echo "=== VM2 배포 완료 ==="
                 docker compose -f docker-compose.state.yml ps
               EOF
