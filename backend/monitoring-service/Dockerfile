@@ -36,6 +36,11 @@ RUN useradd --system --create-home spring \
 WORKDIR /app
 COPY --from=builder --chown=spring:spring /build/build/libs/*.jar app.jar
 RUN mkdir -p ./scripts ./loadtest && chown -R spring:spring /app
+
+# Install MCP server dependencies
+COPY --chown=spring:spring mcp-servers ./mcp-servers
+RUN cd /app/mcp-servers/ai-test-analyzer && npm install --production && npm run build
+
 EXPOSE 8082
 USER spring
 ENTRYPOINT ["java", "-jar", "app.jar"]
