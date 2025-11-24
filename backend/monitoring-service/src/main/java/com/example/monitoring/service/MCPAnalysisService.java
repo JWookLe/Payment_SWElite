@@ -19,7 +19,7 @@ import java.util.*;
 public class MCPAnalysisService {
 
     private static final Logger logger = LoggerFactory.getLogger(MCPAnalysisService.class);
-    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-latest:generateContent";
+    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent";
 
     @Value("${mcp.ai-analyzer.enabled:true}")
     private boolean mcpEnabled;
@@ -142,12 +142,12 @@ public class MCPAnalysisService {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("x-goog-api-key", apiKey);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
         try {
-            var response = restTemplate.postForObject(GEMINI_API_URL, request, Map.class);
+            String urlWithKey = GEMINI_API_URL + "?key=" + apiKey;
+            var response = restTemplate.postForObject(urlWithKey, request, Map.class);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> responseMap = (Map<String, Object>) response;
