@@ -13,13 +13,13 @@ import org.springframework.web.client.RestTemplate;
 import java.util.*;
 
 /**
- * Claude API를 직접 호출하여 AI 분석 수행
+ * Google Gemini API를 직접 호출하여 AI 분석 수행
  */
 @Service
 public class MCPAnalysisService {
 
     private static final Logger logger = LoggerFactory.getLogger(MCPAnalysisService.class);
-    private static final String ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
     @Value("${mcp.ai-analyzer.enabled:true}")
     private boolean mcpEnabled;
@@ -42,10 +42,10 @@ public class MCPAnalysisService {
         }
 
         try {
-            logger.info("Calling Claude API for K6 analysis: testId={}, scenario={}", testId, scenario);
+            logger.info("Calling Gemini API for K6 analysis: testId={}, scenario={}", testId, scenario);
 
             String prompt = buildK6AnalysisPrompt(scenario, rawData);
-            String analysis = callClaudeAPI(prompt);
+            String analysis = callGeminiAPI(prompt);
             return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
@@ -63,10 +63,10 @@ public class MCPAnalysisService {
         }
 
         try {
-            logger.info("Calling Claude API for Circuit Breaker analysis: testId={}", testId);
+            logger.info("Calling Gemini API for Circuit Breaker analysis: testId={}", testId);
 
             String prompt = buildCircuitBreakerAnalysisPrompt(rawData);
-            String analysis = callClaudeAPI(prompt);
+            String analysis = callGeminiAPI(prompt);
             return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
@@ -84,10 +84,10 @@ public class MCPAnalysisService {
         }
 
         try {
-            logger.info("Calling Claude API for Health Check analysis: testId={}", testId);
+            logger.info("Calling Gemini API for Health Check analysis: testId={}", testId);
 
             String prompt = buildHealthCheckAnalysisPrompt(rawData);
-            String analysis = callClaudeAPI(prompt);
+            String analysis = callGeminiAPI(prompt);
             return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
@@ -105,10 +105,10 @@ public class MCPAnalysisService {
         }
 
         try {
-            logger.info("Calling Claude API for {} stats analysis: testId={}", testType, testId);
+            logger.info("Calling Gemini API for {} stats analysis: testId={}", testType, testId);
 
             String prompt = buildMonitoringStatsAnalysisPrompt(testType, rawData);
-            String analysis = callClaudeAPI(prompt);
+            String analysis = callGeminiAPI(prompt);
             return parseAnalysisResult(analysis, rawData);
 
         } catch (Exception e) {
@@ -118,40 +118,56 @@ public class MCPAnalysisService {
     }
 
     /**
-     * Claude API 호출
+     * Google Gemini API 호출
      */
-    private String callClaudeAPI(String prompt) throws Exception {
-        String apiKey = System.getenv("ANTHROPIC_API_KEY");
+    private String callGeminiAPI(String prompt) throws Exception {
+        String apiKey = System.getenv("GEMINI_API_KEY");
         if (apiKey == null || apiKey.isEmpty()) {
-            throw new RuntimeException("ANTHROPIC_API_KEY environment variable is not set");
+            throw new RuntimeException("GEMINI_API_KEY environment variable is not set");
         }
 
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", "claude-3-5-sonnet-20241022");
-        requestBody.put("max_tokens", 2048);
-        requestBody.put("messages", List.of(
-            Map.of("role", "user", "content", prompt)
+
+        // Gemini API 요청 형식
+        Map<String, Object> content = new HashMap<>();
+        List<Map<String, Object>> parts = new ArrayList<>();
+        parts.add(Map.of("text", prompt));
+        content.put("parts", parts);
+
+        requestBody.put("contents", List.of(content));
+        requestBody.put("generationConfig", Map.of(
+            "maxOutputTokens", 2048,
+            "temperature", 0.7
         ));
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("x-api-key", apiKey);
-        headers.set("anthropic-version", "2023-06-01");
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
-        try {
-            var response = restTemplate.postForObject(ANTHROPIC_API_URL, request, Map.class);
+        String urlWithKey = GEMINI_API_URL + "?key=" + apiKey;
 
-            if (response != null && response.containsKey("content")) {
-                List<Map<String, Object>> content = (List<Map<String, Object>>) response.get("content");
-                if (content != null && !content.isEmpty()) {
-                    return (String) content.get(0).get("text");
+        try {
+            var response = restTemplate.postForObject(urlWithKey, request, Map.class);
+
+            if (response != null && response.containsKey("candidates")) {
+                List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
+                if (candidates != null && !candidates.isEmpty()) {
+                    Map<String, Object> candidate = candidates.get(0);
+                    if (candidate.containsKey("content")) {
+                        Map<String, Object> contentResp = (Map<String, Object>) candidate.get("content");
+                        if (contentResp.containsKey("parts")) {
+                            List<Map<String, Object>> partsResp = (List<Map<String, Object>>) contentResp.get("parts");
+                            if (partsResp != null && !partsResp.isEmpty()) {
+                                return (String) partsResp.get(0).get("text");
+                            }
+                        }
+                    }
                 }
             }
-            throw new RuntimeException("Invalid Claude API response");
+            throw new RuntimeException("Invalid Gemini API response");
         } catch (Exception e) {
-            logger.error("Claude API call failed", e);
+            logger.error("Gemini API call failed", e);
             throw e;
         }
     }
