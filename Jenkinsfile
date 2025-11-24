@@ -4,8 +4,8 @@ pipeline {
   parameters {
     choice(
       name: 'DEPLOYMENT_TARGET',
-      choices: ['LOCAL', 'VM1', 'VM2', 'BOTH_VMS'],
-      description: '배포 대상 선택 (GitHub push는 LOCAL으로 트리거됨)'
+      choices: ['BOTH_VMS', 'LOCAL', 'VM1', 'VM2'],
+      description: '배포 대상 선택 (GitHub push는 BOTH_VMS로 자동 트리거됨)'
     )
     booleanParam(
       name: 'AUTO_CLEANUP',
@@ -21,6 +21,8 @@ pipeline {
     VM2_IP = "172.25.0.79"
     VM2_USER = "root"
     SSH_CREDENTIALS_ID = "payment-swelite-ssh"
+    // GitHub push 트리거 시 기본값
+    DEPLOYMENT_TARGET = "${env.DEPLOYMENT_TARGET ?: 'BOTH_VMS'}"
   }
 
   triggers {
