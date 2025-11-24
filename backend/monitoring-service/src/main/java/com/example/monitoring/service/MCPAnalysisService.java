@@ -19,7 +19,7 @@ import java.util.*;
 public class MCPAnalysisService {
 
     private static final Logger logger = LoggerFactory.getLogger(MCPAnalysisService.class);
-    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent";
 
     @Value("${mcp.ai-analyzer.enabled:true}")
     private boolean mcpEnabled;
