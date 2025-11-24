@@ -308,12 +308,12 @@ public class MCPAnalysisService {
             }
         }
 
-        summary.append("상세 분석을 위해서는 MCP 서버와 Claude API 연동이 필요합니다.\n");
-        summary.append("ANTHROPIC_API_KEY 환경 변수를 설정하고 MCP 서버를 활성화하세요.");
+        summary.append("상세 분석을 위해서는 Google Gemini API 연동이 필요합니다.\n");
+        summary.append("GEMINI_API_KEY 환경 변수를 설정하세요.");
 
         result.put("aiSummary", summary.toString());
         result.put("metrics", Map.of("Status", "Data Collected"));
-        result.put("recommendations", List.of("MCP 서버를 활성화하여 AI 분석을 받으세요."));
+        result.put("recommendations", List.of("Google Gemini API를 활성화하여 AI 분석을 받으세요."));
 
         return result;
     }
