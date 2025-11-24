@@ -19,7 +19,7 @@ import java.util.*;
 public class MCPAnalysisService {
 
     private static final Logger logger = LoggerFactory.getLogger(MCPAnalysisService.class);
-    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent";
+    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent";
 
     @Value("${mcp.ai-analyzer.enabled:true}")
     private boolean mcpEnabled;
@@ -142,16 +142,19 @@ public class MCPAnalysisService {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("x-goog-api-key", apiKey);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
-        String urlWithKey = GEMINI_API_URL + "?key=" + apiKey;
-
         try {
-            var response = restTemplate.postForObject(urlWithKey, request, Map.class);
+            var response = restTemplate.postForObject(GEMINI_API_URL, request, Map.class);
 
-            if (response != null && response.containsKey("candidates")) {
-                List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> responseMap = (Map<String, Object>) response;
+
+            if (response != null && responseMap.containsKey("candidates")) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> candidates = (List<Map<String, Object>>) responseMap.get("candidates");
                 if (candidates != null && !candidates.isEmpty()) {
                     Map<String, Object> candidate = candidates.get(0);
                     if (candidate.containsKey("content")) {
