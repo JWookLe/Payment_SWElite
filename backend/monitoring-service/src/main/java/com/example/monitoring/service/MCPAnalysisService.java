@@ -121,9 +121,9 @@ public class MCPAnalysisService {
      * Anthropic Claude API 호출
      */
     private String callClaudeAPI(String prompt) throws Exception {
-        String apiKey = System.getenv("CLAUDE_API_KEY");
+        String apiKey = System.getenv("ANTHROPIC_API_KEY");
         if (apiKey == null || apiKey.isEmpty()) {
-            throw new RuntimeException("CLAUDE_API_KEY environment variable is not set");
+            throw new RuntimeException("ANTHROPIC_API_KEY environment variable is not set");
         }
 
         Map<String, Object> requestBody = new HashMap<>();
@@ -306,7 +306,7 @@ public class MCPAnalysisService {
         }
 
         summary.append("상세 분석을 위해서는 Claude API 연동이 필요합니다.\n");
-        summary.append("CLAUDE_API_KEY 환경 변수를 설정하세요.");
+        summary.append("ANTHROPIC_API_KEY 환경 변수를 설정하세요.");
 
         result.put("aiSummary", summary.toString());
         result.put("metrics", Map.of("Status", "Data Collected"));

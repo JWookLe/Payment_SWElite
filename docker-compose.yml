@@ -204,7 +204,7 @@ services:
       INGEST_SERVICE_URL: http://ingest-service:8080
       PROMETHEUS_URL: http://prometheus:9090
       EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
-      CLAUDE_API_KEY: ${CLAUDE_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       MCP_AI_ANALYZER_ENABLED: "true"
       MCP_AI_ANALYZER_PATH: /app/mcp-servers/ai-test-analyzer
     depends_on:
