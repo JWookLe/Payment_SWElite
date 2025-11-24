@@ -223,7 +223,6 @@ services:
     volumes:
       - ./scripts:/app/scripts:ro
       - ./loadtest:/app/loadtest
-      - ./mcp-servers:/app/mcp-servers:ro
       - /var/run/docker.sock:/var/run/docker.sock
 
   gateway:
