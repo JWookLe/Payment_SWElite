@@ -49,7 +49,7 @@ public class MockPgAuthApiClient {
             String currency,
             String cardNumber
     ) throws PgApiException {
-        log.info("Requesting authorization to Mock PG: merchantId={}, amount={}, currency={}",
+        log.debug("Requesting authorization to Mock PG: merchantId={}, amount={}, currency={}",
                 merchantId, amount, currency);
 
         // 1~3초 지연 시뮬레이션 (실제 PG API 응답 시간)
@@ -66,7 +66,7 @@ public class MockPgAuthApiClient {
         // 실패 시뮬레이션
         // 부하테스트 모드: 거의 성공 (0.01% 실패) - 성능 측정용
         // 일반 모드: 현실적인 실패율 (0.5% 실패) - 에러 처리 검증용
-        double effectiveFailureRate = loadTestMode ? 0.0001 : failureRate;
+        double effectiveFailureRate = loadTestMode ? Math.min(failureRate, 0.0001) : failureRate;
         if (Math.random() < effectiveFailureRate) {
             log.warn("Mock PG authorization failed (random failure): merchantId={}, amount={}, mode={}",
                     merchantId, amount, loadTestMode ? "LOADTEST" : "NORMAL");
@@ -76,7 +76,7 @@ public class MockPgAuthApiClient {
         // 성공 응답
         String approvalNumber = "APP" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         String transactionId = "txn_" + UUID.randomUUID().toString().substring(0, 8);
-        log.info("Mock PG authorization succeeded: merchantId={}, approvalNumber={}, transactionId={}",
+        log.debug("Mock PG authorization succeeded: merchantId={}, approvalNumber={}, transactionId={}",
                 merchantId, approvalNumber, transactionId);
 
         return new AuthorizationResponse(

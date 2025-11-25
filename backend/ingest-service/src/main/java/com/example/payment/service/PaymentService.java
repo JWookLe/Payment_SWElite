@@ -195,7 +195,7 @@ public class PaymentService {
                 try {
                         // Step 1: Mock PG API 호출 (카드 승인) - Circuit Breaker로 보호됨
                         long pgStart = System.currentTimeMillis();
-                        log.info("Calling Mock PG Authorization API: merchantId={}, amount={}, currency={}",
+                        log.debug("Calling Mock PG Authorization API: merchantId={}, amount={}, currency={}",
                                         request.merchantId(), request.amount(), request.currency());
 
                         AuthorizationResponse pgResponse = pgAuthApiService.requestAuthorization(
@@ -206,7 +206,7 @@ public class PaymentService {
                         );
 
                         long pgTime = System.currentTimeMillis() - pgStart;
-                        log.info("PG Authorization succeeded: approvalNumber={}, transactionId={}, elapsedMs={}",
+                        log.debug("PG Authorization succeeded: approvalNumber={}, transactionId={}, elapsedMs={}",
                                         pgResponse.getApprovalNumber(), pgResponse.getTransactionId(), pgTime);
 
                         // Step 2 & 3: DB 저장 및 이벤트 발행 (트랜잭션 내에서 실행)
@@ -267,7 +267,7 @@ public class PaymentService {
 
                         long txTime = System.currentTimeMillis() - txStart;
                         long totalTime = System.currentTimeMillis() - methodStart;
-                        log.info("Authorization complete: pgTime={}ms, txTime={}ms, totalTime={}ms",
+                        log.debug("Authorization complete: pgTime={}ms, txTime={}ms, totalTime={}ms",
                                         pgTime, txTime, totalTime);
 
                         return new PaymentResult(response, false);

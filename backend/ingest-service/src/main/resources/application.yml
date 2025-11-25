@@ -176,7 +176,7 @@ eureka:
 
 mock:
   pg:
-    delay-min-ms: 25
-    delay-max-ms: 75
-    failure-rate: 0.005
+    delay-min-ms: ${MOCK_PG_DELAY_MIN_MS:5}
+    delay-max-ms: ${MOCK_PG_DELAY_MAX_MS:15}
+    failure-rate: ${MOCK_PG_FAILURE_RATE:0.0001}
     loadtest-mode: ${MOCK_PG_LOADTEST_MODE:false}
