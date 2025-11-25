@@ -18,10 +18,10 @@ public class MockPgAuthApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(MockPgAuthApiClient.class);
 
-    @Value("${mock.pg.delay-min-ms:50}")
+    @Value("${mock.pg.delay-min-ms:25}")
     private int minDelayMs;
 
-    @Value("${mock.pg.delay-max-ms:150}")
+    @Value("${mock.pg.delay-max-ms:75}")
     private int maxDelayMs;
 
     @Value("${mock.pg.failure-rate:0.005}")
