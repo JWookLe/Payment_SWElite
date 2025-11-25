@@ -45,15 +45,15 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
       # Timeout configuration for Circuit Breaker to detect Kafka failures
-      acks: all                    # Wait for all replicas to acknowledge
-      retries: 1                   # Retry once on failure
-      request-timeout-ms: 2000     # 2 second timeout for send request (optimized for load testing)
-      delivery-timeout-ms: 3000    # 3 second total timeout including retries
+      acks: all                    # Wait for all replicas to acknowledge (stability)
+      retries: 2                   # Retry twice for transient failures
+      request-timeout-ms: 1000     # 1 second timeout for send request (reduced from 2s)
+      delivery-timeout-ms: 2000    # 2 second total timeout (reduced from 3s)
       # Batching configuration for performance
-      batch-size: 32768            # 32KB batch size for better throughput
-      linger-ms: 5                 # Keep latency low while still batching
+      batch-size: 16384            # 16KB batch size (reduced for faster throughput)
+      linger-ms: 1                 # Minimal batching delay (reduced from 5ms)
       properties:
-        max.in.flight.requests.per.connection: 5  # Must be <=5 for idempotent producer
+        max.in.flight.requests.per.connection: 10  # Increased for better throughput
         buffer.memory: 67108864
         compression.type: lz4
         enable.idempotence: true
@@ -119,17 +119,17 @@ app:
 outbox:
   polling:
     enabled: true
-    interval-ms: 250             # Poll 4 times per second for quick recovery
-    initial-delay-ms: 5000       # Short warm-up to let services stabilize
-    batch-size: 1000             # Process 1,000 events per batch
-    max-retries: 20              # Allow more retries before flagging dead letter
-    retry-interval-seconds: 5    # Retry after 5 seconds cooldown
+    interval-ms: 100             # Poll 10 times per second for faster event processing
+    initial-delay-ms: 1000       # Reduced warm-up time
+    batch-size: 500              # Reduced batch size for faster processing
+    max-retries: 5               # Reduced retries to fail faster
+    retry-interval-seconds: 1    # Faster retry interval
   dispatcher:
-    core-pool-size: 8
-    max-pool-size: 16
-    queue-capacity: 2000
+    core-pool-size: 16           # Increased from 8
+    max-pool-size: 32            # Increased from 16
+    queue-capacity: 5000         # Increased from 2000
   dead-letter:
-    check-interval-ms: 300000    # Check for dead letters every 5 minutes
+    check-interval-ms: 60000     # Check for dead letters every 1 minute (faster)
 
 resilience4j:
   circuitbreaker:
