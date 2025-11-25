@@ -30,7 +30,6 @@ public class PaymentService {
 
         private final PaymentRepository paymentRepository;
         private final IdempotencyCacheService idempotencyCacheService;
-        private final PaymentCacheService paymentCacheService;
         private final RedisRateLimiter rateLimiter;
         private final PaymentEventPublisher eventPublisher;
         private final PgAuthApiService pgAuthApiService;
@@ -39,7 +38,6 @@ public class PaymentService {
 
         public PaymentService(PaymentRepository paymentRepository,
                         IdempotencyCacheService idempotencyCacheService,
-                        PaymentCacheService paymentCacheService,
                         RedisRateLimiter rateLimiter,
                         PaymentEventPublisher eventPublisher,
                         PgAuthApiService pgAuthApiService,
@@ -47,7 +45,6 @@ public class PaymentService {
                         @org.springframework.beans.factory.annotation.Value("${mock.pg.loadtest-mode:false}") boolean loadTestMode) {
                 this.paymentRepository = paymentRepository;
                 this.idempotencyCacheService = idempotencyCacheService;
-                this.paymentCacheService = paymentCacheService;
                 this.rateLimiter = rateLimiter;
                 this.eventPublisher = eventPublisher;
                 this.pgAuthApiService = pgAuthApiService;
@@ -84,12 +81,14 @@ public class PaymentService {
         }
 
         private PaymentResult captureInternal(Long paymentId, CapturePaymentRequest request) {
+                long methodStart = System.currentTimeMillis();
                 rateLimiter.verifyCaptureAllowed(request.merchantId());
 
-                // Try cache first, then fallback to DB
-                Payment payment = paymentCacheService.getPayment(paymentId)
-                                .orElseGet(() -> paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
-                                                .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant")));
+                long dbStart = System.currentTimeMillis();
+                Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
+                                .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant"));
+                long dbReadTime = System.currentTimeMillis() - dbStart;
+                log.debug("Capture - DB read time: {}ms", dbReadTime);
 
                 if (payment.getStatus() != PaymentStatus.AUTHORIZED
                                 && payment.getStatus() != PaymentStatus.CAPTURE_REQUESTED) {
@@ -100,18 +99,27 @@ public class PaymentService {
 
                 // 정산 완료 상태로 변경
                 payment.setStatus(PaymentStatus.CAPTURED);
+                dbStart = System.currentTimeMillis();
                 paymentRepository.save(payment);
-                paymentCacheService.invalidate(paymentId);
+                long dbUpdateTime = System.currentTimeMillis() - dbStart;
+                log.debug("Capture - DB update time: {}ms", dbUpdateTime);
 
                 // payment.captured 이벤트 발행 (ledger 기록 트리거)
+                long evtStart = System.currentTimeMillis();
                 publishEvent(payment, "PAYMENT_CAPTURED", Map.of(
                                 "paymentId", payment.getId(),
                                 "status", payment.getStatus().name(),
                                 "amount", payment.getAmount(),
                                 "occurredAt", Instant.now().toString()));
+                long evtTime = System.currentTimeMillis() - evtStart;
+                log.debug("Capture - Event publish time: {}ms", evtTime);
 
                 PaymentResponse response = toResponse(payment, Collections.emptyList(),
                                 "Payment captured successfully");
+
+                long totalTime = System.currentTimeMillis() - methodStart;
+                log.info("Capture complete: dbRead={}ms, dbUpdate={}ms, event={}ms, totalTime={}ms",
+                                dbReadTime, dbUpdateTime, evtTime, totalTime);
 
                 return new PaymentResult(response, false);
         }
@@ -128,12 +136,14 @@ public class PaymentService {
         }
 
         private PaymentResult refundInternal(Long paymentId, RefundPaymentRequest request) {
+                long methodStart = System.currentTimeMillis();
                 rateLimiter.verifyRefundAllowed(request.merchantId());
 
-                // Try cache first, then fallback to DB
-                Payment payment = paymentCacheService.getPayment(paymentId)
-                                .orElseGet(() -> paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
-                                                .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant")));
+                long dbStart = System.currentTimeMillis();
+                Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
+                                .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant"));
+                long dbReadTime = System.currentTimeMillis() - dbStart;
+                log.debug("Refund - DB read time: {}ms", dbReadTime);
 
                 if (payment.getStatus() != PaymentStatus.CAPTURED) {
                         PaymentResponse response = toResponse(payment, Collections.emptyList(),
@@ -143,24 +153,35 @@ public class PaymentService {
 
                 // 환불 요청 상태로 변경
                 payment.setStatus(PaymentStatus.REFUND_REQUESTED);
+                dbStart = System.currentTimeMillis();
                 paymentRepository.save(payment);
-                paymentCacheService.invalidate(paymentId);
+                long dbUpdateTime = System.currentTimeMillis() - dbStart;
+                log.debug("Refund - DB update time: {}ms", dbUpdateTime);
 
                 // payment.refund-requested 이벤트 발행 (refund-worker 트리거)
+                long evtStart = System.currentTimeMillis();
                 publishEvent(payment, "PAYMENT_REFUND_REQUESTED", Map.of(
                                 "paymentId", payment.getId(),
                                 "status", payment.getStatus().name(),
                                 "amount", payment.getAmount(),
                                 "occurredAt", Instant.now().toString(),
                                 "reason", request.reason()));
+                long evtTime = System.currentTimeMillis() - evtStart;
+                log.debug("Refund - Event publish time: {}ms", evtTime);
 
                 PaymentResponse response = toResponse(payment, Collections.emptyList(),
                                 "Refund requested successfully");
+
+                long totalTime = System.currentTimeMillis() - methodStart;
+                log.info("Refund complete: dbRead={}ms, dbUpdate={}ms, event={}ms, totalTime={}ms",
+                                dbReadTime, dbUpdateTime, evtTime, totalTime);
 
                 return new PaymentResult(response, false);
         }
 
         private PaymentResult createAuthorization(AuthorizePaymentRequest request) {
+                long methodStart = System.currentTimeMillis();
+
                 Payment existing = paymentRepository.findByMerchantIdAndIdempotencyKey(
                                 request.merchantId(), request.idempotencyKey()).orElse(null);
                 if (existing != null) {
@@ -173,7 +194,7 @@ public class PaymentService {
 
                 try {
                         // Step 1: Mock PG API 호출 (카드 승인) - Circuit Breaker로 보호됨
-                        // 실제로는 카드 번호, CVV, 유효기간 등이 필요하지만 Mock이므로 간소화
+                        long pgStart = System.currentTimeMillis();
                         log.info("Calling Mock PG Authorization API: merchantId={}, amount={}, currency={}",
                                         request.merchantId(), request.amount(), request.currency());
 
@@ -184,20 +205,26 @@ public class PaymentService {
                                         "MOCK_CARD_NUMBER" // 실제론 request에서 받아야 함
                         );
 
-                        log.info("PG Authorization succeeded: approvalNumber={}, transactionId={}",
-                                        pgResponse.getApprovalNumber(), pgResponse.getTransactionId());
+                        long pgTime = System.currentTimeMillis() - pgStart;
+                        log.info("PG Authorization succeeded: approvalNumber={}, transactionId={}, elapsedMs={}",
+                                        pgResponse.getApprovalNumber(), pgResponse.getTransactionId(), pgTime);
 
                         // Step 2 & 3: DB 저장 및 이벤트 발행 (트랜잭션 내에서 실행)
+                        long txStart = System.currentTimeMillis();
                         PaymentResponse response = transactionTemplate.execute(status -> {
                                 // OPTIMIZATION: Save directly as CAPTURE_REQUESTED to avoid extra UPDATE
                                 // (Authorized -> Capture Requested transition happens immediately)
                                 Payment payment = new Payment(request.merchantId(), request.amount(),
                                                 request.currency(), PaymentStatus.CAPTURE_REQUESTED,
                                                 request.idempotencyKey());
+
+                                long dbStart = System.currentTimeMillis();
                                 paymentRepository.save(payment);
-                                paymentCacheService.cachePayment(payment);
+                                long dbTime = System.currentTimeMillis() - dbStart;
+                                log.debug("DB save time: {}ms", dbTime);
 
                                 // Event 1: Payment Authorized (Fact)
+                                long evt1Start = System.currentTimeMillis();
                                 publishEvent(payment, "PAYMENT_AUTHORIZED", Map.of(
                                                 "paymentId", payment.getId(),
                                                 "status", "AUTHORIZED", // Event payload keeps original semantic status
@@ -206,8 +233,11 @@ public class PaymentService {
                                                 "approvalNumber", pgResponse.getApprovalNumber(),
                                                 "transactionId", pgResponse.getTransactionId(),
                                                 "occurredAt", Instant.now().toString()));
+                                long evt1Time = System.currentTimeMillis() - evt1Start;
+                                log.debug("Event 1 publish time: {}ms", evt1Time);
 
                                 // Event 2: Capture Requested (Fact)
+                                long evt2Start = System.currentTimeMillis();
                                 publishEvent(payment, "PAYMENT_CAPTURE_REQUESTED", Map.of(
                                                 "paymentId", payment.getId(),
                                                 "status", payment.getStatus().name(),
@@ -217,18 +247,28 @@ public class PaymentService {
                                                 "approvalNumber", pgResponse.getApprovalNumber(),
                                                 "transactionId", pgResponse.getTransactionId(),
                                                 "occurredAt", Instant.now().toString()));
+                                long evt2Time = System.currentTimeMillis() - evt2Start;
+                                log.debug("Event 2 publish time: {}ms", evt2Time);
 
                                 PaymentResponse res = toResponse(payment, Collections.emptyList(),
                                                 "Payment authorized and capture requested - Approval: "
                                                                 + pgResponse.getApprovalNumber());
 
                                 // Save Idempotency Response within the same transaction
+                                long cacheStart = System.currentTimeMillis();
                                 idempotencyCacheService.storeAuthorization(request.merchantId(),
                                                 request.idempotencyKey(), 200,
                                                 res);
+                                long cacheTime = System.currentTimeMillis() - cacheStart;
+                                log.debug("Idempotency cache save time: {}ms", cacheTime);
 
                                 return res;
                         });
+
+                        long txTime = System.currentTimeMillis() - txStart;
+                        long totalTime = System.currentTimeMillis() - methodStart;
+                        log.info("Authorization complete: pgTime={}ms, txTime={}ms, totalTime={}ms",
+                                        pgTime, txTime, totalTime);
 
                         return new PaymentResult(response, false);
                 } catch (PgCircuitOpenException circuitEx) {

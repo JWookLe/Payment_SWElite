@@ -44,9 +44,6 @@ class PaymentServiceTest {
         private IdempotencyCacheService idempotencyCacheService;
 
         @Mock
-        private PaymentCacheService paymentCacheService;
-
-        @Mock
         private RedisRateLimiter rateLimiter;
 
         @Mock
@@ -65,7 +62,6 @@ class PaymentServiceTest {
                 paymentService = new PaymentService(
                                 paymentRepository,
                                 idempotencyCacheService,
-                                paymentCacheService,
                                 rateLimiter,
                                 eventPublisher,
                                 pgAuthApiService,
