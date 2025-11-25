@@ -53,7 +53,7 @@ spring:
       batch-size: 16384            # 16KB batch size (reduced for faster throughput)
       linger-ms: 1                 # Minimal batching delay (reduced from 5ms)
       properties:
-        max.in.flight.requests.per.connection: 10  # Increased for better throughput
+        max.in.flight.requests.per.connection: 5   # Idempotent producer requires <=5
         buffer.memory: 67108864
         compression.type: lz4
         enable.idempotence: true
