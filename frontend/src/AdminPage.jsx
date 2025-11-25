@@ -12,7 +12,7 @@ const TEST_CATEGORIES = [
       {
         id: 'k6-authorize-only',
         name: 'K6: 승인 전용',
-        description: '승인 API 부하 테스트 (최대 400 RPS)',
+        description: '승인 API 부하 테스트 (최대 1000 RPS)',
         endpoint: '/tests/k6/authorize-only',
         estimatedTime: '8분'
       },
