@@ -62,13 +62,28 @@ public class SettlementStatsService {
                 Integer.class
         );
 
+        // 지연 정산 감지 (1시간 이상 PENDING 상태)
+        Integer delayedSettlements = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM settlement_request WHERE status = 'PENDING' AND created_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)",
+                Integer.class
+        );
+
+        // 실패 정산 상세 (재시도 횟수별)
+        List<Map<String, Object>> failureDetails = jdbcTemplate.queryForList(
+                "SELECT retry_count, COUNT(*) as count FROM settlement_request WHERE status = 'FAILED' GROUP BY retry_count ORDER BY retry_count DESC"
+        );
+
         stats.put("totalCount", totalCount);
         stats.put("successCount", successCount);
         stats.put("failedCount", failedCount);
         stats.put("pendingCount", pendingCount);
         stats.put("totalAmount", totalAmount);
         stats.put("deadLetterCount", deadLetterCount);
+        stats.put("delayedSettlements", delayedSettlements);
+        stats.put("failureDetails", failureDetails);
         stats.put("successRate", totalCount > 0 ? (double) successCount / totalCount * 100 : 0.0);
+        stats.put("failureRate", totalCount > 0 ? (double) failedCount / totalCount * 100 : 0.0);
+        stats.put("healthStatus", delayedSettlements > 0 || deadLetterCount > 0 ? "WARNING" : "HEALTHY");
 
         return stats;
     }
@@ -109,13 +124,28 @@ public class SettlementStatsService {
                 Integer.class
         );
 
+        // 지연 환불 감지 (30분 이상 PENDING 상태)
+        Integer delayedRefunds = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM refund_request WHERE status = 'PENDING' AND created_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)",
+                Integer.class
+        );
+
+        // 실패 환불 상세 (재시도 횟수별)
+        List<Map<String, Object>> failureDetails = jdbcTemplate.queryForList(
+                "SELECT retry_count, COUNT(*) as count FROM refund_request WHERE status = 'FAILED' GROUP BY retry_count ORDER BY retry_count DESC"
+        );
+
         stats.put("totalCount", totalCount);
         stats.put("successCount", successCount);
         stats.put("failedCount", failedCount);
         stats.put("pendingCount", pendingCount);
         stats.put("totalAmount", totalAmount);
         stats.put("deadLetterCount", deadLetterCount);
+        stats.put("delayedRefunds", delayedRefunds);
+        stats.put("failureDetails", failureDetails);
         stats.put("successRate", totalCount > 0 ? (double) successCount / totalCount * 100 : 0.0);
+        stats.put("failureRate", totalCount > 0 ? (double) failedCount / totalCount * 100 : 0.0);
+        stats.put("healthStatus", delayedRefunds > 0 || deadLetterCount > 0 ? "WARNING" : "HEALTHY");
 
         return stats;
     }

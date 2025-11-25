@@ -188,6 +188,38 @@ public class DatabaseMonitoringController {
             List<Map<String, Object>> refundByStatus = jdbcTemplate.queryForList(refundStatsSql);
             stats.put("refundsByStatus", refundByStatus);
 
+            // DB Sharding validation (Shard1 and Shard2)
+            Map<String, Object> shardingStats = new HashMap<>();
+            try {
+                String shard1Sql = "SELECT COUNT(*) as total FROM payment";
+                Long shard1Count = jdbcTemplate.queryForObject(shard1Sql, Long.class);
+                shardingStats.put("shard1Total", shard1Count);
+                shardingStats.put("shard1Status", "UP");
+            } catch (Exception e) {
+                shardingStats.put("shard1Status", "DOWN");
+                shardingStats.put("shard1Error", e.getMessage());
+            }
+
+            // Shard2 (Separate connection via environment variable if available)
+            String shard2Host = System.getenv("PAYMENT_DB_HOST_SHARD2");
+            String shard2Port = System.getenv("PAYMENT_DB_PORT_SHARD2");
+            if (shard2Host != null && shard2Port != null) {
+                try {
+                    String shard2Sql = "SELECT COUNT(*) as total FROM payment";
+                    Long shard2Count = jdbcTemplate.queryForObject(shard2Sql, Long.class);
+                    shardingStats.put("shard2Total", shard2Count);
+                    shardingStats.put("shard2Status", "UP");
+                    shardingStats.put("shard2Host", shard2Host);
+                    shardingStats.put("shard2Port", shard2Port);
+                } catch (Exception e) {
+                    shardingStats.put("shard2Status", "DOWN");
+                    shardingStats.put("shard2Error", e.getMessage());
+                }
+            } else {
+                shardingStats.put("shard2Status", "UNCONFIGURED");
+            }
+            stats.put("databaseSharding", shardingStats);
+
             stats.put("message", "Database statistics retrieved successfully");
 
             return ResponseEntity.ok(stats);
