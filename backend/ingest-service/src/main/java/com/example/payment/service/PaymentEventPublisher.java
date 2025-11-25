@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -118,36 +117,16 @@ public class PaymentEventPublisher {
                     .build();
 
             try {
-                // Asynchronous send with callback - doesn't block scheduler thread
-                CompletableFuture<org.springframework.kafka.support.SendResult<String, String>> future =
-                    kafkaTemplate.send(message);
-
-                future.whenComplete((result, ex) -> {
-                    if (ex == null) {
-                        // Success
-                        log.info("Event published to Kafka topic={}, eventId={}, paymentId={}, partition={}, offset={}",
-                                topic, outboxEvent.getId(), outboxEvent.getAggregateId(),
-                                result.getRecordMetadata().partition(),
-                                result.getRecordMetadata().offset());
-                        // Mark as published in outbox
-                        try {
-                            outboxEvent.markPublished();
-                            outboxEventRepository.save(outboxEvent);
-                        } catch (Exception saveEx) {
-                            log.error("Failed to mark event as published: eventId={}, paymentId={}",
-                                    outboxEvent.getId(), outboxEvent.getAggregateId(), saveEx);
-                        }
-                    } else {
-                        // Failure
-                        log.error("Kafka publish failed for topic={}, eventId={}, paymentId={}. Event remains in outbox for retry.",
-                                topic, outboxEvent.getId(), outboxEvent.getAggregateId(), ex);
-                        // Event stays in outbox table for retry by scheduler
-                    }
-                });
+                // Synchronous send with timeout to allow Circuit Breaker to catch exceptions
+                kafkaTemplate.send(message).get(2, java.util.concurrent.TimeUnit.SECONDS);
+                log.info("Event published to Kafka topic={}, eventId={}, paymentId={}",
+                        topic, outboxEvent.getId(), outboxEvent.getAggregateId());
+                // Mark as published in outbox
+                outboxEvent.markPublished();
+                outboxEventRepository.save(outboxEvent);
             } catch (Exception ex) {
-                log.error("Kafka send error for topic={}, eventId={}, paymentId={}", topic, outboxEvent.getId(),
-                        outboxEvent.getAggregateId(), ex);
-                // Event stays in outbox table for retry by scheduler
+                log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
+                throw new KafkaPublishingException("Failed to publish to Kafka", ex);
             }
         };
 
