@@ -64,7 +64,7 @@ public class SettlementStatsService {
 
         // 지연 정산 감지 (1시간 이상 PENDING 상태)
         Integer delayedSettlements = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM settlement_request WHERE status = 'PENDING' AND created_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)",
+                "SELECT COUNT(*) FROM settlement_request WHERE status = 'PENDING' AND requested_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)",
                 Integer.class
         );
 
@@ -126,7 +126,7 @@ public class SettlementStatsService {
 
         // 지연 환불 감지 (30분 이상 PENDING 상태)
         Integer delayedRefunds = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM refund_request WHERE status = 'PENDING' AND created_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)",
+                "SELECT COUNT(*) FROM refund_request WHERE status = 'PENDING' AND requested_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)",
                 Integer.class
         );
 
