@@ -236,13 +236,13 @@ public class MCPAnalysisService {
      */
     private String buildK6AnalysisPrompt(String scenario, Map<String, Object> rawData) throws Exception {
         String rawDataJson = objectMapper.writeValueAsString(rawData);
-        return "You are an expert performance testing analyst. Analyze the following K6 load test results and provide:\n\n" +
-               "1. **Executive Summary** (2-3 sentences)\n" +
-               "2. **Performance Metrics Analysis**\n" +
-               "3. **Bottlenecks & Issues**\n" +
-               "4. **Recommendations** (3-5 bullet points)\n\n" +
-               "Test Scenario: " + scenario + "\n\n" +
-               "Raw Data:\n" + rawDataJson;
+        return "당신은 성능 테스트 전문가입니다. 다음 K6 부하 테스트 결과를 분석하고 한글로 제공하세요:\n\n" +
+               "1. **요약** (2-3문장)\n" +
+               "2. **성능 메트릭 분석**\n" +
+               "3. **병목 지점 및 문제점**\n" +
+               "4. **개선 권장사항** (3-5개)\n\n" +
+               "테스트 시나리오: " + scenario + "\n\n" +
+               "원본 데이터:\n" + rawDataJson;
     }
 
     /**
@@ -250,13 +250,13 @@ public class MCPAnalysisService {
      */
     private String buildCircuitBreakerAnalysisPrompt(Map<String, Object> rawData) throws Exception {
         String rawDataJson = objectMapper.writeValueAsString(rawData);
-        return "You are a resilience engineering expert. Analyze the following Circuit Breaker test results:\n\n" +
-               "Provide:\n" +
-               "1. **Summary**: Did the circuit breaker function correctly?\n" +
-               "2. **State Transitions**: Analyze CLOSED → OPEN → HALF_OPEN → CLOSED transitions\n" +
-               "3. **Recovery Behavior**: Evaluate system recovery\n" +
-               "4. **Recommendations**: Tuning suggestions\n\n" +
-               "Test Data:\n" + rawDataJson;
+        return "당신은 회복탄력성 엔지니어입니다. 다음 Circuit Breaker 테스트 결과를 분석하고 한글로 제공하세요:\n\n" +
+               "다음을 포함하세요:\n" +
+               "1. **요약**: Circuit Breaker가 올바르게 작동했는가?\n" +
+               "2. **상태 전환**: CLOSED → OPEN → HALF_OPEN → CLOSED 전환 분석\n" +
+               "3. **복구 동작**: 시스템 복구 평가\n" +
+               "4. **개선 권장사항**: 설정 조정 제안\n\n" +
+               "테스트 데이터:\n" + rawDataJson;
     }
 
     /**
@@ -264,13 +264,13 @@ public class MCPAnalysisService {
      */
     private String buildHealthCheckAnalysisPrompt(Map<String, Object> rawData) throws Exception {
         String rawDataJson = objectMapper.writeValueAsString(rawData);
-        return "You are a DevOps engineer analyzing system health checks. Review the following health check results:\n\n" +
-               "Provide:\n" +
-               "1. **Summary**: Overall system health status\n" +
-               "2. **Service Status**: Breakdown of each service (UP/DOWN)\n" +
-               "3. **Dependencies**: Evaluate connectivity\n" +
-               "4. **Recommendations**: Actions needed\n\n" +
-               "Health Check Data:\n" + rawDataJson;
+        return "당신은 DevOps 엔지니어입니다. 다음 시스템 Health Check 결과를 분석하고 한글로 제공하세요:\n\n" +
+               "다음을 포함하세요:\n" +
+               "1. **요약**: 전체 시스템 상태\n" +
+               "2. **서비스 상태**: 각 서비스별 상태 (UP/DOWN)\n" +
+               "3. **의존성**: 연결성 평가\n" +
+               "4. **조치 권장사항**: 필요한 행동\n\n" +
+               "Health Check 데이터:\n" + rawDataJson;
     }
 
     /**
@@ -278,13 +278,13 @@ public class MCPAnalysisService {
      */
     private String buildMonitoringStatsAnalysisPrompt(String testType, Map<String, Object> rawData) throws Exception {
         String rawDataJson = objectMapper.writeValueAsString(rawData);
-        return "You are a monitoring and observability expert. Analyze the following " + testType + " statistics:\n\n" +
-               "Provide:\n" +
-               "1. **Summary**: Key insights from the data\n" +
-               "2. **Metrics Analysis**: Evaluate performance and health metrics\n" +
-               "3. **Trends**: Identify concerning trends or anomalies\n" +
-               "4. **Recommendations**: Optimization suggestions\n\n" +
-               "Monitoring Data:\n" + rawDataJson;
+        return "당신은 모니터링 및 관찰성 전문가입니다. 다음 " + testType + " 통계를 분석하고 한글로 제공하세요:\n\n" +
+               "다음을 포함하세요:\n" +
+               "1. **요약**: 데이터에서 얻은 핵심 인사이트\n" +
+               "2. **메트릭 분석**: 성능 및 상태 메트릭 평가\n" +
+               "3. **트렌드**: 우려스러운 추세 또는 이상 현상 식별\n" +
+               "4. **개선 권장사항**: 최적화 제안\n\n" +
+               "모니터링 데이터:\n" + rawDataJson;
     }
 
     /**
