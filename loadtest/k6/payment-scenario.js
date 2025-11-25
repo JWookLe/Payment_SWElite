@@ -40,12 +40,12 @@ if (ENABLE_REFUND) {
 export const options = {
   scenarios: {
     authorize_flow: {
-      // Drive a constant 800 RPS for a clearer steady-state measurement
+      // Drive a constant 1000 RPS for a clearer steady-state measurement
       executor: "constant-arrival-rate",
-      rate: 800,
+      rate: 1000,
       timeUnit: "1s",
       duration: "6m",
-      preAllocatedVUs: 800,
+      preAllocatedVUs: 1000,
       maxVUs: 1500,
     },
   },
