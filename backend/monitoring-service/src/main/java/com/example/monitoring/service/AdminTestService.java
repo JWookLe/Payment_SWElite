@@ -271,11 +271,11 @@ public class AdminTestService {
 
             Map<String, Object> healthData = new HashMap<>();
 
-            // 각 서비스 health check
+            // 각 서비스 health check (VM1 IP 주소 기반)
             String[] services = {
-                    "http://localhost:8761/actuator/health", // eureka
-                    "http://localhost:8080/actuator/health", // ingest-service
-                    "http://localhost:8082/actuator/health"  // monitoring-service
+                    "http://172.25.0.37:8761/actuator/health", // eureka-server
+                    "http://172.25.0.37:8081/actuator/health", // ingest-service
+                    "http://172.25.0.37:8082/actuator/health"  // monitoring-service
             };
 
             for (String url : services) {
