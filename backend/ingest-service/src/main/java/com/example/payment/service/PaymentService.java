@@ -30,6 +30,7 @@ public class PaymentService {
 
         private final PaymentRepository paymentRepository;
         private final IdempotencyCacheService idempotencyCacheService;
+        private final PaymentCacheService paymentCacheService;
         private final RedisRateLimiter rateLimiter;
         private final PaymentEventPublisher eventPublisher;
         private final PgAuthApiService pgAuthApiService;
@@ -38,6 +39,7 @@ public class PaymentService {
 
         public PaymentService(PaymentRepository paymentRepository,
                         IdempotencyCacheService idempotencyCacheService,
+                        PaymentCacheService paymentCacheService,
                         RedisRateLimiter rateLimiter,
                         PaymentEventPublisher eventPublisher,
                         PgAuthApiService pgAuthApiService,
@@ -45,6 +47,7 @@ public class PaymentService {
                         @org.springframework.beans.factory.annotation.Value("${mock.pg.loadtest-mode:false}") boolean loadTestMode) {
                 this.paymentRepository = paymentRepository;
                 this.idempotencyCacheService = idempotencyCacheService;
+                this.paymentCacheService = paymentCacheService;
                 this.rateLimiter = rateLimiter;
                 this.eventPublisher = eventPublisher;
                 this.pgAuthApiService = pgAuthApiService;
@@ -83,8 +86,10 @@ public class PaymentService {
         private PaymentResult captureInternal(Long paymentId, CapturePaymentRequest request) {
                 rateLimiter.verifyCaptureAllowed(request.merchantId());
 
-                Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
-                                .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant"));
+                // Try cache first, then fallback to DB
+                Payment payment = paymentCacheService.getPayment(paymentId)
+                                .orElseGet(() -> paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
+                                                .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant")));
 
                 if (payment.getStatus() != PaymentStatus.AUTHORIZED
                                 && payment.getStatus() != PaymentStatus.CAPTURE_REQUESTED) {
@@ -96,6 +101,7 @@ public class PaymentService {
                 // 정산 완료 상태로 변경
                 payment.setStatus(PaymentStatus.CAPTURED);
                 paymentRepository.save(payment);
+                paymentCacheService.invalidate(paymentId);
 
                 // payment.captured 이벤트 발행 (ledger 기록 트리거)
                 publishEvent(payment, "PAYMENT_CAPTURED", Map.of(
@@ -124,8 +130,10 @@ public class PaymentService {
         private PaymentResult refundInternal(Long paymentId, RefundPaymentRequest request) {
                 rateLimiter.verifyRefundAllowed(request.merchantId());
 
-                Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
-                                .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant"));
+                // Try cache first, then fallback to DB
+                Payment payment = paymentCacheService.getPayment(paymentId)
+                                .orElseGet(() -> paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
+                                                .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant")));
 
                 if (payment.getStatus() != PaymentStatus.CAPTURED) {
                         PaymentResponse response = toResponse(payment, Collections.emptyList(),
@@ -136,6 +144,7 @@ public class PaymentService {
                 // 환불 요청 상태로 변경
                 payment.setStatus(PaymentStatus.REFUND_REQUESTED);
                 paymentRepository.save(payment);
+                paymentCacheService.invalidate(paymentId);
 
                 // payment.refund-requested 이벤트 발행 (refund-worker 트리거)
                 publishEvent(payment, "PAYMENT_REFUND_REQUESTED", Map.of(
@@ -186,6 +195,7 @@ public class PaymentService {
                                                 request.currency(), PaymentStatus.CAPTURE_REQUESTED,
                                                 request.idempotencyKey());
                                 paymentRepository.save(payment);
+                                paymentCacheService.cachePayment(payment);
 
                                 // Event 1: Payment Authorized (Fact)
                                 publishEvent(payment, "PAYMENT_AUTHORIZED", Map.of(
