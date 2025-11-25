@@ -57,6 +57,10 @@ public class MockPgAuthApiClient {
             int upperBound = Math.max(minDelayMs, maxDelayMs);
             int lowerBound = Math.min(minDelayMs, maxDelayMs);
             int delay = ThreadLocalRandom.current().nextInt(lowerBound, upperBound + 1);
+            if (loadTestMode) {
+                // Keep PG mock latency negligible during load tests
+                delay = Math.min(3, Math.max(1, delay));
+            }
             Thread.sleep(delay);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

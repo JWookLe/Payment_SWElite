@@ -54,6 +54,9 @@ public class OutboxPollingScheduler {
     @Value("${outbox.polling.retry-interval-seconds:30}")
     private int retryIntervalSeconds;
 
+    @Value("${outbox.polling.enabled:true}")
+    private boolean pollingEnabled;
+
     public OutboxPollingScheduler(OutboxEventRepository outboxEventRepository,
                                   PaymentEventPublisher paymentEventPublisher,
                                   PlatformTransactionManager transactionManager) {
@@ -72,8 +75,14 @@ public class OutboxPollingScheduler {
      * 4. On failure: increment retry count, update lastRetryAt
      * 5. Dead letter candidates (max retries exceeded) are logged
      */
-    @Scheduled(fixedDelayString = "${outbox.polling.fixed-delay-ms:1000}")
+    @Scheduled(
+            initialDelayString = "${outbox.polling.initial-delay-ms:1000}",
+            fixedDelayString = "${outbox.polling.interval-ms:${outbox.polling.fixed-delay-ms:1000}}"
+    )
     public void pollAndPublishOutboxEvents() {
+        if (!pollingEnabled) {
+            return;
+        }
         try {
             Instant retryThreshold = Instant.now().minus(retryIntervalSeconds, ChronoUnit.SECONDS);
             Pageable pageable = PageRequest.of(0, batchSize);

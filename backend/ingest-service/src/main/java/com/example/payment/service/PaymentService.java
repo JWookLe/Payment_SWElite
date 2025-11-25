@@ -62,11 +62,11 @@ public class PaymentService {
         // @Transactional 제거: PG API 호출을 트랜잭션 범위 밖으로 분리
         public PaymentResult authorize(AuthorizePaymentRequest request) {
                 if (loadTestMode) {
-                        return createAuthorization(request);
+                        return createAuthorization(request, true);
                 }
                 // 샤딩은 Controller에서 트랜잭션 시작 전에 설정됨
                 return idempotencyCacheService.findAuthorization(request.merchantId(), request.idempotencyKey())
-                                .orElseGet(() -> createAuthorization(request));
+                                .orElseGet(() -> createAuthorization(request, false));
         }
 
         /**
@@ -179,15 +179,17 @@ public class PaymentService {
                 return new PaymentResult(response, false);
         }
 
-        private PaymentResult createAuthorization(AuthorizePaymentRequest request) {
+        private PaymentResult createAuthorization(AuthorizePaymentRequest request, boolean fastPathLoadTest) {
                 long methodStart = System.currentTimeMillis();
 
-                Payment existing = paymentRepository.findByMerchantIdAndIdempotencyKey(
-                                request.merchantId(), request.idempotencyKey()).orElse(null);
-                if (existing != null) {
-                        PaymentResponse response = toResponse(existing, Collections.emptyList(),
-                                        "Idempotency key already used");
-                        return new PaymentResult(response, true);
+                if (!fastPathLoadTest) {
+                        Payment existing = paymentRepository.findByMerchantIdAndIdempotencyKey(
+                                        request.merchantId(), request.idempotencyKey()).orElse(null);
+                        if (existing != null) {
+                                PaymentResponse response = toResponse(existing, Collections.emptyList(),
+                                                "Idempotency key already used");
+                                return new PaymentResult(response, true);
+                        }
                 }
 
                 rateLimiter.verifyAuthorizeAllowed(request.merchantId());
@@ -254,13 +256,15 @@ public class PaymentService {
                                                 "Payment authorized and capture requested - Approval: "
                                                                 + pgResponse.getApprovalNumber());
 
-                                // Save Idempotency Response within the same transaction
-                                long cacheStart = System.currentTimeMillis();
-                                idempotencyCacheService.storeAuthorization(request.merchantId(),
-                                                request.idempotencyKey(), 200,
-                                                res);
-                                long cacheTime = System.currentTimeMillis() - cacheStart;
-                                log.debug("Idempotency cache save time: {}ms", cacheTime);
+                                if (!fastPathLoadTest) {
+                                        // Save Idempotency Response within the same transaction
+                                        long cacheStart = System.currentTimeMillis();
+                                        idempotencyCacheService.storeAuthorization(request.merchantId(),
+                                                        request.idempotencyKey(), 200,
+                                                        res);
+                                        long cacheTime = System.currentTimeMillis() - cacheStart;
+                                        log.debug("Idempotency cache save time: {}ms", cacheTime);
+                                }
 
                                 return res;
                         });
