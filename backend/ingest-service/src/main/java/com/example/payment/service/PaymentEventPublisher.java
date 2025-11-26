@@ -122,22 +122,28 @@ public class PaymentEventPublisher {
                 .setHeader("eventId", String.valueOf(outboxEvent.getId()))
                 .build();
 
+        // Measure duration for Circuit Breaker metrics
+        long startTime = System.nanoTime();
+
         try {
             // Non-blocking async send - returns immediately, result handled in callback
             kafkaTemplate.send(message).whenComplete((sendResult, ex) -> {
+                long duration = System.nanoTime() - startTime;
+
                 if (ex != null) {
                     log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
-                    // Record failure for Circuit Breaker metrics
-                    try {
-                        circuitBreaker.executeRunnable(() -> {
-                            throw new KafkaPublishingException("Kafka send failed", ex);
-                        });
-                    } catch (Exception ignored) {
-                        // Event stays in outbox for retry
-                    }
+
+                    // Manually record failure in Circuit Breaker (non-blocking)
+                    circuitBreaker.onError(duration, java.util.concurrent.TimeUnit.NANOSECONDS, ex);
+
+                    // Event stays in outbox for retry
                 } else {
                     log.debug("Event published to Kafka topic={}, eventId={}, paymentId={}",
                             topic, outboxEvent.getId(), outboxEvent.getAggregateId());
+
+                    // Manually record success in Circuit Breaker (non-blocking)
+                    circuitBreaker.onSuccess(duration, java.util.concurrent.TimeUnit.NANOSECONDS);
+
                     // Mark as published in outbox
                     outboxEvent.markPublished();
                     outboxEventRepository.save(outboxEvent);
@@ -147,6 +153,9 @@ public class PaymentEventPublisher {
             // Error during send submission (not Kafka issue, but send itself)
             log.warn("Error sending to Kafka for topic={}, eventId={}. Error: {}",
                     topic, outboxEvent.getId(), ex.getMessage());
+
+            // Record submission error in Circuit Breaker
+            circuitBreaker.onError(System.nanoTime() - startTime, java.util.concurrent.TimeUnit.NANOSECONDS, ex);
         }
     }
 
