@@ -122,33 +122,24 @@ public class PaymentEventPublisher {
                 .setHeader("eventId", String.valueOf(outboxEvent.getId()))
                 .build();
 
-        try {
-            // Wrap Kafka send with Circuit Breaker (synchronous measurement)
-            circuitBreaker.executeRunnable(() -> {
+        // Non-blocking async send - returns immediately, result handled in callback
+        kafkaTemplate.send(message).whenComplete((sendResult, ex) -> {
+            if (ex != null) {
+                log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
                 try {
-                    // Async send with blocking wait for result (to measure actual Kafka response time)
-                    kafkaTemplate.send(message).whenComplete((sendResult, ex) -> {
-                        if (ex != null) {
-                            log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
-                            // Event stays in outbox for retry
-                        } else {
-                            log.debug("Event published to Kafka topic={}, eventId={}, paymentId={}",
-                                    topic, outboxEvent.getId(), outboxEvent.getAggregateId());
-
-                            // Mark as published in outbox
-                            outboxEvent.markPublished();
-                            outboxEventRepository.save(outboxEvent);
-                        }
-                    }).get(); // Block until Kafka responds (for Circuit Breaker timing)
-                } catch (Exception e) {
-                    throw new KafkaPublishingException("Failed to publish to Kafka", e);
+                    circuitBreaker.executeRunnable(() -> {
+                        throw new KafkaPublishingException("Kafka send failed", ex);
+                    });
+                } catch (Exception ignored) {
+                    // Event stays in outbox for retry
                 }
-            });
-        } catch (Exception ex) {
-            log.warn("Circuit Breaker rejected or Kafka publish failed for topic={}, eventId={}. Error: {}",
-                    topic, outboxEvent.getId(), ex.getMessage());
-            // Event stays in outbox for retry
-        }
+            } else {
+                log.debug("Event published to Kafka topic={}, eventId={}, paymentId={}",
+                        topic, outboxEvent.getId(), outboxEvent.getAggregateId());
+                outboxEvent.markPublished();
+                outboxEventRepository.save(outboxEvent);
+            }
+        });
     }
 
     /**
