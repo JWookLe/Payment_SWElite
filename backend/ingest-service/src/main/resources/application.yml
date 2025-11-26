@@ -44,17 +44,17 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      # Async publishing with optimized timeouts
+      # Async publishing with practical timeouts
       acks: 1                      # Wait for leader only (faster, still safe with replication)
-      retries: 1                   # Retry once for transient failures
-      request-timeout-ms: 3000     # 3 second timeout for send request
-      delivery-timeout-ms: 5000    # 5 second total timeout (allows async callbacks)
+      retries: 3                   # Retry 3 times for transient failures
+      request-timeout-ms: 10000    # 10 second timeout for send request (increased from 3s)
+      delivery-timeout-ms: 120000  # 120 second total timeout (allows for slow Kafka)
       # Batching configuration for throughput (async now)
-      batch-size: 32768            # 32KB batch size for better throughput
-      linger-ms: 5                 # 5ms batching delay for throughput
+      batch-size: 16384            # 16KB batch size (conservative)
+      linger-ms: 100               # 100ms batching delay for better batching
       properties:
-        max.in.flight.requests.per.connection: 10  # Higher for async throughput (idempotence off)
-        buffer.memory: 134217728                    # 128MB buffer for high throughput
+        max.in.flight.requests.per.connection: 5   # Conservative for stability
+        buffer.memory: 67108864                     # 64MB buffer
         compression.type: lz4
         enable.idempotence: false
   data:
