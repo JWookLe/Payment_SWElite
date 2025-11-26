@@ -87,37 +87,64 @@ public class OutboxPollingScheduler {
             return;
         }
         try {
-            Instant retryThreshold = Instant.now().minus(retryIntervalSeconds, ChronoUnit.SECONDS);
-            Pageable pageable = PageRequest.of(0, batchSize);
-
-            List<OutboxEvent> events = fetchEventsWithLock(retryThreshold, pageable);
-
-            if (events == null || events.isEmpty()) {
-                return;
-            }
-
-            log.debug("Polling outbox: found {} unpublished events", events.size());
-
-            // Submit all events for async publishing (non-blocking)
-            for (OutboxEvent event : events) {
-                try {
-                    String topic = paymentEventPublisher.resolveTopicName(event.getEventType());
-                    paymentEventPublisher.publishToKafkaWithCircuitBreaker(event, topic, event.getPayload());
-                } catch (Exception ex) {
-                    log.error("Failed to submit outbox event for publishing id={}, aggregateId={}, eventType={}",
-                            event.getId(), event.getAggregateId(), event.getEventType(), ex);
-                    // Still update retry count even if submission failed
-                    incrementRetryCount(event);
-                }
-            }
-
-            log.debug("Submitted {} events for async Kafka publishing", events.size());
-
-            // Check for dead letter candidates periodically
-            checkDeadLetterCandidates();
-
+            pollAndPublishWithRetry();
         } catch (Exception ex) {
             log.error("Outbox polling cycle failed", ex);
+        }
+    }
+
+    private void pollAndPublishWithRetry() {
+        int maxAttempts = 3;
+        int attempt = 0;
+
+        while (attempt < maxAttempts) {
+            try {
+                Instant retryThreshold = Instant.now().minus(retryIntervalSeconds, ChronoUnit.SECONDS);
+                Pageable pageable = PageRequest.of(0, batchSize);
+
+                List<OutboxEvent> events = fetchEventsWithLock(retryThreshold, pageable);
+
+                if (events == null || events.isEmpty()) {
+                    return;
+                }
+
+                log.debug("Polling outbox: found {} unpublished events", events.size());
+
+                // Submit all events for async publishing (non-blocking)
+                for (OutboxEvent event : events) {
+                    try {
+                        String topic = paymentEventPublisher.resolveTopicName(event.getEventType());
+                        paymentEventPublisher.publishToKafkaWithCircuitBreaker(event, topic, event.getPayload());
+                    } catch (Exception ex) {
+                        log.error("Failed to submit outbox event for publishing id={}, aggregateId={}, eventType={}",
+                                event.getId(), event.getAggregateId(), event.getEventType(), ex);
+                        // Still update retry count even if submission failed
+                        incrementRetryCount(event);
+                    }
+                }
+
+                log.debug("Submitted {} events for async Kafka publishing", events.size());
+
+                // Check for dead letter candidates periodically
+                checkDeadLetterCandidates();
+
+                return; // Success
+
+            } catch (org.springframework.dao.CannotAcquireLockException lockEx) {
+                attempt++;
+                if (attempt >= maxAttempts) {
+                    log.warn("Deadlock detected {} times, skipping this poll cycle", maxAttempts);
+                    return;
+                }
+                // Add exponential backoff: 10ms, 20ms, 40ms
+                try {
+                    Thread.sleep(10L * (long) Math.pow(2, attempt - 1));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                log.debug("Deadlock detected, retrying poll (attempt {}/{})", attempt + 1, maxAttempts);
+            }
         }
     }
 
