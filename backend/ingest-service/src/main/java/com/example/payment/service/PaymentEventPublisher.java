@@ -138,6 +138,16 @@ public class PaymentEventPublisher {
                 } else {
                     log.debug("Event published to Kafka topic={}, eventId={}, paymentId={}",
                             topic, outboxEvent.getId(), outboxEvent.getAggregateId());
+
+                    // Record success for Circuit Breaker metrics
+                    try {
+                        circuitBreaker.executeRunnable(() -> {
+                            // Success - do nothing, just record the success
+                        });
+                    } catch (Exception ignored) {
+                        // Should not happen for success case
+                    }
+
                     // Mark as published in outbox
                     outboxEvent.markPublished();
                     outboxEventRepository.save(outboxEvent);
