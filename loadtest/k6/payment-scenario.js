@@ -42,7 +42,7 @@ export const options = {
     authorize_flow: {
       // Drive a constant 1000 RPS for high throughput testing
       executor: "constant-arrival-rate",
-      rate: 1050,
+      rate: 1000,
       timeUnit: "1s",
       duration: "6m",
       preAllocatedVUs: 800,
