@@ -110,6 +110,9 @@ public class PaymentEventPublisher {
         if (circuitBreaker.getState() == io.github.resilience4j.circuitbreaker.CircuitBreaker.State.OPEN) {
             log.warn("Circuit Breaker OPEN - skipping publish for topic={}, eventId={}. Event will be retried by outbox polling.",
                     topic, outboxEvent.getId());
+            // Backoff when circuit is open to avoid tight polling loops
+            outboxEvent.incrementRetryCount();
+            outboxEventRepository.save(outboxEvent);
             return;
         }
 
@@ -135,6 +138,9 @@ public class PaymentEventPublisher {
                     } catch (Exception ignored) {
                         // Event stays in outbox for retry
                     }
+                    // Apply retry backoff to prevent hammering DB/Kafka when failures continue
+                    outboxEvent.incrementRetryCount();
+                    outboxEventRepository.save(outboxEvent);
                 } else {
                     log.debug("Event published to Kafka topic={}, eventId={}, paymentId={}",
                             topic, outboxEvent.getId(), outboxEvent.getAggregateId());
