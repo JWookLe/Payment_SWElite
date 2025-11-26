@@ -122,40 +122,32 @@ public class PaymentEventPublisher {
                 .setHeader("eventId", String.valueOf(outboxEvent.getId()))
                 .build();
 
-        // Measure duration for Circuit Breaker metrics
-        long startTime = System.nanoTime();
-
         try {
-            // Non-blocking async send - returns immediately, result handled in callback
-            kafkaTemplate.send(message).whenComplete((sendResult, ex) -> {
-                long duration = System.nanoTime() - startTime;
+            // Wrap Kafka send with Circuit Breaker (synchronous measurement)
+            circuitBreaker.executeRunnable(() -> {
+                try {
+                    // Async send with blocking wait for result (to measure actual Kafka response time)
+                    kafkaTemplate.send(message).whenComplete((sendResult, ex) -> {
+                        if (ex != null) {
+                            log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
+                            // Event stays in outbox for retry
+                        } else {
+                            log.debug("Event published to Kafka topic={}, eventId={}, paymentId={}",
+                                    topic, outboxEvent.getId(), outboxEvent.getAggregateId());
 
-                if (ex != null) {
-                    log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
-
-                    // Manually record failure in Circuit Breaker (non-blocking)
-                    circuitBreaker.onError(duration, java.util.concurrent.TimeUnit.NANOSECONDS, ex);
-
-                    // Event stays in outbox for retry
-                } else {
-                    log.debug("Event published to Kafka topic={}, eventId={}, paymentId={}",
-                            topic, outboxEvent.getId(), outboxEvent.getAggregateId());
-
-                    // Manually record success in Circuit Breaker (non-blocking)
-                    circuitBreaker.onSuccess(duration, java.util.concurrent.TimeUnit.NANOSECONDS);
-
-                    // Mark as published in outbox
-                    outboxEvent.markPublished();
-                    outboxEventRepository.save(outboxEvent);
+                            // Mark as published in outbox
+                            outboxEvent.markPublished();
+                            outboxEventRepository.save(outboxEvent);
+                        }
+                    }).get(); // Block until Kafka responds (for Circuit Breaker timing)
+                } catch (Exception e) {
+                    throw new KafkaPublishingException("Failed to publish to Kafka", e);
                 }
             });
         } catch (Exception ex) {
-            // Error during send submission (not Kafka issue, but send itself)
-            log.warn("Error sending to Kafka for topic={}, eventId={}. Error: {}",
+            log.warn("Circuit Breaker rejected or Kafka publish failed for topic={}, eventId={}. Error: {}",
                     topic, outboxEvent.getId(), ex.getMessage());
-
-            // Record submission error in Circuit Breaker
-            circuitBreaker.onError(System.nanoTime() - startTime, java.util.concurrent.TimeUnit.NANOSECONDS, ex);
+            // Event stays in outbox for retry
         }
     }
 
