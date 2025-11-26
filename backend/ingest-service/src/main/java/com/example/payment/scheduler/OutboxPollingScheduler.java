@@ -6,7 +6,9 @@ import com.example.payment.service.PaymentEventPublisher;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -45,7 +47,7 @@ public class OutboxPollingScheduler {
     private final OutboxEventRepository outboxEventRepository;
     private final PaymentEventPublisher paymentEventPublisher;
     private final TransactionTemplate transactionTemplate;
-    private final org.springframework.core.task.TaskExecutor outboxDispatchExecutor;
+    private final TaskExecutor outboxDispatchExecutor;
 
     @Value("${outbox.polling.batch-size:200}")
     private int batchSize;
@@ -62,7 +64,7 @@ public class OutboxPollingScheduler {
     public OutboxPollingScheduler(OutboxEventRepository outboxEventRepository,
                                   PaymentEventPublisher paymentEventPublisher,
                                   PlatformTransactionManager transactionManager,
-                                  org.springframework.core.task.TaskExecutor outboxDispatchExecutor) {
+                                  @Qualifier("outboxDispatchExecutor") TaskExecutor outboxDispatchExecutor) {
         this.outboxEventRepository = outboxEventRepository;
         this.paymentEventPublisher = paymentEventPublisher;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
