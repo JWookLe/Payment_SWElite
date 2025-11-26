@@ -40,9 +40,9 @@ if (ENABLE_REFUND) {
 export const options = {
   scenarios: {
     authorize_flow: {
-      // Drive a constant 800 RPS for performance diagnostics
+      // Drive a constant 1000 RPS for high throughput testing
       executor: "constant-arrival-rate",
-      rate: 800,
+      rate: 1000,
       timeUnit: "1s",
       duration: "6m",
       preAllocatedVUs: 800,
