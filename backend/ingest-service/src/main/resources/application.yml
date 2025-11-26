@@ -119,15 +119,15 @@ app:
 outbox:
   polling:
     enabled: true
-    interval-ms: 50              # Poll 20 times per second for rapid event processing (async now!)
+    interval-ms: 500             # Poll 2 times per second (conservative)
     initial-delay-ms: 1000       # Reduced warm-up time
-    batch-size: 1000             # Increased batch size since we're async now
+    batch-size: 100              # Batch 100 events per poll (conservative)
     max-retries: 5               # Reduced retries to fail faster
     retry-interval-seconds: 1    # Faster retry interval
   dispatcher:
-    core-pool-size: 32           # Kafka producer's own async threads
-    max-pool-size: 64            # High concurrency for async callbacks
-    queue-capacity: 10000        # Large queue for pending callbacks
+    core-pool-size: 16           # Reduced thread pool
+    max-pool-size: 32            # Reduced max threads
+    queue-capacity: 5000         # Reduced queue capacity
   dead-letter:
     check-interval-ms: 60000     # Check for dead letters every 1 minute (faster)
 
