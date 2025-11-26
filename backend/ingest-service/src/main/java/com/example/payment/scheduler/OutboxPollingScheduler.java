@@ -3,6 +3,7 @@ package com.example.payment.scheduler;
 import com.example.payment.domain.OutboxEvent;
 import com.example.payment.repository.OutboxEventRepository;
 import com.example.payment.service.PaymentEventPublisher;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -77,11 +78,19 @@ public class OutboxPollingScheduler {
      *
      * Note: With async publishing, success/failure counts are approximate
      * since callbacks complete asynchronously after this method returns.
+     *
+     * ShedLock Integration:
+     * - Only one instance (VM) acquires the lock and executes this task
+     * - Prevents duplicate processing and eliminates deadlock contention
+     * - Lock is held for the duration of the task execution
      */
     @Scheduled(
             initialDelayString = "${outbox.polling.initial-delay-ms:1000}",
             fixedDelayString = "${outbox.polling.interval-ms:${outbox.polling.fixed-delay-ms:100}}"
     )
+    @SchedulerLock(name = "pollAndPublishOutboxEvents",
+            lockAtMostFor = "30s",
+            lockAtLeastFor = "1s")
     public void pollAndPublishOutboxEvents() {
         if (!pollingEnabled) {
             return;

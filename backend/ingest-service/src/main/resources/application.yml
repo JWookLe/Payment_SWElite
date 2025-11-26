@@ -119,7 +119,7 @@ app:
 outbox:
   polling:
     enabled: true
-    interval-ms: 100             # Poll 10 times per second (aggressive for p95<500ms)
+    interval-ms: 100             # Poll 10 times per second (aggressive with ShedLock protection)
     initial-delay-ms: 1000       # Reduced warm-up time
     batch-size: 200              # Batch 200 events per poll
     max-retries: 5               # Reduced retries to fail faster
@@ -164,6 +164,15 @@ resilience4j:
         waitDuration: 1000ms
         retryExceptions:
           - org.springframework.kafka.KafkaException
+
+spring-boot-admin:
+  client:
+    enabled: false
+
+shedlock:
+  defaults:
+    lock-at-most-for: 10m
+    lock-at-least-for: 1s
 
 eureka:
   client:

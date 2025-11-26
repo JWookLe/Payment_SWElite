@@ -23,6 +23,10 @@ dependencies {
     implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.1.0")
     implementation("io.github.resilience4j:resilience4j-micrometer:2.1.0")
 
+    // ShedLock for distributed task scheduling
+    implementation("net.javacrumbs.shedlock:shedlock-spring:5.10.0")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:5.10.0")
+
     runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
