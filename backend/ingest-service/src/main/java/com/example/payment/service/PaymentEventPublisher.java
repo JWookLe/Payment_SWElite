@@ -96,52 +96,57 @@ public class PaymentEventPublisher {
     }
 
     /**
-     * Publishes to Kafka with circuit breaker protection (Asynchronous).
+     * Publishes to Kafka with circuit breaker protection (Truly Asynchronous).
      * Called by OutboxPollingScheduler for background event processing.
      * If circuit is OPEN, falls back to keeping the event in outbox (will be retried later).
      *
-     * Uses asynchronous callback to avoid blocking scheduler threads.
-     * This allows the scheduler to process more events concurrently.
+     * Uses non-blocking async callback to avoid blocking scheduler threads.
+     * This allows the scheduler to process many events concurrently without waiting.
      */
     public void publishToKafkaWithCircuitBreaker(OutboxEvent outboxEvent, String topic, String payload) {
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
 
-        Runnable publishTask = () -> {
-            String messageKey = String.valueOf(outboxEvent.getAggregateId());
+        // Check if circuit is OPEN before sending
+        if (circuitBreaker.getState() == io.github.resilience4j.circuitbreaker.CircuitBreaker.State.OPEN) {
+            log.warn("Circuit Breaker OPEN - skipping publish for topic={}, eventId={}. Event will be retried by outbox polling.",
+                    topic, outboxEvent.getId());
+            return;
+        }
 
-            Message<String> message = MessageBuilder
-                    .withPayload(payload)
-                    .setHeader(KafkaHeaders.TOPIC, topic)
-                    .setHeader(KafkaHeaders.KEY, messageKey)
-                    .setHeader("eventId", String.valueOf(outboxEvent.getId()))
-                    .build();
+        String messageKey = String.valueOf(outboxEvent.getAggregateId());
 
-            try {
-                // Synchronous send with timeout to allow Circuit Breaker to catch exceptions
-                kafkaTemplate.send(message).get(2, java.util.concurrent.TimeUnit.SECONDS);
-                log.info("Event published to Kafka topic={}, eventId={}, paymentId={}",
-                        topic, outboxEvent.getId(), outboxEvent.getAggregateId());
-                // Mark as published in outbox
-                outboxEvent.markPublished();
-                outboxEventRepository.save(outboxEvent);
-            } catch (Exception ex) {
-                log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
-                throw new KafkaPublishingException("Failed to publish to Kafka", ex);
-            }
-        };
+        Message<String> message = MessageBuilder
+                .withPayload(payload)
+                .setHeader(KafkaHeaders.TOPIC, topic)
+                .setHeader(KafkaHeaders.KEY, messageKey)
+                .setHeader("eventId", String.valueOf(outboxEvent.getId()))
+                .build();
 
         try {
-            circuitBreaker.executeRunnable(publishTask);
-        } catch (io.github.resilience4j.circuitbreaker.CallNotPermittedException ex) {
-            // Circuit breaker is OPEN, request was rejected
-            log.warn("Circuit Breaker OPEN - request rejected for topic={}, eventId={}. Event will be retried by outbox polling.",
-                    topic, outboxEvent.getId());
-            // Event is already saved in outbox, so we don't throw
+            // Non-blocking async send - returns immediately, result handled in callback
+            kafkaTemplate.send(message).whenComplete((sendResult, ex) -> {
+                if (ex != null) {
+                    log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
+                    // Record failure for Circuit Breaker metrics
+                    try {
+                        circuitBreaker.executeRunnable(() -> {
+                            throw new KafkaPublishingException("Kafka send failed", ex);
+                        });
+                    } catch (Exception ignored) {
+                        // Event stays in outbox for retry
+                    }
+                } else {
+                    log.debug("Event published to Kafka topic={}, eventId={}, paymentId={}",
+                            topic, outboxEvent.getId(), outboxEvent.getAggregateId());
+                    // Mark as published in outbox
+                    outboxEvent.markPublished();
+                    outboxEventRepository.save(outboxEvent);
+                }
+            });
         } catch (Exception ex) {
-            // Other errors (timeout, etc)
-            log.warn("Circuit Breaker caught error for topic={}, eventId={}. Error: {}",
+            // Error during send submission (not Kafka issue, but send itself)
+            log.warn("Error sending to Kafka for topic={}, eventId={}. Error: {}",
                     topic, outboxEvent.getId(), ex.getMessage());
-            // Event is already saved in outbox, so we don't throw
         }
     }
 

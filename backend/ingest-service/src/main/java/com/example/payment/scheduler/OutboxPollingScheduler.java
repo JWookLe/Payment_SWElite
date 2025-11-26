@@ -66,18 +66,21 @@ public class OutboxPollingScheduler {
     }
 
     /**
-     * Main polling loop - executes every 1 second
+     * Main polling loop - executes every 100ms
      *
      * Processing flow:
      * 1. Query unpublished events with pessimistic lock (prevents race conditions)
-     * 2. For each event, attempt Kafka publish via Circuit Breaker
-     * 3. On success: mark as published
-     * 4. On failure: increment retry count, update lastRetryAt
+     * 2. For each event, submit async Kafka publish via Circuit Breaker
+     * 3. Callback will mark as published on success
+     * 4. On failure: callback doesn't mark published, next poll will retry
      * 5. Dead letter candidates (max retries exceeded) are logged
+     *
+     * Note: With async publishing, success/failure counts are approximate
+     * since callbacks complete asynchronously after this method returns.
      */
     @Scheduled(
             initialDelayString = "${outbox.polling.initial-delay-ms:1000}",
-            fixedDelayString = "${outbox.polling.interval-ms:${outbox.polling.fixed-delay-ms:1000}}"
+            fixedDelayString = "${outbox.polling.interval-ms:${outbox.polling.fixed-delay-ms:100}}"
     )
     public void pollAndPublishOutboxEvents() {
         if (!pollingEnabled) {
@@ -95,35 +98,22 @@ public class OutboxPollingScheduler {
 
             log.debug("Polling outbox: found {} unpublished events", events.size());
 
-            int successCount = 0;
-            int failureCount = 0;
-
+            // Submit all events for async publishing (non-blocking)
             for (OutboxEvent event : events) {
                 try {
                     String topic = paymentEventPublisher.resolveTopicName(event.getEventType());
                     paymentEventPublisher.publishToKafkaWithCircuitBreaker(event, topic, event.getPayload());
-
-                    if (event.isPublished()) {
-                        successCount++;
-                    } else {
-                        // Circuit Breaker rejected or other failure
-                        incrementRetryCount(event);
-                        failureCount++;
-                    }
                 } catch (Exception ex) {
-                    log.error("Failed to process outbox event id={}, aggregateId={}, eventType={}",
+                    log.error("Failed to submit outbox event for publishing id={}, aggregateId={}, eventType={}",
                             event.getId(), event.getAggregateId(), event.getEventType(), ex);
+                    // Still update retry count even if submission failed
                     incrementRetryCount(event);
-                    failureCount++;
                 }
             }
 
-            if (successCount > 0 || failureCount > 0) {
-                log.info("Outbox polling cycle completed: success={}, failure={}, total={}",
-                        successCount, failureCount, events.size());
-            }
+            log.debug("Submitted {} events for async Kafka publishing", events.size());
 
-            // Check for dead letter candidates
+            // Check for dead letter candidates periodically
             checkDeadLetterCandidates();
 
         } catch (Exception ex) {
