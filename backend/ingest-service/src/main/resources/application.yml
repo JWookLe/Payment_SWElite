@@ -119,15 +119,15 @@ app:
 outbox:
   polling:
     enabled: true
-    interval-ms: 500             # Poll 2 times per second (conservative)
+    interval-ms: 100             # Poll 10 times per second (aggressive for p95<500ms)
     initial-delay-ms: 1000       # Reduced warm-up time
-    batch-size: 100              # Batch 100 events per poll (conservative)
+    batch-size: 200              # Batch 200 events per poll
     max-retries: 5               # Reduced retries to fail faster
     retry-interval-seconds: 1    # Faster retry interval
   dispatcher:
-    core-pool-size: 16           # Reduced thread pool
-    max-pool-size: 32            # Reduced max threads
-    queue-capacity: 5000         # Reduced queue capacity
+    core-pool-size: 32           # Increased thread pool for faster processing
+    max-pool-size: 64            # Increased max threads
+    queue-capacity: 10000        # Increased queue capacity
   dead-letter:
     check-interval-ms: 60000     # Check for dead letters every 1 minute (faster)
 
