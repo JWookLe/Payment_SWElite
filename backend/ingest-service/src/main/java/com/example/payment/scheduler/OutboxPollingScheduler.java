@@ -45,6 +45,7 @@ public class OutboxPollingScheduler {
     private final OutboxEventRepository outboxEventRepository;
     private final PaymentEventPublisher paymentEventPublisher;
     private final TransactionTemplate transactionTemplate;
+    private final org.springframework.core.task.TaskExecutor outboxDispatchExecutor;
 
     @Value("${outbox.polling.batch-size:200}")
     private int batchSize;
@@ -60,10 +61,12 @@ public class OutboxPollingScheduler {
 
     public OutboxPollingScheduler(OutboxEventRepository outboxEventRepository,
                                   PaymentEventPublisher paymentEventPublisher,
-                                  PlatformTransactionManager transactionManager) {
+                                  PlatformTransactionManager transactionManager,
+                                  org.springframework.core.task.TaskExecutor outboxDispatchExecutor) {
         this.outboxEventRepository = outboxEventRepository;
         this.paymentEventPublisher = paymentEventPublisher;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.outboxDispatchExecutor = outboxDispatchExecutor;
     }
 
     /**
@@ -119,20 +122,21 @@ public class OutboxPollingScheduler {
 
                 log.debug("Polling outbox: found {} unpublished events", events.size());
 
-                // Submit all events for async publishing (non-blocking)
+                // Submit all events to dispatcher thread pool for async publishing
                 for (OutboxEvent event : events) {
-                    try {
-                        String topic = paymentEventPublisher.resolveTopicName(event.getEventType());
-                        paymentEventPublisher.publishToKafkaWithCircuitBreaker(event, topic, event.getPayload());
-                    } catch (Exception ex) {
-                        log.error("Failed to submit outbox event for publishing id={}, aggregateId={}, eventType={}",
-                                event.getId(), event.getAggregateId(), event.getEventType(), ex);
-                        // Still update retry count even if submission failed
-                        incrementRetryCount(event);
-                    }
+                    outboxDispatchExecutor.execute(() -> {
+                        try {
+                            String topic = paymentEventPublisher.resolveTopicName(event.getEventType());
+                            paymentEventPublisher.publishToKafkaWithCircuitBreaker(event, topic, event.getPayload());
+                        } catch (Exception ex) {
+                            log.error("Failed to publish outbox event id={}, aggregateId={}, eventType={}",
+                                    event.getId(), event.getAggregateId(), event.getEventType(), ex);
+                            // Retry count will be incremented on next poll cycle
+                        }
+                    });
                 }
 
-                log.debug("Submitted {} events for async Kafka publishing", events.size());
+                log.debug("Submitted {} events to dispatcher for async Kafka publishing", events.size());
 
                 // Check for dead letter candidates periodically
                 checkDeadLetterCandidates();
