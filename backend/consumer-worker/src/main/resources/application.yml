@@ -4,9 +4,14 @@ spring:
   main:
     web-application-type: reactive
   datasource:
-    url: jdbc:mariadb://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:3306}/${PAYMENT_DB_NAME:paydb}
-    username: ${PAYMENT_DB_USER:payuser}
-    password: ${PAYMENT_DB_PASSWORD:paypass}
+    shard1:
+      url: jdbc:mariadb://172.25.0.37:13306/paydb
+      username: payuser
+      password: paypass
+    shard2:
+      url: jdbc:mariadb://mariadb-shard2:3306/paydb
+      username: payuser
+      password: paypass
   jpa:
     hibernate:
       ddl-auto: none

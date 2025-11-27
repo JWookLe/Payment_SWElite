@@ -3,6 +3,7 @@ package com.example.settlement.service;
 import com.example.settlement.client.MockPgApiClient;
 import com.example.settlement.client.MockPgApiClient.PgApiException;
 import com.example.settlement.client.MockPgApiClient.SettlementResponse;
+import com.example.settlement.config.ShardContextHolder;
 import com.example.settlement.domain.Payment;
 import com.example.settlement.domain.PaymentStatus;
 import com.example.settlement.domain.SettlementRequest;
@@ -55,9 +56,14 @@ public class SettlementService {
     public void processSettlement(Long paymentId, Long amount) {
         log.info("Processing settlement: paymentId={}, amount={}", paymentId, amount);
 
-        // Payment 조회
-        Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
+        try {
+            // Payment 조회
+            Payment payment = paymentRepository.findById(paymentId)
+                    .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
+
+            // Shard 라우팅 설정
+            ShardContextHolder.setShardByMerchantId(payment.getMerchantId());
+            log.info("Shard routing set for merchantId={}, shard={}", payment.getMerchantId(), ShardContextHolder.getShardKey());
 
         // 이미 정산 요청이 있는지 확인
         SettlementRequest existingRequest = settlementRequestRepository.findByPaymentId(paymentId)
@@ -118,6 +124,9 @@ public class SettlementService {
                 log.error("Settlement max retries exceeded: paymentId={}", paymentId);
                 // DLQ로 전송하거나 알림 발송
             }
+        }
+        } finally {
+            ShardContextHolder.clear();
         }
     }
 

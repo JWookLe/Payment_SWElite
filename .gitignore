@@ -35,6 +35,9 @@ jenkins-data/
 # Backend build outputs
 backend/consumer-worker/bin/
 backend/ingest-service/bin/
+backend/settlement-worker/bin/
+backend/refund-worker/bin/
+
 
 # Load testing artifacts
 loadtest/k6/*.json

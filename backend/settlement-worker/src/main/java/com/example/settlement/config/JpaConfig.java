@@ -18,26 +18,62 @@ import java.util.Map;
 @Configuration
 public class JpaConfig {
 
-    @Value("${spring.datasource.url}")
-    private String url;
+    @Value("${spring.datasource.shard1.url}")
+    private String shard1Url;
 
-    @Value("${spring.datasource.username}")
-    private String username;
+    @Value("${spring.datasource.shard1.username}")
+    private String shard1Username;
 
-    @Value("${spring.datasource.password}")
-    private String password;
+    @Value("${spring.datasource.shard1.password}")
+    private String shard1Password;
+
+    @Value("${spring.datasource.shard2.url}")
+    private String shard2Url;
+
+    @Value("${spring.datasource.shard2.username}")
+    private String shard2Username;
+
+    @Value("${spring.datasource.shard2.password}")
+    private String shard2Password;
 
     @Bean
-    @Primary
-    public DataSource dataSource() {
+    public DataSource shard1DataSource() {
         HikariDataSource dataSource = new HikariDataSource();
-        dataSource.setJdbcUrl(url);
-        dataSource.setUsername(username);
-        dataSource.setPassword(password);
+        dataSource.setJdbcUrl(shard1Url);
+        dataSource.setUsername(shard1Username);
+        dataSource.setPassword(shard1Password);
         dataSource.setDriverClassName("org.mariadb.jdbc.Driver");
         dataSource.setMaximumPoolSize(50);
         dataSource.setMinimumIdle(10);
         return dataSource;
+    }
+
+    @Bean
+    public DataSource shard2DataSource() {
+        HikariDataSource dataSource = new HikariDataSource();
+        dataSource.setJdbcUrl(shard2Url);
+        dataSource.setUsername(shard2Username);
+        dataSource.setPassword(shard2Password);
+        dataSource.setDriverClassName("org.mariadb.jdbc.Driver");
+        dataSource.setMaximumPoolSize(50);
+        dataSource.setMinimumIdle(10);
+        return dataSource;
+    }
+
+    @Bean
+    @Primary
+    public DataSource dataSource() {
+        ShardRoutingDataSource routingDataSource = new ShardRoutingDataSource();
+
+        Map<Object, Object> targetDataSources = new HashMap<>();
+        targetDataSources.put("shard1", shard1DataSource());
+        targetDataSources.put("shard2", shard2DataSource());
+
+        routingDataSource.setTargetDataSources(targetDataSources);
+        routingDataSource.setDefaultTargetDataSource(shard1DataSource());
+        routingDataSource.afterPropertiesSet();
+
+        return routingDataSource;
     }
 
     @Bean
