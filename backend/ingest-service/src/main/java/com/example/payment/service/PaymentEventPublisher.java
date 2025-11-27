@@ -122,23 +122,32 @@ public class PaymentEventPublisher {
                 .setHeader("eventId", String.valueOf(outboxEvent.getId()))
                 .build();
 
-        // Wrap Kafka send in Supplier for Circuit Breaker decoration
-        var supplier = (java.util.function.Supplier<java.util.concurrent.CompletionStage<org.springframework.kafka.support.SendResult<String, String>>>)
-            () -> kafkaTemplate.send(message);
-
-        // Decorate with Circuit Breaker - automatically records success/failure
-        circuitBreaker.decorateCompletionStage(supplier).get()
-            .whenComplete((sendResult, ex) -> {
-                if (ex != null) {
-                    log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
+        // Non-blocking async send - returns immediately, result handled in callback
+        kafkaTemplate.send(message).whenComplete((sendResult, ex) -> {
+            if (ex != null) {
+                log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
+                try {
+                    circuitBreaker.executeRunnable(() -> {
+                        throw new KafkaPublishingException("Kafka send failed", ex);
+                    });
+                } catch (Exception ignored) {
                     // Event stays in outbox for retry
-                } else {
-                    log.debug("Event published to Kafka topic={}, eventId={}, paymentId={}",
-                            topic, outboxEvent.getId(), outboxEvent.getAggregateId());
-                    outboxEvent.markPublished();
-                    outboxEventRepository.save(outboxEvent);
                 }
-            });
+            } else {
+                log.debug("Event published to Kafka topic={}, eventId={}, paymentId={}",
+                        topic, outboxEvent.getId(), outboxEvent.getAggregateId());
+                outboxEvent.markPublished();
+                outboxEventRepository.save(outboxEvent);
+
+                // Sample 10% of successful calls to record in Circuit Breaker
+                // This minimizes overhead while allowing HALF_OPEN -> CLOSED transition
+                if (outboxEvent.getId() % 10 == 0) {
+                    circuitBreaker.executeRunnable(() -> {
+                        // Success - no exception thrown
+                    });
+                }
+            }
+        });
     }
 
     /**
