@@ -2,7 +2,7 @@ import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { Trend, Rate } from "k6/metrics";
 
-const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
+const BASE_URL = __ENV.BASE_URL || "http://localhost:8080/api";
 
 // 샤딩을 위한 랜덤 merchantId 생성 (1~1000 범위로 짝수/홀수 균등 분배)
 function getRandomMerchantId() {
@@ -75,7 +75,7 @@ export default function () {
       idempotencyKey,
     });
 
-    const authorizeResponse = http.post(`${BASE_URL}/api/payments/authorize`, authorizePayload, headers);
+    const authorizeResponse = http.post(`${BASE_URL}/payments/authorize`, authorizePayload, headers);
     authorizeTrend.add(authorizeResponse.timings.duration);
 
     const authorizeOk = check(authorizeResponse, {
@@ -121,7 +121,7 @@ export default function () {
       merchantId: merchantId,
     });
 
-    const captureResponse = http.post(`${BASE_URL}/api/payments/capture/${paymentId}`, capturePayload, headers);
+    const captureResponse = http.post(`${BASE_URL}/payments/capture/${paymentId}`, capturePayload, headers);
     captureTrend.add(captureResponse.timings.duration);
 
     const captureOk = check(captureResponse, {
@@ -147,7 +147,7 @@ export default function () {
       reason: "k6 full flow test",
     });
 
-    const refundResponse = http.post(`${BASE_URL}/api/payments/refund/${paymentId}`, refundPayload, headers);
+    const refundResponse = http.post(`${BASE_URL}/payments/refund/${paymentId}`, refundPayload, headers);
     refundTrend.add(refundResponse.timings.duration);
 
     const refundOk = check(refundResponse, {
