@@ -57,8 +57,6 @@ spring:
         buffer.memory: 134217728                   # 128MB buffer
         compression.type: lz4
         enable.idempotence: false
-        max.block.ms: 5000                         # 5s max wait for metadata (fast fail for CB test)
-        metadata.max.age.ms: 5000                  # 5s metadata refresh (detect Kafka outage faster)
   data:
     redis:
       host: ${REDIS_HOST:localhost}
