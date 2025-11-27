@@ -73,9 +73,16 @@ if [ ! -d "$K6_DIR" ]; then
     exit 1
 fi
 
+# Determine which k6 script to use
+if [ "$SCENARIO" = "full-flow" ]; then
+    K6_SCRIPT="$K6_DIR/full-flow.js"
+else
+    K6_SCRIPT="$K6_DIR/payment-scenario.js"
+fi
+
 # Check k6 script
-if [ ! -f "$K6_DIR/payment-scenario.js" ]; then
-    echo -e "${RED}Error:${NC} k6 script not found: $K6_DIR/payment-scenario.js"
+if [ ! -f "$K6_SCRIPT" ]; then
+    echo -e "${RED}Error:${NC} k6 script not found: $K6_SCRIPT"
     exit 1
 fi
 
@@ -93,11 +100,17 @@ rm -f "$RESULTS_FILE"
 
 if [ "$USE_LOCAL_K6" = true ]; then
   echo -e "${YELLOW}k6 binary detected locally. Running without Docker.${NC}"
-  BASE_URL="$BASE_URL" \
-  ENABLE_CAPTURE="$ENABLE_CAPTURE" \
-  ENABLE_REFUND="$ENABLE_REFUND" \
-  k6 run "$K6_DIR/payment-scenario.js" \
-    --summary-export "$RESULTS_FILE"
+  if [ "$SCENARIO" = "full-flow" ]; then
+    BASE_URL="$BASE_URL" \
+    k6 run "$K6_SCRIPT" \
+      --summary-export "$RESULTS_FILE"
+  else
+    BASE_URL="$BASE_URL" \
+    ENABLE_CAPTURE="$ENABLE_CAPTURE" \
+    ENABLE_REFUND="$ENABLE_REFUND" \
+    k6 run "$K6_SCRIPT" \
+      --summary-export "$RESULTS_FILE"
+  fi
 else
   echo -e "${YELLOW}k6 binary not found. Falling back to Docker (requires Docker socket access).${NC}"
   # Resolve host path for Docker Desktop (Windows) vs Linux host
@@ -106,15 +119,28 @@ else
     HOST_K6_DIR="$(cygpath -aw "$K6_DIR")"
   fi
 
-  docker run --rm \
-    --network "$DOCKER_NETWORK" \
-    -v "$HOST_K6_DIR:/k6" \
-    -e BASE_URL="$BASE_URL" \
-    -e ENABLE_CAPTURE="$ENABLE_CAPTURE" \
-    -e ENABLE_REFUND="$ENABLE_REFUND" \
-    grafana/k6:0.49.0 \
-    run /k6/payment-scenario.js \
-    --summary-export=/k6/summary.json
+  # Determine script name for Docker
+  K6_SCRIPT_NAME=$(basename "$K6_SCRIPT")
+
+  if [ "$SCENARIO" = "full-flow" ]; then
+    docker run --rm \
+      --network "$DOCKER_NETWORK" \
+      -v "$HOST_K6_DIR:/k6" \
+      -e BASE_URL="$BASE_URL" \
+      grafana/k6:0.49.0 \
+      run /k6/$K6_SCRIPT_NAME \
+      --summary-export=/k6/summary.json
+  else
+    docker run --rm \
+      --network "$DOCKER_NETWORK" \
+      -v "$HOST_K6_DIR:/k6" \
+      -e BASE_URL="$BASE_URL" \
+      -e ENABLE_CAPTURE="$ENABLE_CAPTURE" \
+      -e ENABLE_REFUND="$ENABLE_REFUND" \
+      grafana/k6:0.49.0 \
+      run /k6/$K6_SCRIPT_NAME \
+      --summary-export=/k6/summary.json
+  fi
 fi
 
 # Check results
