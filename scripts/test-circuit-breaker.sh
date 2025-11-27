@@ -259,8 +259,13 @@ fi
 
 log_info "Step 5: restarting Kafka broker."
 start_service kafka
-sleep 20
+sleep 10
 log_success "Kafka broker restarted."
+
+log_info "Step 5.5: restarting ingest-service to reconnect to Kafka."
+start_service ingest-service
+sleep 10
+log_success "Ingest service restarted."
 
 recovery_failed=false
 log_info "Step 6: preparing recovery window."
