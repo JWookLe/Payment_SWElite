@@ -138,6 +138,14 @@ public class PaymentEventPublisher {
                         topic, outboxEvent.getId(), outboxEvent.getAggregateId());
                 outboxEvent.markPublished();
                 outboxEventRepository.save(outboxEvent);
+
+                // Record success only in HALF_OPEN state to allow transition to CLOSED
+                // In CLOSED state, skip recording to maintain K6 performance
+                if (circuitBreaker.getState() == io.github.resilience4j.circuitbreaker.CircuitBreaker.State.HALF_OPEN) {
+                    circuitBreaker.executeRunnable(() -> {
+                        // Success - no exception thrown
+                    });
+                }
             }
         });
     }
