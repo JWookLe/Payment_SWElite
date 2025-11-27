@@ -138,14 +138,6 @@ public class PaymentEventPublisher {
                         topic, outboxEvent.getId(), outboxEvent.getAggregateId());
                 outboxEvent.markPublished();
                 outboxEventRepository.save(outboxEvent);
-
-                // Sample 10% of successful calls to record in Circuit Breaker
-                // This minimizes overhead while allowing HALF_OPEN -> CLOSED transition
-                if (outboxEvent.getId() % 10 == 0) {
-                    circuitBreaker.executeRunnable(() -> {
-                        // Success - no exception thrown
-                    });
-                }
             }
         });
     }
