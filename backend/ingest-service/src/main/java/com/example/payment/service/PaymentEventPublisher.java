@@ -126,6 +126,8 @@ public class PaymentEventPublisher {
         kafkaTemplate.send(message).whenComplete((sendResult, ex) -> {
             if (ex != null) {
                 log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
+
+                // Record failure in Circuit Breaker (non-blocking)
                 try {
                     circuitBreaker.executeRunnable(() -> {
                         throw new KafkaPublishingException("Kafka send failed", ex);
@@ -136,6 +138,12 @@ public class PaymentEventPublisher {
             } else {
                 log.debug("Event published to Kafka topic={}, eventId={}, paymentId={}",
                         topic, outboxEvent.getId(), outboxEvent.getAggregateId());
+
+                // Record success in Circuit Breaker (non-blocking)
+                circuitBreaker.executeRunnable(() -> {
+                    // Success - no exception thrown
+                });
+
                 outboxEvent.markPublished();
                 outboxEventRepository.save(outboxEvent);
             }
