@@ -6,7 +6,7 @@ const BASE_URL = __ENV.BASE_URL || "http://localhost:8080/api";
 
 // 샤딩을 위한 랜덤 merchantId 생성 (1~1000 범위로 짝수/홀수 균등 분배)
 function getRandomMerchantId() {
-  return `MERCHANT-${Math.floor(Math.random() * 1000) + 1}`;
+  return `MERCHANT-${Math.floor(Math.random() * 2000) + 1}`;
 }
 
 console.log(`K6 Full Flow Test: BASE_URL=${BASE_URL}`);
