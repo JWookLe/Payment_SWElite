@@ -58,8 +58,12 @@ public class SettlementService {
 
         try {
             // Payment 조회 (ShardContextHolder는 Consumer에서 이미 설정됨)
-            Payment payment = paymentRepository.findById(paymentId)
-                    .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
+            Payment payment = paymentRepository.findById(paymentId).orElse(null);
+            if (payment == null) {
+                log.warn("Payment not found in shard {}: paymentId={}, merchantId={} - skipping",
+                    ShardContextHolder.getShardKey(), paymentId, merchantId);
+                return;
+            }
 
             // Payment 상태 확인 - CAPTURE_REQUESTED가 아니면 처리 불필요
             if (payment.getStatus() != PaymentStatus.CAPTURE_REQUESTED) {
