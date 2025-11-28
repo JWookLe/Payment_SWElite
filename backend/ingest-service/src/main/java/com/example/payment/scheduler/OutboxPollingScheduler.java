@@ -96,6 +96,7 @@ public class OutboxPollingScheduler {
             lockAtLeastFor = "1s")
     public void pollAndPublishOutboxEvents() {
         if (!pollingEnabled) {
+            log.info("Outbox polling disabled via configuration");
             return;
         }
         // shard2 먼저, shard1 순서로 폴링해 백로그를 우선 처리
@@ -107,6 +108,7 @@ public class OutboxPollingScheduler {
         // ingest-service는 샤드별로 개별 데이터소스를 사용하므로 명시적으로 샤드 컨텍스트를 설정
         ShardContextHolder.setShardKey(shard);
         try {
+            log.info("Outbox polling start for shard {}", shard);
             pollAndPublishWithRetry(shard);
         } catch (Exception ex) {
             log.error("Outbox polling cycle failed for shard {}", shard, ex);
@@ -127,10 +129,11 @@ public class OutboxPollingScheduler {
                 List<OutboxEvent> events = fetchEventsWithLock(retryThreshold, pageable);
 
                 if (events == null || events.isEmpty()) {
+                    log.info("Outbox polling ({}) found no unpublished events", shard);
                     return;
                 }
 
-                log.debug("Polling outbox ({}): found {} unpublished events", shard, events.size());
+                log.info("Outbox polling ({}) found {} unpublished events", shard, events.size());
 
                 // Submit all events for async publishing (non-blocking)
                 for (OutboxEvent event : events) {
