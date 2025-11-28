@@ -61,6 +61,12 @@ public class SettlementService {
             Payment payment = paymentRepository.findById(paymentId)
                     .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
 
+            // Payment 상태 확인 - CAPTURE_REQUESTED가 아니면 처리 불필요
+            if (payment.getStatus() != PaymentStatus.CAPTURE_REQUESTED) {
+                log.info("Payment status is not CAPTURE_REQUESTED: paymentId={}, status={}", paymentId, payment.getStatus());
+                return;
+            }
+
         // 이미 정산 요청이 있는지 확인
         SettlementRequest existingRequest = settlementRequestRepository.findByPaymentId(paymentId)
                 .orElse(null);
