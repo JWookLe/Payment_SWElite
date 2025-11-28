@@ -2,6 +2,7 @@ package com.example.payment.service;
 
 import com.example.payment.domain.OutboxEvent;
 import com.example.payment.repository.OutboxEventRepository;
+import com.example.payment.config.shard.ShardContextHolder;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -103,7 +104,7 @@ public class PaymentEventPublisher {
      * Uses non-blocking async callback to avoid blocking scheduler threads.
      * This allows the scheduler to process many events concurrently without waiting.
      */
-    public void publishToKafkaWithCircuitBreaker(OutboxEvent outboxEvent, String topic, String payload) {
+    public void publishToKafkaWithCircuitBreaker(OutboxEvent outboxEvent, String topic, String payload, String shardKey) {
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
 
         // Check if circuit is OPEN before sending
@@ -124,6 +125,8 @@ public class PaymentEventPublisher {
 
         // Non-blocking async send - returns immediately, result handled in callback
         kafkaTemplate.send(message).whenComplete((sendResult, ex) -> {
+            // Ensure we save published flag into the same shard where we fetched
+            ShardContextHolder.setShardKey(shardKey);
             if (ex != null) {
                 log.error("Kafka publish failed for topic={}, eventId={}", topic, outboxEvent.getId(), ex);
                 try {
@@ -148,6 +151,7 @@ public class PaymentEventPublisher {
                     });
                 }
             }
+            ShardContextHolder.clear();
         });
     }
 

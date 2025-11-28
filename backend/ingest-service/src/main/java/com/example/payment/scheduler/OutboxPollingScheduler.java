@@ -139,7 +139,7 @@ public class OutboxPollingScheduler {
                 for (OutboxEvent event : events) {
                     try {
                         String topic = paymentEventPublisher.resolveTopicName(event.getEventType());
-                        paymentEventPublisher.publishToKafkaWithCircuitBreaker(event, topic, event.getPayload());
+                        paymentEventPublisher.publishToKafkaWithCircuitBreaker(event, topic, event.getPayload(), shard);
                     } catch (Exception ex) {
                         log.error("Failed to submit outbox event for publishing id={}, aggregateId={}, eventType={}",
                                 event.getId(), event.getAggregateId(), event.getEventType(), ex);
