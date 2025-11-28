@@ -54,14 +54,10 @@ public class SettlementService {
      */
     @Transactional
     public void processSettlement(Long paymentId, String merchantId, Long amount) {
-        log.info("Processing settlement: paymentId={}, merchantId={}, amount={}", paymentId, merchantId, amount);
+        log.info("Processing settlement: paymentId={}, merchantId={}, shard={}", paymentId, merchantId, ShardContextHolder.getShardKey());
 
         try {
-            // Shard 라우팅 설정 (Payment 조회 전에 먼저!)
-            ShardContextHolder.setShardByMerchantId(merchantId);
-            log.info("Shard routing set for merchantId={}, shard={}", merchantId, ShardContextHolder.getShardKey());
-
-            // Payment 조회
+            // Payment 조회 (ShardContextHolder는 Consumer에서 이미 설정됨)
             Payment payment = paymentRepository.findById(paymentId)
                     .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
 

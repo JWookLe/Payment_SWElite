@@ -55,11 +55,11 @@ public class SettlementEventConsumer {
 
             // 트랜잭션 시작 전에 샤드 컨텍스트 설정 (AbstractRoutingDataSource가 올바른 샤드로 연결)
             ShardContextHolder.setShardByMerchantId(merchantId);
-            try {
-                settlementService.processSettlement(paymentId, merchantId, amount);
-            } finally {
-                ShardContextHolder.clear();
-            }
+            log.info("Shard routing set for merchantId={}, shard={}", merchantId, ShardContextHolder.getShardKey());
+
+            settlementService.processSettlement(paymentId, merchantId, amount);
+
+            // Note: ShardContextHolder는 다음 메시지 처리 전에 자동으로 덮어써지므로 clear() 불필요
 
         } catch (Exception ex) {
             log.error("Failed to process capture-requested event: {}", ex.getMessage(), ex);

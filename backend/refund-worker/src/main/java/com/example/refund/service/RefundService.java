@@ -47,13 +47,10 @@ public class RefundService {
 
     @Transactional
     public void processRefund(Long paymentId, String merchantId, Long amount, String reason) {
-        log.info("Processing refund: paymentId={}, merchantId={}, amount={}, reason={}", paymentId, merchantId, amount, reason);
+        log.info("Processing refund: paymentId={}, merchantId={}, shard={}, amount={}, reason={}", paymentId, merchantId, ShardContextHolder.getShardKey(), amount, reason);
 
         try {
-            // Shard 라우팅 설정 (Payment 조회 전에 먼저!)
-            ShardContextHolder.setShardByMerchantId(merchantId);
-            log.info("Shard routing set for merchantId={}, shard={}", merchantId, ShardContextHolder.getShardKey());
-
+            // Payment 조회 (ShardContextHolder는 Consumer에서 이미 설정됨)
             Payment payment = paymentRepository.findById(paymentId)
                     .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
 
