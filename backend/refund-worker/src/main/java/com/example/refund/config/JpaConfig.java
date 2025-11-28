@@ -2,7 +2,11 @@ package com.example.refund.config;
 
 import com.zaxxer.hikari.HikariDataSource;
 import jakarta.persistence.EntityManagerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -17,6 +21,8 @@ import java.util.Map;
 
 @Configuration
 public class JpaConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(JpaConfig.class);
 
     @Value("${spring.datasource.shard1.url}")
     private String shard1Url;
@@ -76,6 +82,25 @@ public class JpaConfig {
         routingDataSource.afterPropertiesSet();
 
         return routingDataSource;
+    }
+
+    @Bean
+    public SmartInitializingSingleton warmUpPools(
+            @Qualifier("shard1DataSource") DataSource shard1DataSource,
+            @Qualifier("shard2DataSource") DataSource shard2DataSource) {
+        return () -> {
+            warmUp(shard1DataSource, "shard1");
+            warmUp(shard2DataSource, "shard2");
+        };
+    }
+
+    private void warmUp(DataSource dataSource, String shardName) {
+        try (var ignored = dataSource.getConnection()) {
+            log.info("Warmed up {} datasource", shardName);
+        } catch (Exception e) {
+            log.error("Failed to warm up {} datasource", shardName, e);
+            throw new IllegalStateException("Datasource warm-up failed for " + shardName, e);
+        }
     }
 
     @Bean
