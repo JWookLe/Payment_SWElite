@@ -45,12 +45,13 @@ public class RefundEventConsumer {
             Map<String, Object> payload = objectMapper.readValue(message, Map.class);
 
             Long paymentId = getLongValue(payload, "paymentId");
+            String merchantId = (String) payload.get("merchantId");
             Long amount = getLongValue(payload, "amount");
             String reason = (String) payload.getOrDefault("reason", "고객 요청");
 
-            log.info("Processing refund request: paymentId={}, amount={}, reason={}", paymentId, amount, reason);
+            log.info("Processing refund request: paymentId={}, merchantId={}, amount={}, reason={}", paymentId, merchantId, amount, reason);
 
-            refundService.processRefund(paymentId, amount, reason);
+            refundService.processRefund(paymentId, merchantId, amount, reason);
 
         } catch (Exception ex) {
             log.error("Failed to process refund-requested event: topic={}, offset={}", topic, offset, ex);

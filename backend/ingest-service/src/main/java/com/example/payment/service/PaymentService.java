@@ -162,6 +162,7 @@ public class PaymentService {
                 long evtStart = System.currentTimeMillis();
                 publishEvent(payment, "PAYMENT_REFUND_REQUESTED", Map.of(
                                 "paymentId", payment.getId(),
+                                "merchantId", payment.getMerchantId(),
                                 "status", payment.getStatus().name(),
                                 "amount", payment.getAmount(),
                                 "occurredAt", Instant.now().toString(),

@@ -48,11 +48,12 @@ public class SettlementEventConsumer {
 
             Long paymentId = getLongValue(payload, "paymentId");
             Long amount = getLongValue(payload, "amount");
+            String merchantId = (String) payload.get("merchantId");
 
-            log.info("Processing capture request: paymentId={}, amount={}", paymentId, amount);
+            log.info("Processing capture request: paymentId={}, merchantId={}, amount={}", paymentId, merchantId, amount);
 
             // 정산 처리
-            settlementService.processSettlement(paymentId, amount);
+            settlementService.processSettlement(paymentId, merchantId, amount);
 
         } catch (Exception ex) {
             log.error("Failed to process capture-requested event: {}", ex.getMessage(), ex);

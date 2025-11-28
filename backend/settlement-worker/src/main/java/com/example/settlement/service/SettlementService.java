@@ -53,17 +53,17 @@ public class SettlementService {
      * 4. 실패 시: SettlementRequest FAILED 상태로 변경
      */
     @Transactional
-    public void processSettlement(Long paymentId, Long amount) {
-        log.info("Processing settlement: paymentId={}, amount={}", paymentId, amount);
+    public void processSettlement(Long paymentId, String merchantId, Long amount) {
+        log.info("Processing settlement: paymentId={}, merchantId={}, amount={}", paymentId, merchantId, amount);
 
         try {
+            // Shard 라우팅 설정 (Payment 조회 전에 먼저!)
+            ShardContextHolder.setShardByMerchantId(merchantId);
+            log.info("Shard routing set for merchantId={}, shard={}", merchantId, ShardContextHolder.getShardKey());
+
             // Payment 조회
             Payment payment = paymentRepository.findById(paymentId)
                     .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
-
-            // Shard 라우팅 설정
-            ShardContextHolder.setShardByMerchantId(payment.getMerchantId());
-            log.info("Shard routing set for merchantId={}, shard={}", payment.getMerchantId(), ShardContextHolder.getShardKey());
 
         // 이미 정산 요청이 있는지 확인
         SettlementRequest existingRequest = settlementRequestRepository.findByPaymentId(paymentId)
