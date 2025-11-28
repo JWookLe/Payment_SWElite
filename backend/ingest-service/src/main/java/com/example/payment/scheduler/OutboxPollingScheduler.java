@@ -98,16 +98,19 @@ public class OutboxPollingScheduler {
         if (!pollingEnabled) {
             return;
         }
-        for (String shard : SHARDS) {
-            try {
-                // shard 컨텍스트를 명시적으로 설정해 각 샤드별 outbox를 모두 폴링
-                ShardContextHolder.setShardKey(shard);
-                pollAndPublishWithRetry(shard);
-            } catch (Exception ex) {
-                log.error("Outbox polling cycle failed for shard {}", shard, ex);
-            } finally {
-                ShardContextHolder.clear();
-            }
+        // shard2 먼저, shard1 순서로 폴링해 백로그를 우선 처리
+        pollShard("shard2");
+        pollShard("shard1");
+    }
+
+    private void pollShard(String shard) {
+        ShardContextHolder.setShardKey(shard);
+        try {
+            pollAndPublishWithRetry(shard);
+        } catch (Exception ex) {
+            log.error("Outbox polling cycle failed for shard {}", shard, ex);
+        } finally {
+            ShardContextHolder.clear();
         }
     }
 
