@@ -679,6 +679,7 @@ if (outboxEvent.getId() % 10 == 0) {
 #### 최종 해결책: 상태 기반 조건부 샘플링
 
 **핵심 아이디어**:
+
 - **CLOSED 상태**: 성공 기록 안 함 → 최고 성능 유지
 - **HALF_OPEN 상태**: 10% 샘플링으로 성공 기록 → CLOSED 전환 가능
 
@@ -721,13 +722,14 @@ kafkaTemplate.send(message).whenComplete((sendResult, ex) -> {
 #### 주요 변경사항
 
 1. **Kafka 타임아웃 대응**:
-   - `OPEN_STATE_WAIT_SECONDS`: 35s → 150s (Kafka 120s 타임아웃 고려)
 
+   - `OPEN_STATE_WAIT_SECONDS`: 35s → 150s (Kafka 120s 타임아웃 고려)
 2. **DNS 이슈 해결**:
+
    - Step 5.5 추가: Kafka 재시작 후 ingest-service도 재시작
    - Docker network DNS caching 문제 해결
-
 3. **성공 조건 완화**:
+
    - HALF_OPEN 상태도 성공으로 인정
    - 성공 카운트 검증 제거 (성능 최적화로 인해 0일 수 있음)
 
@@ -788,16 +790,19 @@ Exit Code: 0 ✅
 ### 핵심 검증 항목
 
 ✅ **Circuit Breaker 상태 전환**:
+
 - CLOSED → OPEN: Kafka 장애 감지
 - OPEN → CLOSED: 자동 복구
 - not permitted calls: 800개 (OPEN 상태에서 차단)
 
 ✅ **Transactional Outbox Pattern**:
+
 - HTTP 요청: Circuit Breaker 상태와 무관하게 성공
 - 이벤트: outbox_event 테이블에 안전하게 저장
 - 비동기 발행: OutboxPollingScheduler가 백그라운드 처리
 
 ✅ **성능 유지**:
+
 - p(95): 470ms (목표 500ms 미만)
 - RPS: 1038 (목표 1000 이상)
 - 에러율: 0.01%
@@ -854,11 +859,11 @@ Exit Code: 0 ✅
 
 ### 성능 최적화 전략
 
-| 상태        | 성공 기록 | 실패 기록 | 이유                           |
-|-----------|-------|-------|------------------------------|
-| CLOSED    | ❌ 안함  | ✅ 함   | 최고 성능, 실패만 감지하면 됨           |
-| OPEN      | -     | -     | 모든 호출 차단 (outbox에 남음)        |
-| HALF_OPEN | ✅ 10% | ✅ 함   | 샘플링으로 성능 유지 + CLOSED 전환 가능 |
+| 상태      | 성공 기록 | 실패 기록 | 이유                                    |
+| --------- | --------- | --------- | --------------------------------------- |
+| CLOSED    | ❌ 안함   | ✅ 함     | 최고 성능, 실패만 감지하면 됨           |
+| OPEN      | -         | -         | 모든 호출 차단 (outbox에 남음)          |
+| HALF_OPEN | ✅ 10%    | ✅ 함     | 샘플링으로 성능 유지 + CLOSED 전환 가능 |
 
 ### 배운 점
 
@@ -887,12 +892,12 @@ if (circuitBreaker.getState() == HALF_OPEN && id % 10 == 0) {
 
 ### 최종 성과 요약
 
-| 지표               | 목표       | 달성       | 상태  |
-|------------------|----------|----------|-----|
-| K6 p(95)         | < 500ms  | 470ms    | ✅   |
-| K6 RPS           | > 1000   | 1038     | ✅   |
-| Circuit Breaker  | CLOSED 전환 | CLOSED 전환 | ✅   |
-| 에러율              | < 0.05%  | 0.01%    | ✅   |
+| 지표            | 목표        | 달성        | 상태 |
+| --------------- | ----------- | ----------- | ---- |
+| K6 p(95)        | < 500ms     | 470ms       | ✅   |
+| K6 RPS          | > 1000      | 1038        | ✅   |
+| Circuit Breaker | CLOSED 전환 | CLOSED 전환 | ✅   |
+| 에러율          | < 0.05%     | 0.01%       | ✅   |
 
 ### 결론
 
@@ -901,6 +906,51 @@ if (circuitBreaker.getState() == HALF_OPEN && id % 10 == 0) {
 ✅ **Transactional Outbox Pattern + Circuit Breaker 완벽한 조합**
 
 **핵심 교훈**:
+
 - 모든 기능을 완벽하게 구현하는 것보다
 - **운영 환경에서 가장 중요한 것(성능)을 우선순위**로
 - **상태별 조건부 최적화**로 균형잡힌 해결책 도출
+
+## 2025-11-28
+
+### 상황
+
+- shard2 쪽 캡처/환불이 처리되지 않고 REFUND_REQUESTED만 쌓임. 오래된 Kafka 오프셋, outbox 미발행, DB
+  누적 데이터 혼재.
+- k6 기준은 유지(승인 p95 500ms), full-flow는 추후 더 촘촘히 조정 예정.
+
+### 조치
+
+1) 데이터 정리 + 오프셋 초기화
+
+- payment/settlement_request/refund_request/outbox_event TRUNCATE 후 settlement/refund 컨슈머 그룹
+  to-latest reset → 오래된 메시지 스킵.
+
+2) shard2 처리 경로 보완
+
+- settlement/refund/ingest Hikari 풀 이름·DI 수정, 워밍업 확인.
+- ingest OutboxPollingScheduler: 샤드 컨텍스트 명시 + shard2 우선 폴링 적용 → unpublished 0/발행 카운
+  트 정상 증가 확인.
+
+3) 빌드/재배포
+
+- vm2 docker-compose.app.yml 기준 ingest/settlement/refund 워커 재빌드 후 기동.
+- Kafka to-latest reset 이후 신규 이벤트부터 처리됨을 확인.
+
+4) MCP/접속 환경
+
+- VM1(210.104.76.135)에 Node 20 설치, SSH 키 무비번 접속 + 포트포워딩 4000 확인.
+- Claude Desktop MCP: system-health-mcp 등 로컬 실행, API_BASE_URL=210.104.76.135:8082로 원격 모니터
+  링 조회(ai-analysis 제외).
+
+### 결과
+
+- shard2에도 CAPTURED/REFUNDED 발생 시작(발행 카운트 증가). Payment not found 반복 예외 제거.
+- 오래된 메시지 스킵 후 새 이벤트부터 처리 정상.
+- k6 승인 p95 500ms 유지(성능 영향 코드 변경 없음).
+
+### 확인/조정 필요 사항
+
+- full-flow 임계값(p95) 재설정 시 백로그 감소 여부 분석.
+- Kafka consumer lag 관찰, shard2 처리량 진척 관찰.
+- MCP 다른 서버(ai-analysis 제외)도 동일 API_BASE_URL 구성 시 문제 없는지 확인
