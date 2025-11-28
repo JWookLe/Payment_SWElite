@@ -63,7 +63,7 @@ public class SettlementEventConsumer {
 
         } catch (Exception ex) {
             log.error("Failed to process capture-requested event: {}", ex.getMessage(), ex);
-            // DLQ로 전송 혹은 재시도 로직 추가
+            throw new RuntimeException("Settlement event processing failed", ex);
         }
     }
 
