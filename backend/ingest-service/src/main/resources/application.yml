@@ -119,7 +119,7 @@ app:
 outbox:
   polling:
     enabled: true
-    interval-ms: 50              # Poll 20 times per second (ultra-aggressive for 1000 RPS)
+    fixed-delay-ms: 50           # Poll 20 times per second (ultra-aggressive for 1000 RPS)
     initial-delay-ms: 1000       # Reduced warm-up time
     batch-size: 300              # Batch 300 events per poll
     max-retries: 5               # Reduced retries to fail faster
