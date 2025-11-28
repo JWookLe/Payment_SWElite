@@ -36,9 +36,10 @@ public class JpaConfig {
     @Value("${spring.datasource.shard2.password}")
     private String shard2Password;
 
-    @Bean
+    @Bean(name = "shard1DataSource")
     public DataSource shard1DataSource() {
         HikariDataSource dataSource = new HikariDataSource();
+        dataSource.setPoolName("HikariPool-Shard1");
         dataSource.setJdbcUrl(shard1Url);
         dataSource.setUsername(shard1Username);
         dataSource.setPassword(shard1Password);
@@ -48,9 +49,10 @@ public class JpaConfig {
         return dataSource;
     }
 
-    @Bean
+    @Bean(name = "shard2DataSource")
     public DataSource shard2DataSource() {
         HikariDataSource dataSource = new HikariDataSource();
+        dataSource.setPoolName("HikariPool-Shard2");
         dataSource.setJdbcUrl(shard2Url);
         dataSource.setUsername(shard2Username);
         dataSource.setPassword(shard2Password);
@@ -62,15 +64,15 @@ public class JpaConfig {
 
     @Bean
     @Primary
-    public DataSource dataSource() {
+    public DataSource dataSource(DataSource shard1DataSource, DataSource shard2DataSource) {
         ShardRoutingDataSource routingDataSource = new ShardRoutingDataSource();
 
         Map<Object, Object> targetDataSources = new HashMap<>();
-        targetDataSources.put("shard1", shard1DataSource());
-        targetDataSources.put("shard2", shard2DataSource());
+        targetDataSources.put("shard1", shard1DataSource);
+        targetDataSources.put("shard2", shard2DataSource);
 
         routingDataSource.setTargetDataSources(targetDataSources);
-        routingDataSource.setDefaultTargetDataSource(shard1DataSource());
+        routingDataSource.setDefaultTargetDataSource(shard1DataSource);
         routingDataSource.afterPropertiesSet();
 
         return routingDataSource;
