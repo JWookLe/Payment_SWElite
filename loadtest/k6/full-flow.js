@@ -14,6 +14,7 @@ console.log(`K6 Full Flow Test: BASE_URL=${BASE_URL}`);
 const authorizeTrend = new Trend("payment_authorize_duration", true);
 const captureTrend = new Trend("payment_capture_duration", true);
 const refundTrend = new Trend("payment_refund_duration", true);
+const flowTrend = new Trend("payment_full_flow_duration", true);
 const errorRate = new Rate("payment_errors");
 
 // Track error samples for debugging
@@ -36,9 +37,11 @@ export const options = {
   },
   thresholds: {
     http_req_failed: ["rate<0.05"],
-    // Full flow total time: authorize + capture + refund + sleeps
-    http_req_duration: ["p(95)<2000"],
+    // 단건 요청 지연: authorize/capture/refund 각각
+    http_req_duration: ["p(95)<800"],
     payment_errors: ["rate<0.002"],
+    // 전체 플로우: authorize + capture + refund + sleep(1s) 포함
+    payment_full_flow_duration: ["p(95)<2800"],
     payment_authorize_duration: ["p(95)<500"],
     payment_capture_duration: ["p(95)<600"],
     payment_refund_duration: ["p(95)<700"],
@@ -63,6 +66,7 @@ function buildIdempotencyKey() {
 
 export default function () {
   group("full-flow", () => {
+    const flowStart = Date.now();
     const idempotencyKey = buildIdempotencyKey();
     const amount = buildAmount();
     const merchantId = getRandomMerchantId();
@@ -166,5 +170,6 @@ export default function () {
 
     // Mark successful iteration
     errorRate.add(0);
+    flowTrend.add(Date.now() - flowStart);
   });
 }

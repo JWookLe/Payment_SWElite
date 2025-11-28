@@ -1,5 +1,6 @@
 package com.example.settlement.consumer;
 
+import com.example.settlement.config.ShardContextHolder;
 import com.example.settlement.service.SettlementService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -52,12 +53,17 @@ public class SettlementEventConsumer {
 
             log.info("Processing capture request: paymentId={}, merchantId={}, amount={}", paymentId, merchantId, amount);
 
-            // 정산 처리
-            settlementService.processSettlement(paymentId, merchantId, amount);
+            // 트랜잭션 시작 전에 샤드 컨텍스트 설정 (AbstractRoutingDataSource가 올바른 샤드로 연결)
+            ShardContextHolder.setShardByMerchantId(merchantId);
+            try {
+                settlementService.processSettlement(paymentId, merchantId, amount);
+            } finally {
+                ShardContextHolder.clear();
+            }
 
         } catch (Exception ex) {
             log.error("Failed to process capture-requested event: {}", ex.getMessage(), ex);
-            // DLQ로 전송 또는 재시도 로직 추가
+            // DLQ로 전송 혹은 재시도 로직 추가
         }
     }
 

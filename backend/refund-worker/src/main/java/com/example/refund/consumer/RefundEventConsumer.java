@@ -1,5 +1,6 @@
 package com.example.refund.consumer;
 
+import com.example.refund.config.ShardContextHolder;
 import com.example.refund.service.RefundService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -51,7 +52,13 @@ public class RefundEventConsumer {
 
             log.info("Processing refund request: paymentId={}, merchantId={}, amount={}, reason={}", paymentId, merchantId, amount, reason);
 
-            refundService.processRefund(paymentId, merchantId, amount, reason);
+            // 트랜잭션 시작 전에 샤드 컨텍스트 설정 (AbstractRoutingDataSource가 올바른 샤드로 연결)
+            ShardContextHolder.setShardByMerchantId(merchantId);
+            try {
+                refundService.processRefund(paymentId, merchantId, amount, reason);
+            } finally {
+                ShardContextHolder.clear();
+            }
 
         } catch (Exception ex) {
             log.error("Failed to process refund-requested event: topic={}, offset={}", topic, offset, ex);
