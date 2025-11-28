@@ -104,6 +104,7 @@ public class OutboxPollingScheduler {
     }
 
     private void pollShard(String shard) {
+        // ingest-service는 샤드별로 개별 데이터소스를 사용하므로 명시적으로 샤드 컨텍스트를 설정
         ShardContextHolder.setShardKey(shard);
         try {
             pollAndPublishWithRetry(shard);
