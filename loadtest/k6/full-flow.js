@@ -6,10 +6,9 @@ const BASE_URL = __ENV.BASE_URL || "http://localhost:8080/api";
 
 // 샤딩을 위한 랜덤 merchantId 생성 (1~1000 범위로 짝수/홀수 균등 분배)
 function getRandomMerchantId() {
-  // 홀/짝을 번갈아 만들어 shard1/2 모두로 라우팅
+  // 강제로 홀수 merchantId만 생성해 shard2로 라우팅되는지 확인
   const base = Math.floor(Math.random() * 1000) + 1; // 1~1000
-  const useOdd = (__ITER % 2) === 1; // iteration마다 홀/짝 교대로
-  const merchantNum = useOdd ? base * 2 - 1 : base * 2; // 1~2000 중 절반은 홀수
+  const merchantNum = base * 2 - 1; // 1~1999 홀수만
   return `MERCHANT-${merchantNum}`;
 }
 

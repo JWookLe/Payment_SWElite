@@ -3,6 +3,7 @@ package com.example.payment.scheduler;
 import com.example.payment.domain.OutboxEvent;
 import com.example.payment.repository.OutboxEventRepository;
 import com.example.payment.service.PaymentEventPublisher;
+import com.example.payment.config.shard.ShardContextHolder;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -41,6 +43,7 @@ import java.util.List;
 public class OutboxPollingScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxPollingScheduler.class);
+    private static final List<String> SHARDS = Arrays.asList("shard1", "shard2");
 
     private final OutboxEventRepository outboxEventRepository;
     private final PaymentEventPublisher paymentEventPublisher;
@@ -95,14 +98,20 @@ public class OutboxPollingScheduler {
         if (!pollingEnabled) {
             return;
         }
-        try {
-            pollAndPublishWithRetry();
-        } catch (Exception ex) {
-            log.error("Outbox polling cycle failed", ex);
+        for (String shard : SHARDS) {
+            try {
+                // shard 컨텍스트를 명시적으로 설정해 각 샤드별 outbox를 모두 폴링
+                ShardContextHolder.setShardKey(shard);
+                pollAndPublishWithRetry(shard);
+            } catch (Exception ex) {
+                log.error("Outbox polling cycle failed for shard {}", shard, ex);
+            } finally {
+                ShardContextHolder.clear();
+            }
         }
     }
 
-    private void pollAndPublishWithRetry() {
+    private void pollAndPublishWithRetry(String shard) {
         int maxAttempts = 3;
         int attempt = 0;
 
@@ -117,7 +126,7 @@ public class OutboxPollingScheduler {
                     return;
                 }
 
-                log.debug("Polling outbox: found {} unpublished events", events.size());
+                log.debug("Polling outbox ({}): found {} unpublished events", shard, events.size());
 
                 // Submit all events for async publishing (non-blocking)
                 for (OutboxEvent event : events) {
@@ -152,7 +161,7 @@ public class OutboxPollingScheduler {
                     Thread.currentThread().interrupt();
                     return;
                 }
-                log.debug("Deadlock detected, retrying poll (attempt {}/{})", attempt + 1, maxAttempts);
+                log.debug("Deadlock detected on shard {}, retrying poll (attempt {}/{})", shard, attempt + 1, maxAttempts);
             }
         }
     }
