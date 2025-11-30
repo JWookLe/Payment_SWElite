@@ -37,6 +37,7 @@ backend/consumer-worker/bin/
 backend/ingest-service/bin/
 backend/settlement-worker/bin/
 backend/refund-worker/bin/
+backend/monitoring-service/bin/
 
 
 # Load testing artifacts
