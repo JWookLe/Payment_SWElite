@@ -1,15 +1,18 @@
 package com.example.monitoring.controller;
 
+import com.example.monitoring.config.shard.ShardContextHolder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * REST API for Database monitoring and queries
  * Provides same functionality as database-query-mcp but via HTTP
+ * Supports dual shard querying (shard1 + shard2)
  */
 @RestController
 @RequestMapping("/monitoring/database")
@@ -56,7 +59,7 @@ public class DatabaseMonitoringController {
 
     /**
      * GET /monitoring/database/statistics?timeRange=today
-     * Get payment statistics
+     * Get payment statistics from BOTH shards (shard1 + shard2)
      */
     @GetMapping("/statistics")
     public ResponseEntity<Map<String, Object>> getStatistics(
@@ -65,44 +68,144 @@ public class DatabaseMonitoringController {
         try {
             String whereClause = getTimeRangeClause(timeRange);
 
-            // Overall stats
-            String statsSql = "SELECT COUNT(*) as total_count, " +
-                    "COALESCE(SUM(amount), 0) as total_amount, " +
-                    "COALESCE(AVG(amount), 0) as avg_amount, " +
-                    "COALESCE(MIN(amount), 0) as min_amount, " +
-                    "COALESCE(MAX(amount), 0) as max_amount " +
-                    "FROM payment WHERE " + whereClause;
+            // Query shard1
+            ShardContextHolder.setShardKey("shard1");
+            Map<String, Object> shard1Stats = queryShardStatistics(whereClause);
+            List<Map<String, Object>> shard1StatusBreakdown = queryShardStatusBreakdown(whereClause);
+            List<Map<String, Object>> shard1TopMerchants = queryShardTopMerchants(whereClause);
 
-            Map<String, Object> stats = jdbcTemplate.queryForMap(statsSql);
+            // Query shard2
+            ShardContextHolder.setShardKey("shard2");
+            Map<String, Object> shard2Stats = queryShardStatistics(whereClause);
+            List<Map<String, Object>> shard2StatusBreakdown = queryShardStatusBreakdown(whereClause);
+            List<Map<String, Object>> shard2TopMerchants = queryShardTopMerchants(whereClause);
 
-            // By status
-            String statusSql = "SELECT status, COUNT(*) as count, " +
-                    "COALESCE(SUM(amount), 0) as total_amount " +
-                    "FROM payment WHERE " + whereClause +
-                    " GROUP BY status";
+            // Clear shard context
+            ShardContextHolder.clear();
 
-            List<Map<String, Object>> statusBreakdown = jdbcTemplate.queryForList(statusSql);
+            // Merge overall stats
+            Map<String, Object> mergedStats = mergeOverallStats(shard1Stats, shard2Stats);
 
-            // Top merchants
-            String merchantSql = "SELECT merchant_id, COUNT(*) as transaction_count, " +
-                    "COALESCE(SUM(amount), 0) as total_amount " +
-                    "FROM payment WHERE " + whereClause +
-                    " GROUP BY merchant_id ORDER BY total_amount DESC LIMIT 5";
+            // Merge status breakdown
+            List<Map<String, Object>> mergedStatusBreakdown = mergeStatusBreakdown(shard1StatusBreakdown, shard2StatusBreakdown);
 
-            List<Map<String, Object>> topMerchants = jdbcTemplate.queryForList(merchantSql);
+            // Merge top merchants
+            List<Map<String, Object>> mergedTopMerchants = mergeTopMerchants(shard1TopMerchants, shard2TopMerchants);
 
             return ResponseEntity.ok(Map.of(
                     "timeRange", timeRange,
-                    "overall", stats,
-                    "byStatus", statusBreakdown,
-                    "topMerchants", topMerchants
+                    "overall", mergedStats,
+                    "byStatus", mergedStatusBreakdown,
+                    "topMerchants", mergedTopMerchants
             ));
         } catch (Exception e) {
+            ShardContextHolder.clear();
             return ResponseEntity.status(500).body(Map.of(
                     "error", "Statistics query failed",
                     "message", e.getMessage()
             ));
         }
+    }
+
+    private Map<String, Object> queryShardStatistics(String whereClause) {
+        String statsSql = "SELECT COUNT(*) as total_count, " +
+                "COALESCE(SUM(amount), 0) as total_amount, " +
+                "COALESCE(AVG(amount), 0) as avg_amount, " +
+                "COALESCE(MIN(amount), 0) as min_amount, " +
+                "COALESCE(MAX(amount), 0) as max_amount " +
+                "FROM payment WHERE " + whereClause;
+        return jdbcTemplate.queryForMap(statsSql);
+    }
+
+    private List<Map<String, Object>> queryShardStatusBreakdown(String whereClause) {
+        String statusSql = "SELECT status, COUNT(*) as count, " +
+                "COALESCE(SUM(amount), 0) as total_amount " +
+                "FROM payment WHERE " + whereClause +
+                " GROUP BY status";
+        return jdbcTemplate.queryForList(statusSql);
+    }
+
+    private List<Map<String, Object>> queryShardTopMerchants(String whereClause) {
+        String merchantSql = "SELECT merchant_id, COUNT(*) as transaction_count, " +
+                "COALESCE(SUM(amount), 0) as total_amount " +
+                "FROM payment WHERE " + whereClause +
+                " GROUP BY merchant_id ORDER BY total_amount DESC LIMIT 10";
+        return jdbcTemplate.queryForList(merchantSql);
+    }
+
+    private Map<String, Object> mergeOverallStats(Map<String, Object> shard1, Map<String, Object> shard2) {
+        long totalCount = ((Number) shard1.get("total_count")).longValue() + ((Number) shard2.get("total_count")).longValue();
+        long totalAmount = ((Number) shard1.get("total_amount")).longValue() + ((Number) shard2.get("total_amount")).longValue();
+        long avgAmount = totalCount > 0 ? totalAmount / totalCount : 0;
+
+        long min1 = ((Number) shard1.get("min_amount")).longValue();
+        long min2 = ((Number) shard2.get("min_amount")).longValue();
+        long minAmount = Math.min(min1, min2);
+
+        long max1 = ((Number) shard1.get("max_amount")).longValue();
+        long max2 = ((Number) shard2.get("max_amount")).longValue();
+        long maxAmount = Math.max(max1, max2);
+
+        Map<String, Object> merged = new HashMap<>();
+        merged.put("total_count", totalCount);
+        merged.put("total_amount", totalAmount);
+        merged.put("avg_amount", avgAmount);
+        merged.put("min_amount", minAmount);
+        merged.put("max_amount", maxAmount);
+        return merged;
+    }
+
+    private List<Map<String, Object>> mergeStatusBreakdown(List<Map<String, Object>> shard1, List<Map<String, Object>> shard2) {
+        Map<String, Map<String, Object>> merged = new HashMap<>();
+
+        for (Map<String, Object> item : shard1) {
+            String status = (String) item.get("status");
+            merged.put(status, new HashMap<>(item));
+        }
+
+        for (Map<String, Object> item : shard2) {
+            String status = (String) item.get("status");
+            if (merged.containsKey(status)) {
+                Map<String, Object> existing = merged.get(status);
+                long count = ((Number) existing.get("count")).longValue() + ((Number) item.get("count")).longValue();
+                long totalAmount = ((Number) existing.get("total_amount")).longValue() + ((Number) item.get("total_amount")).longValue();
+                existing.put("count", count);
+                existing.put("total_amount", totalAmount);
+            } else {
+                merged.put(status, new HashMap<>(item));
+            }
+        }
+
+        return new ArrayList<>(merged.values());
+    }
+
+    private List<Map<String, Object>> mergeTopMerchants(List<Map<String, Object>> shard1, List<Map<String, Object>> shard2) {
+        Map<String, Map<String, Object>> merged = new HashMap<>();
+
+        for (Map<String, Object> item : shard1) {
+            String merchantId = (String) item.get("merchant_id");
+            merged.put(merchantId, new HashMap<>(item));
+        }
+
+        for (Map<String, Object> item : shard2) {
+            String merchantId = (String) item.get("merchant_id");
+            if (merged.containsKey(merchantId)) {
+                Map<String, Object> existing = merged.get(merchantId);
+                long txCount = ((Number) existing.get("transaction_count")).longValue() + ((Number) item.get("transaction_count")).longValue();
+                long totalAmount = ((Number) existing.get("total_amount")).longValue() + ((Number) item.get("total_amount")).longValue();
+                existing.put("transaction_count", txCount);
+                existing.put("total_amount", totalAmount);
+            } else {
+                merged.put(merchantId, new HashMap<>(item));
+            }
+        }
+
+        return merged.values().stream()
+                .sorted((a, b) -> Long.compare(
+                        ((Number) b.get("total_amount")).longValue(),
+                        ((Number) a.get("total_amount")).longValue()))
+                .limit(5)
+                .collect(Collectors.toList());
     }
 
     /**
