@@ -74,7 +74,7 @@ public class PaymentService {
          * settlement-worker가 호출
          * AUTHORIZED → CAPTURED 상태 전환
          */
-        // Transactional removed from public method to narrow scope
+        @Transactional
         public PaymentResult capture(Long paymentId, CapturePaymentRequest request) {
                 // 샤딩은 Controller에서 트랜잭션 시작 전에 설정됨
                 return captureInternal(paymentId, request);
@@ -82,11 +82,9 @@ public class PaymentService {
 
         private PaymentResult captureInternal(Long paymentId, CapturePaymentRequest request) {
                 long methodStart = System.currentTimeMillis();
-                // 1. Rate Limiting (Redis) - Outside Transaction
                 rateLimiter.verifyCaptureAllowed(request.merchantId());
 
                 long dbStart = System.currentTimeMillis();
-                // 2. Read (Can be outside transaction or read-only, but fine here)
                 Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
                                 .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant"));
                 long dbReadTime = System.currentTimeMillis() - dbStart;
@@ -99,28 +97,29 @@ public class PaymentService {
                         return new PaymentResult(response, true);
                 }
 
-                // 3. Update & Outbox Save (Atomic Transaction)
-                long txStart = System.currentTimeMillis();
-                PaymentResponse response = transactionTemplate.execute(status -> {
-                        // 정산 완료 상태로 변경
-                        payment.setStatus(PaymentStatus.CAPTURED);
-                        paymentRepository.save(payment);
+                // 정산 완료 상태로 변경
+                payment.setStatus(PaymentStatus.CAPTURED);
+                dbStart = System.currentTimeMillis();
+                paymentRepository.save(payment);
+                long dbUpdateTime = System.currentTimeMillis() - dbStart;
+                log.debug("Capture - DB update time: {}ms", dbUpdateTime);
 
-                        // payment.captured 이벤트 발행 (ledger 기록 트리거)
-                        publishEvent(payment, "PAYMENT_CAPTURED", Map.of(
-                                        "paymentId", payment.getId(),
-                                        "status", payment.getStatus().name(),
-                                        "amount", payment.getAmount(),
-                                        "occurredAt", Instant.now().toString()));
+                // payment.captured 이벤트 발행 (ledger 기록 트리거)
+                long evtStart = System.currentTimeMillis();
+                publishEvent(payment, "PAYMENT_CAPTURED", Map.of(
+                                "paymentId", payment.getId(),
+                                "status", payment.getStatus().name(),
+                                "amount", payment.getAmount(),
+                                "occurredAt", Instant.now().toString()));
+                long evtTime = System.currentTimeMillis() - evtStart;
+                log.debug("Capture - Event publish time: {}ms", evtTime);
 
-                        return toResponse(payment, Collections.emptyList(), "Payment captured successfully");
-                });
-                long txTime = System.currentTimeMillis() - txStart;
-                log.debug("Capture - DB update & Event publish (Tx) time: {}ms", txTime);
+                PaymentResponse response = toResponse(payment, Collections.emptyList(),
+                                "Payment captured successfully");
 
                 long totalTime = System.currentTimeMillis() - methodStart;
-                log.info("Capture complete: dbRead={}ms, txTime={}ms, totalTime={}ms",
-                                dbReadTime, txTime, totalTime);
+                log.info("Capture complete: dbRead={}ms, dbUpdate={}ms, event={}ms, totalTime={}ms",
+                                dbReadTime, dbUpdateTime, evtTime, totalTime);
 
                 return new PaymentResult(response, false);
         }
@@ -130,7 +129,7 @@ public class PaymentService {
          * CAPTURED → REFUND_REQUESTED 상태 전환
          * 환불 요청 시 payment.refund-requested 이벤트 발행
          */
-        // Transactional removed from public method to narrow scope
+        @Transactional
         public PaymentResult refund(Long paymentId, RefundPaymentRequest request) {
                 // 샤딩은 Controller에서 트랜잭션 시작 전에 설정됨
                 return refundInternal(paymentId, request);
@@ -138,11 +137,9 @@ public class PaymentService {
 
         private PaymentResult refundInternal(Long paymentId, RefundPaymentRequest request) {
                 long methodStart = System.currentTimeMillis();
-                // 1. Rate Limiting (Redis) - Outside Transaction
                 rateLimiter.verifyRefundAllowed(request.merchantId());
 
                 long dbStart = System.currentTimeMillis();
-                // 2. Read
                 Payment payment = paymentRepository.findByIdAndMerchantId(paymentId, request.merchantId())
                                 .orElseThrow(() -> new IllegalArgumentException("Payment not found for merchant"));
                 long dbReadTime = System.currentTimeMillis() - dbStart;
@@ -154,30 +151,31 @@ public class PaymentService {
                         return new PaymentResult(response, true);
                 }
 
-                // 3. Update & Outbox Save (Atomic Transaction)
-                long txStart = System.currentTimeMillis();
-                PaymentResponse response = transactionTemplate.execute(status -> {
-                        // 환불 요청 상태로 변경
-                        payment.setStatus(PaymentStatus.REFUND_REQUESTED);
-                        paymentRepository.save(payment);
+                // 환불 요청 상태로 변경
+                payment.setStatus(PaymentStatus.REFUND_REQUESTED);
+                dbStart = System.currentTimeMillis();
+                paymentRepository.save(payment);
+                long dbUpdateTime = System.currentTimeMillis() - dbStart;
+                log.debug("Refund - DB update time: {}ms", dbUpdateTime);
 
-                        // payment.refund-requested 이벤트 발행 (refund-worker 트리거)
-                        publishEvent(payment, "PAYMENT_REFUND_REQUESTED", Map.of(
-                                        "paymentId", payment.getId(),
-                                        "merchantId", payment.getMerchantId(),
-                                        "status", payment.getStatus().name(),
-                                        "amount", payment.getAmount(),
-                                        "occurredAt", Instant.now().toString(),
-                                        "reason", request.reason()));
+                // payment.refund-requested 이벤트 발행 (refund-worker 트리거)
+                long evtStart = System.currentTimeMillis();
+                publishEvent(payment, "PAYMENT_REFUND_REQUESTED", Map.of(
+                                "paymentId", payment.getId(),
+                                "merchantId", payment.getMerchantId(),
+                                "status", payment.getStatus().name(),
+                                "amount", payment.getAmount(),
+                                "occurredAt", Instant.now().toString(),
+                                "reason", request.reason()));
+                long evtTime = System.currentTimeMillis() - evtStart;
+                log.debug("Refund - Event publish time: {}ms", evtTime);
 
-                        return toResponse(payment, Collections.emptyList(), "Refund requested successfully");
-                });
-                long txTime = System.currentTimeMillis() - txStart;
-                log.debug("Refund - DB update & Event publish (Tx) time: {}ms", txTime);
+                PaymentResponse response = toResponse(payment, Collections.emptyList(),
+                                "Refund requested successfully");
 
                 long totalTime = System.currentTimeMillis() - methodStart;
-                log.info("Refund complete: dbRead={}ms, txTime={}ms, totalTime={}ms",
-                                dbReadTime, txTime, totalTime);
+                log.info("Refund complete: dbRead={}ms, dbUpdate={}ms, event={}ms, totalTime={}ms",
+                                dbReadTime, dbUpdateTime, evtTime, totalTime);
 
                 return new PaymentResult(response, false);
         }

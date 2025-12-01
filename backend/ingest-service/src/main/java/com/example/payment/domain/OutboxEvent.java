@@ -5,9 +5,7 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "outbox_event", indexes = {
-        @Index(name = "ix_pub_created", columnList = "published, created_at"),
-        // Helps polling query filter on retry/last_retry_at without scanning entire table
-        @Index(name = "ix_pub_retry_last_created", columnList = "published, last_retry_at, retry_count, created_at")
+        @Index(name = "ix_pub_created", columnList = "published, created_at")
 })
 public class OutboxEvent {
 
