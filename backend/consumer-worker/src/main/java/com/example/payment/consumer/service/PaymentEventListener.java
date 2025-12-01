@@ -13,12 +13,16 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
+
+import static com.example.payment.consumer.config.ShardContextHolder.clear;
+import static com.example.payment.consumer.config.ShardContextHolder.setShardKey;
 
 @Service
 public class PaymentEventListener {
@@ -59,27 +63,21 @@ public class PaymentEventListener {
             String occurredAt = node.path("occurredAt").asText(null);
 
             if ("payment.captured".equals(topic)) {
-                if (!ledgerEntryRepository.existsByPaymentIdAndDebitAccountAndCreditAccount(
-                        paymentId, "merchant_receivable", "cash")) {
-                    ledgerEntryRepository.save(new LedgerEntry(
-                            paymentId,
-                            "merchant_receivable",
-                            "cash",
-                            amount,
-                            occurredAt != null ? Instant.parse(occurredAt) : Instant.now()
-                    ));
-                }
+                saveWithShardFallback(new LedgerEntry(
+                        paymentId,
+                        "merchant_receivable",
+                        "cash",
+                        amount,
+                        occurredAt != null ? Instant.parse(occurredAt) : Instant.now()
+                ));
             } else if ("payment.refunded".equals(topic)) {
-                if (!ledgerEntryRepository.existsByPaymentIdAndDebitAccountAndCreditAccount(
-                        paymentId, "cash", "merchant_receivable")) {
-                    ledgerEntryRepository.save(new LedgerEntry(
-                            paymentId,
-                            "cash",
-                            "merchant_receivable",
-                            amount,
-                            occurredAt != null ? Instant.parse(occurredAt) : Instant.now()
-                    ));
-                }
+                saveWithShardFallback(new LedgerEntry(
+                        paymentId,
+                        "cash",
+                        "merchant_receivable",
+                        amount,
+                        occurredAt != null ? Instant.parse(occurredAt) : Instant.now()
+                ));
             } else {
                 log.debug("No ledger action required for topic {}", topic);
             }
@@ -87,6 +85,31 @@ public class PaymentEventListener {
             log.error("Failed to process event from topic {} partition {} offset {}", topic, partition, offset, ex);
             markTransactionForRollback();
             sendToDlq(payload, topic, partition, offset, ex);
+        }
+    }
+
+    /**
+     * Try shard1 first; on FK violation retry shard2. Clears context after use.
+     */
+    private void saveWithShardFallback(LedgerEntry entry) {
+        clear();
+        try {
+            setShardKey("shard1");
+            ledgerEntryRepository.save(entry);
+            return;
+        } catch (DataIntegrityViolationException ex) {
+            log.warn("Shard1 save failed for paymentId={} (retrying shard2): {}", entry.getPaymentId(), ex.getMessage());
+            clear();
+            try {
+                setShardKey("shard2");
+                ledgerEntryRepository.save(entry);
+                return;
+            } catch (DataIntegrityViolationException ex2) {
+                log.error("Shard2 save also failed for paymentId={}: {}", entry.getPaymentId(), ex2.getMessage());
+                throw ex2;
+            }
+        } finally {
+            clear();
         }
     }
 

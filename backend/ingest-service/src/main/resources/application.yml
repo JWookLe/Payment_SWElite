@@ -121,7 +121,7 @@ outbox:
     enabled: true
     fixed-delay-ms: 50           # Poll 20 times per second (ultra-aggressive for 1000 RPS)
     initial-delay-ms: 1000       # Reduced warm-up time
-    batch-size: 500              # Batch 500 events per poll
+    batch-size: 300              # Batch 300 events per poll
     max-retries: 5               # Reduced retries to fail faster
     retry-interval-seconds: 1    # Faster retry interval
   dispatcher:
