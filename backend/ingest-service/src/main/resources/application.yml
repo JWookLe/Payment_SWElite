@@ -33,7 +33,7 @@ spring:
         dialect: org.hibernate.dialect.MariaDBDialect
         jdbc:
           time_zone: UTC
-          batch_size: 50                        # Batch INSERT operations
+          batch_size: 100                       # Optimized Batch INSERT operations
         order_inserts: true                     # Order INSERTs for better batching
         order_updates: true                     # Order UPDATEs for better batching
         generate_statistics: false              # Disable for performance
@@ -51,7 +51,7 @@ spring:
       delivery-timeout-ms: 120000  # 120 second total timeout (allows for slow Kafka)
       # Batching configuration for high throughput (1000 RPS target)
       batch-size: 32768            # 32KB batch size (aggressive)
-      linger-ms: 50                # 50ms batching delay (faster)
+      linger-ms: 5                 # Reduced to 5ms for lower latency
       properties:
         max.in.flight.requests.per.connection: 10  # Higher parallelism
         buffer.memory: 134217728                   # 128MB buffer
@@ -68,10 +68,10 @@ server:
   port: ${SERVER_PORT:8080}
   tomcat:
     threads:
-      max: ${SERVER_TOMCAT_THREADS_MAX:400}       # Allow more worker threads under load
-      min-spare: ${SERVER_TOMCAT_THREADS_MIN_SPARE:50} # Keep 50 threads ready
-    accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:2000}   # Larger backlog for waiting sockets
-    max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:4000} # Higher concurrent connections
+      max: ${SERVER_TOMCAT_THREADS_MAX:600}       # Increased worker threads
+      min-spare: ${SERVER_TOMCAT_THREADS_MIN_SPARE:100} # Keep 100 threads ready
+    accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:3000}   # Larger backlog for waiting sockets
+    max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:6000} # Higher concurrent connections
     connection-timeout: ${SERVER_TOMCAT_CONNECTION_TIMEOUT:20000} # 20s socket timeout
 
 management:
@@ -119,9 +119,9 @@ app:
 outbox:
   polling:
     enabled: true
-    fixed-delay-ms: 50           # Poll 20 times per second (ultra-aggressive for 1000 RPS)
+    fixed-delay-ms: 100          # Poll every 100ms (reduced frequency)
     initial-delay-ms: 1000       # Reduced warm-up time
-    batch-size: 300              # Batch 300 events per poll
+    batch-size: 500              # Increased batch size to 500
     max-retries: 5               # Reduced retries to fail faster
     retry-interval-seconds: 1    # Faster retry interval
   dispatcher:
@@ -191,7 +191,7 @@ eureka:
 
 mock:
   pg:
-    delay-min-ms: ${MOCK_PG_DELAY_MIN_MS:5}
-    delay-max-ms: ${MOCK_PG_DELAY_MAX_MS:15}
+    delay-min-ms: ${MOCK_PG_DELAY_MIN_MS:1}
+    delay-max-ms: ${MOCK_PG_DELAY_MAX_MS:5}
     failure-rate: ${MOCK_PG_FAILURE_RATE:0.0001}
     loadtest-mode: ${MOCK_PG_LOADTEST_MODE:false}
