@@ -706,7 +706,7 @@
   "tags": [
     "performance",
     "loadtest",
-    "800rps"
+    "1000rps"
   ],
   "templating": {
     "list": []

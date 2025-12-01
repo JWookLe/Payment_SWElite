@@ -16,10 +16,10 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
     List<OutboxEvent> findByPublishedFalseOrderByCreatedAtAsc();
 
     /**
-     * Find unpublished events that can be retried with pessimistic lock
-     * to prevent duplicate processing in distributed environments
+     * Find unpublished events that can be retried.
+     * Lock annotation removed to prevent Gap Locks blocking inserts.
+     * Concurrency is handled by ShedLock at the scheduler level.
      */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT e FROM OutboxEvent e WHERE e.published = false " +
            "AND e.retryCount < :maxRetries " +
            "AND (e.lastRetryAt IS NULL OR e.lastRetryAt < :retryThreshold) " +
