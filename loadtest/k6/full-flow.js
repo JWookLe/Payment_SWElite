@@ -29,13 +29,13 @@ export const options = {
     full_flow: {
       // Full flow: authorize + capture + refund
       // 3 HTTP calls per iteration = 3x backend load
-      // Reduced RPS to 350 (from 1050) to maintain similar backend throughput
+      // Reduced RPS to 300 to ease dropped iterations under current capacity
       executor: "constant-arrival-rate",
-      rate: 350,
+      rate: 300,
       timeUnit: "1s",
       duration: "6m",
-      preAllocatedVUs: 400,
-      maxVUs: 800,
+      preAllocatedVUs: 500,
+      maxVUs: 1000,
     },
   },
   thresholds: {
