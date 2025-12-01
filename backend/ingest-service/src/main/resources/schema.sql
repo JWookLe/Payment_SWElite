@@ -33,7 +33,11 @@ CREATE TABLE IF NOT EXISTS outbox_event (
   payload         JSON        NOT NULL,
   published       TINYINT(1)  NOT NULL DEFAULT 0,
   created_at      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  KEY ix_pub_created (published, created_at)
+  retry_count     INT          NOT NULL DEFAULT 0,
+  last_retry_at   TIMESTAMP(3),
+  published_at    TIMESTAMP(3),
+  KEY ix_pub_created (published, created_at),
+  KEY ix_pub_retry_last_created (published, last_retry_at, retry_count, created_at)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS idem_response_cache (
