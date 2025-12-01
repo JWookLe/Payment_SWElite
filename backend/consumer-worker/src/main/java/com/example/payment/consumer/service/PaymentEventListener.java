@@ -40,7 +40,10 @@ public class PaymentEventListener {
         this.dlqTopic = dlqTopic;
     }
 
-    @KafkaListener(topics = {"payment.captured", "payment.refunded"})
+    @KafkaListener(
+            topics = {"payment.captured", "payment.refunded"},
+            concurrency = "${spring.kafka.listener.concurrency:1}"
+    )
     @Transactional
     public void handleEvent(ConsumerRecord<String, String> record) {
         String payload = record.value();
