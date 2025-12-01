@@ -40,4 +40,12 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
             @Param("maxRetries") int maxRetries,
             Pageable pageable
     );
+
+    /**
+     * Bulk update to mark events as processed/retried.
+     * Updates lastRetryAt for multiple IDs in a single query.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE OutboxEvent e SET e.lastRetryAt = :lastRetryAt WHERE e.id IN :ids")
+    int updateLastRetryAtByIds(@Param("ids") List<Long> ids, @Param("lastRetryAt") Instant lastRetryAt);
 }
