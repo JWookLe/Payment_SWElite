@@ -2,7 +2,7 @@ import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { Trend, Rate } from "k6/metrics";
 
-const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
+const BASE_URL = __ENV.BASE_URL || "http://localhost:8080/api";
 const ENABLE_CAPTURE = ((__ENV.ENABLE_CAPTURE || "false").toLowerCase() === "true");
 const ENABLE_REFUND = ((__ENV.ENABLE_REFUND || "false").toLowerCase() === "true");
 
@@ -84,18 +84,19 @@ export default function () {
     const authorizeResponse = http.post(`${BASE_URL}/payments/authorize`, authorizePayload, headers);
     authorizeTrend.add(authorizeResponse.timings.duration);
 
+    // Debug: log response status and body for first few requests
+    if (errorSampleCount < MAX_ERROR_SAMPLES && (authorizeResponse.status !== 200 && authorizeResponse.status !== 409)) {
+      errorSampleCount++;
+      const bodyPreview = authorizeResponse.body ? authorizeResponse.body.substring(0, 500) : 'N/A';
+      console.error(`AUTHORIZE ERROR #${errorSampleCount}: status=${authorizeResponse.status}, error=${authorizeResponse.error}, body=${bodyPreview}`);
+    }
+
     const authorizeOk = check(authorizeResponse, {
       "authorize status ok": (res) => res.status === 200 || res.status === 409,
     });
 
     if (!authorizeOk) {
       errorRate.add(1);
-      // Log first few errors for debugging
-      if (errorSampleCount < MAX_ERROR_SAMPLES) {
-        errorSampleCount++;
-        const bodyPreview = authorizeResponse.body ? authorizeResponse.body.substring(0, 200) : 'N/A';
-        console.error(`ERROR #${errorSampleCount}: status=${authorizeResponse.status}, error=${authorizeResponse.error}, body=${bodyPreview}`);
-      }
       return;
     }
 
