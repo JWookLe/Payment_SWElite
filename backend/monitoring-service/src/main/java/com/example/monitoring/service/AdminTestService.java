@@ -205,7 +205,7 @@ public class AdminTestService {
 
                 // Set environment variables for Docker network access
                 processBuilder.environment().put("API_BASE_URL", apiBaseUrl);
-                processBuilder.environment().put("GATEWAY_BASE_URL", gatewayBaseUrl + "/api");
+                processBuilder.environment().put("GATEWAY_BASE_URL", gatewayBaseUrl);
 
                 logger.info("Environment variables set for circuit breaker test:");
                 logger.info("  API_BASE_URL = {}", processBuilder.environment().get("API_BASE_URL"));
