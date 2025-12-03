@@ -38,6 +38,9 @@ backend/ingest-service/bin/
 backend/settlement-worker/bin/
 backend/refund-worker/bin/
 backend/monitoring-service/bin/
+backend/ingest-service-vm1/bin/
+backend/ingest-service-vm2/bin/
+ppt_html
 
 
 # Load testing artifacts

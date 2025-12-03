@@ -61,7 +61,7 @@ pipeline {
 
     stage('Build Spring Boot Services') {
       steps {
-        sh './gradlew clean :backend:eureka-server:bootJar :backend:gateway:bootJar :backend:ingest-service:bootJar :backend:consumer-worker:bootJar :backend:settlement-worker:bootJar :backend:refund-worker:bootJar :backend:monitoring-service:bootJar --parallel'
+        sh './gradlew clean :backend:eureka-server:bootJar :backend:gateway:bootJar :backend:ingest-service-vm1:bootJar :backend:ingest-service-vm2:bootJar :backend:consumer-worker:bootJar :backend:settlement-worker:bootJar :backend:refund-worker:bootJar :backend:monitoring-service:bootJar --parallel'
       }
     }
 
@@ -88,8 +88,8 @@ pipeline {
 
               echo ""
               echo "=== Step 3: 전체 서비스 빌드 및 시작 (Jenkins 제외) ==="
-              docker compose build eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
-              docker compose up -d eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
+              docker compose build eureka-server gateway ingest-service-vm1 consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
+              docker compose up -d eureka-server gateway ingest-service-vm1 consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
               echo "✓ 모든 서비스 기동 완료"
 
               echo ""
@@ -102,7 +102,7 @@ pipeline {
 
               # Docker 이미지 빌드만 수행
               echo "=== Docker 이미지 빌드 중 ==="
-              docker compose build eureka-server gateway ingest-service consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
+              docker compose build eureka-server gateway ingest-service-vm1 ingest-service-vm2 consumer-worker settlement-worker refund-worker monitoring-service prometheus grafana frontend
               echo "✓ Docker 이미지 빌드 완료"
             '''
           }
@@ -121,7 +121,7 @@ pipeline {
               echo "=== VM1 배포 중 (172.25.0.37) ==="
               sh '''
                 echo "Docker 이미지를 tar 파일로 저장 중..."
-                docker save eureka-server:local gateway:local ingest-service:local consumer-worker:local settlement-worker:local refund-worker:local monitoring-service:local pay-prometheus:local pay-grafana:local mock-frontend:local > /tmp/images.tar
+                docker save eureka-server:local gateway:local ingest-service-vm1:local ingest-service-vm2:local consumer-worker:local settlement-worker:local refund-worker:local monitoring-service:local pay-prometheus:local pay-grafana:local mock-frontend:local > /tmp/images.tar
 
                 ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@172.25.0.37 "cd /root/Payment_SWElite && git pull"
 
@@ -145,7 +145,7 @@ ENDSSH
               echo "=== VM2 배포 중 (172.25.0.79) ==="
               sh '''
                 echo "Docker 이미지를 tar 파일로 저장 중..."
-                docker save eureka-server:local gateway:local ingest-service:local consumer-worker:local settlement-worker:local refund-worker:local monitoring-service:local pay-prometheus:local pay-grafana:local mock-frontend:local > /tmp/images.tar
+                docker save eureka-server:local gateway:local ingest-service-vm1:local ingest-service-vm2:local consumer-worker:local settlement-worker:local refund-worker:local monitoring-service:local pay-prometheus:local pay-grafana:local mock-frontend:local > /tmp/images.tar
 
                 ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@172.25.0.79 "cd /root/Payment_SWElite && git pull"
 

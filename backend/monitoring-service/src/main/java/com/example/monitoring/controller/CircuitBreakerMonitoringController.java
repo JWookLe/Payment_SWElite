@@ -21,7 +21,7 @@ public class CircuitBreakerMonitoringController {
 
     public CircuitBreakerMonitoringController(
             WebClient.Builder webClientBuilder,
-            @Value("${services.ingest-service.url}") String ingestServiceUrl) {
+            @Value("${services.ingest-service-vm1.url}") String ingestServiceUrl) {
         this.webClient = webClientBuilder.build();
         this.ingestServiceUrl = ingestServiceUrl;
     }

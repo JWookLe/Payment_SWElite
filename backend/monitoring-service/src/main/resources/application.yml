@@ -59,8 +59,10 @@ eureka:
 
 # External service URLs
 services:
-  ingest-service:
-    url: ${INGEST_SERVICE_URL:http://localhost:8080}
+  ingest-service-vm1:
+    url: ${INGEST_SERVICE_VM1_URL:http://localhost:8080}
+  ingest-service-vm2:
+    url: ${INGEST_SERVICE_VM2_URL:http://localhost:8081}
   prometheus:
     url: ${PROMETHEUS_URL:http://localhost:9090}
 

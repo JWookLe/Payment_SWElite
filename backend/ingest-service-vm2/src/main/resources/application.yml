@@ -1,0 +1,197 @@
+spring:
+  application:
+    name: ingest-service-vm2
+  datasource:
+    # 샤딩 설정: shard1 (VM1), shard2 (VM2)
+    shard1:
+      url: jdbc:mariadb://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:13306}/${PAYMENT_DB_NAME:paydb}?rewriteBatchedStatements=true
+      username: ${PAYMENT_DB_USER:payuser}
+      password: ${PAYMENT_DB_PASSWORD:paypass}
+      hikari:
+        maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:150}
+        minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:30}
+        connection-timeout: 10000
+        idle-timeout: 300000
+        max-lifetime: 1800000
+        leak-detection-threshold: 60000
+    shard2:
+      url: jdbc:mariadb://${PAYMENT_DB_HOST_SHARD2:localhost}:${PAYMENT_DB_PORT_SHARD2:13307}/${PAYMENT_DB_NAME:paydb}?rewriteBatchedStatements=true
+      username: ${PAYMENT_DB_USER:payuser}
+      password: ${PAYMENT_DB_PASSWORD:paypass}
+      hikari:
+        maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:150}
+        minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:30}
+        connection-timeout: 10000
+        idle-timeout: 300000
+        max-lifetime: 1800000
+        leak-detection-threshold: 60000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MariaDBDialect
+        jdbc:
+          time_zone: UTC
+          batch_size: 50                        # Batch INSERT operations
+        order_inserts: true                     # Order INSERTs for better batching
+        order_updates: true                     # Order UPDATEs for better batching
+        generate_statistics: false              # Disable for performance
+        query:
+          in_clause_parameter_padding: true     # Optimize IN clause queries
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # Async publishing with practical timeouts
+      acks: 1                      # Wait for leader only (faster, still safe with replication)
+      retries: 3                   # Retry 3 times for transient failures
+      request-timeout-ms: 10000    # 10 second timeout for send request
+      delivery-timeout-ms: 120000  # 120 second total timeout (allows for slow Kafka)
+      # Batching configuration for high throughput (1000 RPS target)
+      batch-size: 32768            # 32KB batch size (aggressive)
+      linger-ms: 50                # 50ms batching delay (faster)
+      properties:
+        max.in.flight.requests.per.connection: 10  # Higher parallelism
+        buffer.memory: 134217728                   # 128MB buffer
+        compression.type: lz4
+        enable.idempotence: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      repositories:
+        enabled: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  tomcat:
+    threads:
+      max: ${SERVER_TOMCAT_THREADS_MAX:400}       # Allow more worker threads under load
+      min-spare: ${SERVER_TOMCAT_THREADS_MIN_SPARE:50} # Keep 50 threads ready
+    accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:2000}   # Larger backlog for waiting sockets
+    max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:4000} # Higher concurrent connections
+    connection-timeout: ${SERVER_TOMCAT_CONNECTION_TIMEOUT:20000} # 20s socket timeout
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+    enable:
+      hikaricp: true
+
+app:
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  rate-limit:
+    authorize:
+      window-seconds: ${APP_RATE_LIMIT_AUTHORIZE_WINDOW_SECONDS:60}
+      capacity: ${APP_RATE_LIMIT_AUTHORIZE_CAPACITY:30000}
+    capture:
+      window-seconds: ${APP_RATE_LIMIT_CAPTURE_WINDOW_SECONDS:60}
+      capacity: ${APP_RATE_LIMIT_CAPTURE_CAPACITY:30000}
+    refund:
+      window-seconds: ${APP_RATE_LIMIT_REFUND_WINDOW_SECONDS:60}
+      capacity: ${APP_RATE_LIMIT_REFUND_CAPACITY:15000}
+  idempotency-cache:
+    ttl-seconds: ${APP_IDEMPOTENCY_CACHE_TTL_SECONDS:600}
+  circuit-breaker:
+    kafka-publisher:
+      failure-threshold-percentage: ${APP_CB_KAFKA_FAILURE_THRESHOLD:50}
+      wait-duration-in-open-state: ${APP_CB_KAFKA_WAIT_DURATION:30000}
+      permitted-calls-in-half-open-state: ${APP_CB_KAFKA_HALF_OPEN_CALLS:3}
+      minimum-number-of-calls: ${APP_CB_KAFKA_MIN_CALLS:5}
+      slow-call-duration-threshold: ${APP_CB_KAFKA_SLOW_CALL_THRESHOLD:2000}
+      slow-call-rate-threshold: ${APP_CB_KAFKA_SLOW_CALL_RATE:50}
+
+outbox:
+  polling:
+    enabled: true
+    fixed-delay-ms: 50           # Poll 20 times per second (ultra-aggressive for 1000 RPS)
+    initial-delay-ms: 1000       # Reduced warm-up time
+    batch-size: 300              # Batch 300 events per poll.
+    max-retries: 5               # Reduced retries to fail faster
+    retry-interval-seconds: 1    # Faster retry interval
+  dispatcher:
+    core-pool-size: 48           # Increased thread pool for 1000 RPS
+    max-pool-size: 96            # Increased max threads
+    queue-capacity: 15000        # Increased queue capacity
+  dead-letter:
+    check-interval-ms: 60000     # Check for dead letters every 1 minute (faster)
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      kafka-publisher:
+        registerHealthIndicator: true
+        failureRateThreshold: 50
+        slowCallRateThreshold: 50
+        slowCallDurationThreshold: 2000ms  # 2초 이상을 느린 호출로 간주 (optimized for load testing)
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        minimumNumberOfCalls: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        eventConsumerBufferSize: 10
+        recordFailurePredicate: com.example.payment.service.KafkaPublishingFailurePredicate
+      pg-auth-api:
+        registerHealthIndicator: true
+        failureRateThreshold: 50          # 50% 실패율 시 OPEN
+        slowCallRateThreshold: 50         # 50% 느린 호출 시 OPEN
+        slowCallDurationThreshold: 2000ms # 2초 이상을 느린 호출로 간주 (optimized for load testing)
+        waitDurationInOpenState: 60s      # OPEN 상태 60초 유지 (Kafka보다 길게)
+        permittedNumberOfCallsInHalfOpenState: 5  # HALF_OPEN에서 5번 테스트
+        minimumNumberOfCalls: 10          # 최소 10번 호출 후 통계 계산
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        eventConsumerBufferSize: 10
+    metrics:
+      enabled: true
+  retry:
+    instances:
+      kafka-publisher:
+        maxAttempts: 3
+        waitDuration: 1000ms
+        retryExceptions:
+          - org.springframework.kafka.KafkaException
+
+spring-boot-admin:
+  client:
+    enabled: false
+
+shedlock:
+  defaults:
+    lock-at-most-for: 10m
+    lock-at-least-for: 1s
+
+logging:
+  level:
+    com.example.payment.scheduler.OutboxPollingScheduler: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+
+mock:
+  pg:
+    delay-min-ms: ${MOCK_PG_DELAY_MIN_MS:5}
+    delay-max-ms: ${MOCK_PG_DELAY_MAX_MS:15}
+    failure-rate: ${MOCK_PG_FAILURE_RATE:0.0001}
+    loadtest-mode: ${MOCK_PG_LOADTEST_MODE:false}

@@ -77,7 +77,7 @@ service_exec() {
 }
 
 ingest_exec() {
-  service_exec ingest-service "$@"
+  service_exec ingest-service-vm1 "$@"
 }
 
 ingest_curl() {
@@ -262,10 +262,10 @@ start_service kafka
 sleep 10
 log_success "Kafka broker restarted."
 
-log_info "Step 5.5: restarting ingest-service to reconnect to Kafka."
-start_service ingest-service
+log_info "Step 5.5: restarting ingest-service-vm1 to reconnect to Kafka."
+start_service ingest-service-vm1
 sleep 10
-log_success "Ingest service restarted."
+log_success "Ingest service (vm1) restarted."
 
 recovery_failed=false
 log_info "Step 6: preparing recovery window."
@@ -303,5 +303,5 @@ fi
 
 log_warn "Circuit breaker scenario finished, but did not recover from OPEN state."
 log_warn "Final state: ${final_state:-unknown}"
-log_warn "Inspect ingest-service logs for details (docker compose logs ingest-service)."
+log_warn "Inspect ingest-service-vm1 logs for details (docker compose logs ingest-service-vm1)."
 exit 1
