@@ -1,6 +1,6 @@
 spring:
   application:
-    name: ingest-service-vm2
+    name: ingest-service
   datasource:
     # 샤딩 설정: shard1 (VM1), shard2 (VM2)
     shard1:

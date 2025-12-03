@@ -13,43 +13,22 @@
           max-connections: ${GATEWAY_MAX_CONNECTIONS:2000}
           acquire-timeout: ${GATEWAY_POOL_ACQUIRE_TIMEOUT:5000}
       routes:
-        - id: payments-api-vm1
-          uri: lb://INGEST-SERVICE-VM1
+        - id: payments-api
+          uri: lb://INGEST-SERVICE
           predicates:
             - Path=/api/payments/**
           filters:
             - RewritePath=/api/payments/?(?<segment>.*), /payments/${segment}
 
-        - id: payments-api-vm2
-          uri: lb://INGEST-SERVICE-VM2
-          predicates:
-            - Path=/api/payments/**
-          filters:
-            - RewritePath=/api/payments/?(?<segment>.*), /payments/${segment}
-
-        - id: refund-api-vm1
-          uri: lb://INGEST-SERVICE-VM1
+        - id: refund-api
+          uri: lb://INGEST-SERVICE
           predicates:
             - Path=/api/refund/**
           filters:
             - RewritePath=/api/refund/?(?<segment>.*), /refund/${segment}
 
-        - id: refund-api-vm2
-          uri: lb://INGEST-SERVICE-VM2
-          predicates:
-            - Path=/api/refund/**
-          filters:
-            - RewritePath=/api/refund/?(?<segment>.*), /refund/${segment}
-
-        - id: circuit-breaker-api-vm1
-          uri: lb://INGEST-SERVICE-VM1
-          predicates:
-            - Path=/api/circuit-breaker/**
-          filters:
-            - RewritePath=/api/circuit-breaker/?(?<segment>.*), /circuit-breaker/${segment}
-
-        - id: circuit-breaker-api-vm2
-          uri: lb://INGEST-SERVICE-VM2
+        - id: circuit-breaker-api
+          uri: lb://INGEST-SERVICE
           predicates:
             - Path=/api/circuit-breaker/**
           filters:
