@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS outbox_event (
   event_type      VARCHAR(32) NOT NULL,
   payload         JSON        NOT NULL,
   published       TINYINT(1)  NOT NULL DEFAULT 0,
+  published_at    TIMESTAMP(3),
+  retry_count     INT         NOT NULL DEFAULT 0,
+  last_retry_at   TIMESTAMP(3),
   created_at      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   KEY ix_pub_created (published, created_at)
 ) ENGINE=InnoDB;
