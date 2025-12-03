@@ -45,7 +45,7 @@ public class AdminTestService {
     @Autowired
     public AdminTestService(RestTemplate restTemplate, ObjectMapper objectMapper, MCPAnalysisService mcpAnalysisService,
                            @org.springframework.beans.factory.annotation.Value("${api.base-url:http://ingest-service-vm1:8080}") String apiBaseUrl,
-                           @org.springframework.beans.factory.annotation.Value("${monitoring.gateway.base-url:http://localhost:8080}") String gatewayBaseUrl) {
+                           @org.springframework.beans.factory.annotation.Value("${gateway.base-url:http://localhost:8080}") String gatewayBaseUrl) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.mcpAnalysisService = mcpAnalysisService;
