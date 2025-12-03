@@ -1,9 +1,9 @@
 # Build stage
 FROM gradle:8-jdk21 AS builder
 WORKDIR /build
-COPY build.gradle.kts settings.gradle.kts ./
-COPY src ./src
-RUN gradle build -x test --no-daemon
+COPY backend/ingest-service-vm1/build.gradle.kts backend/ingest-service-vm1/settings.gradle.kts ./
+COPY backend/ingest-service-vm1/src ./src
+RUN gradle :backend:ingest-service-vm1:build -x test --no-daemon
 
 # Runtime stage
 FROM eclipse-temurin:21-jre
