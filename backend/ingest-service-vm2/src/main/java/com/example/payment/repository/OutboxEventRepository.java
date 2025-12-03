@@ -49,7 +49,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
     @Query("SELECT e FROM OutboxEvent e WHERE e.published = false " +
            "AND e.retryCount < :maxRetries " +
            "AND (e.lastRetryAt IS NULL OR e.lastRetryAt < :retryThreshold) " +
-           "AND MOD(CAST(SUBSTRING(e.aggregateId, 1) AS INTEGER), 2) = 0 " +
+           "AND MOD(CAST(REGEXP_SUBSTR(e.aggregateId, '[0-9]+') AS INTEGER), 2) = 0 " +
            "ORDER BY e.createdAt ASC")
     List<OutboxEvent> findUnpublishedEventsForRetryEvenParity(
             @Param("maxRetries") int maxRetries,
@@ -65,7 +65,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
     @Query("SELECT e FROM OutboxEvent e WHERE e.published = false " +
            "AND e.retryCount < :maxRetries " +
            "AND (e.lastRetryAt IS NULL OR e.lastRetryAt < :retryThreshold) " +
-           "AND MOD(CAST(SUBSTRING(e.aggregateId, 1) AS INTEGER), 2) = 1 " +
+           "AND MOD(CAST(REGEXP_SUBSTR(e.aggregateId, '[0-9]+') AS INTEGER), 2) = 1 " +
            "ORDER BY e.createdAt ASC")
     List<OutboxEvent> findUnpublishedEventsForRetryOddParity(
             @Param("maxRetries") int maxRetries,
