@@ -44,8 +44,8 @@ public class AdminTestService {
 
     @Autowired
     public AdminTestService(RestTemplate restTemplate, ObjectMapper objectMapper, MCPAnalysisService mcpAnalysisService,
-                           @org.springframework.beans.factory.annotation.Value("${api.base-url:http://ingest-service-vm1:8080}") String apiBaseUrl,
-                           @org.springframework.beans.factory.annotation.Value("${gateway.base-url:http://localhost:8080}") String gatewayBaseUrl) {
+                           @org.springframework.beans.factory.annotation.Value("${ingest-service-vm1-url:http://ingest-service-vm1:8080}") String apiBaseUrl,
+                           @org.springframework.beans.factory.annotation.Value("${monitoring-gateway-base-url:http://localhost:8080}") String gatewayBaseUrl) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.mcpAnalysisService = mcpAnalysisService;
@@ -205,7 +205,7 @@ public class AdminTestService {
 
                 // Set environment variables for Docker network access
                 processBuilder.environment().put("API_BASE_URL", apiBaseUrl);
-                processBuilder.environment().put("GATEWAY_BASE_URL", gatewayBaseUrl);
+                processBuilder.environment().put("GATEWAY_BASE_URL", gatewayBaseUrl + "/api");
 
                 logger.info("Environment variables set for circuit breaker test:");
                 logger.info("  API_BASE_URL = {}", processBuilder.environment().get("API_BASE_URL"));
