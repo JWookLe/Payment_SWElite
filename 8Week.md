@@ -36,13 +36,13 @@ shedlock:
 ### 1.3 Merchant ID 기반 샤딩 유지
 ```
 VM1 (ingest-service-vm1):
-  - shard1 MariaDB (localhost:13306)
-  - 홀수 merchant ID 처리
+  - shard1 MariaDB (pay-mariadb-shard1:3306)
+  - 짝수 merchant ID 처리
   - Eureka port: 8080
 
 VM2 (ingest-service-vm2):
-  - shard2 MariaDB (localhost:13307)
-  - 짝수 merchant ID 처리
+  - shard2 MariaDB (pay-mariadb-shard2:3306)
+  - 홀수 merchant ID 처리
   - Eureka port: 8083
 ```
 
@@ -232,10 +232,10 @@ API Gateway (port 8080)
 Service Discovery (Eureka)
   ├→ Load Balancer (INGEST-SERVICE)
   │   ├→ ingest-service-vm1 (port 8080)
-  │   │   └→ shard1 MariaDB (port 13306)
+  │   │   └→ shard1 MariaDB (pay-mariadb-shard1:3306)
   │   │
   │   └→ ingest-service-vm2 (port 8083)
-  │       └→ shard2 MariaDB (port 13307)
+  │       └→ shard2 MariaDB (pay-mariadb-shard2:3306)
   │
   └→ Kafka (메시지 브로커)
       └→ consumer-worker
