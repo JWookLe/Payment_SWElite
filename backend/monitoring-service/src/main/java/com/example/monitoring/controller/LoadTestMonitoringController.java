@@ -17,8 +17,8 @@ import java.util.stream.Collectors;
 public class LoadTestMonitoringController {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private static final String K6_RESULTS_DIR = System.getenv().getOrDefault("K6_RESULTS_DIR", "./loadtest/k6");
-    private static final String K6_SCRIPT_PATH = System.getenv().getOrDefault("K6_SCRIPT_PATH", "./loadtest/k6/payment-scenario.js");
+    private static final String K6_RESULTS_DIR = System.getenv().getOrDefault("K6_RESULTS_DIR", "/app/loadtest/k6");
+    private static final String K6_SCRIPT_PATH = System.getenv().getOrDefault("K6_SCRIPT_PATH", "/app/loadtest/k6/payment-scenario.js");
 
     /**
      * 최근 k6 테스트 결과 조회
