@@ -375,24 +375,46 @@ Recent Activity:
           query: `resilience4j_circuitbreaker_state{name="kafka-publisher"}`,
         },
         {
-          name: "Failed Calls",
-          query: `resilience4j_circuitbreaker_calls_total{name="kafka-publisher",kind="failed"}`,
+          name: "Buffered Calls",
+          query: `resilience4j_circuitbreaker_buffered_calls{name="kafka-publisher"}`,
+        },
+        {
+          name: "Not Permitted Calls",
+          query: `resilience4j_circuitbreaker_not_permitted_calls_total{name="kafka-publisher"}`,
+        },
+        {
+          name: "Total Calls",
+          query: `resilience4j_circuitbreaker_calls_seconds_count{name="kafka-publisher"}`,
         },
       ];
+
+      // Calculate time range in seconds
+      const rangeSeconds = timeRange.endsWith('h')
+        ? parseInt(timeRange) * 3600
+        : timeRange.endsWith('m')
+        ? parseInt(timeRange) * 60
+        : 3600; // default 1h
+
+      const endTime = Math.floor(Date.now() / 1000);
+      const startTime = endTime - rangeSeconds;
 
       const results = await Promise.all(
         queries.map(async (q) => {
           try {
             const response = await axios.get(
-              `${PROMETHEUS_URL}/api/v1/query`,
+              `${PROMETHEUS_URL}/api/v1/query_range`,
               {
                 params: {
-                  query: `${q.query}[${timeRange}]`,
+                  query: q.query,
+                  start: startTime,
+                  end: endTime,
+                  step: '60s', // 1 minute resolution
                 },
               }
             );
             return { name: q.name, data: response.data };
-          } catch {
+          } catch (error) {
+            console.error(`Failed to query ${q.name}:`, error instanceof Error ? error.message : String(error));
             return { name: q.name, data: null };
           }
         })
