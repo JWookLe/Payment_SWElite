@@ -29,7 +29,7 @@ public class RedisMonitoringController {
             @RequestParam String merchantId) {
 
         try {
-            String key = "rate_limit:" + merchantId;
+            String key = "rate:authorize:" + merchantId;
             String value = redisTemplate.opsForValue().get(key);
             Long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
 
@@ -77,7 +77,7 @@ public class RedisMonitoringController {
             @RequestParam String key) {
 
         try {
-            String redisKey = "idempotency:" + key;
+            String redisKey = "idem:authorize:" + key;
             String value = redisTemplate.opsForValue().get(redisKey);
             Long ttl = redisTemplate.getExpire(redisKey, TimeUnit.SECONDS);
 
@@ -111,8 +111,8 @@ public class RedisMonitoringController {
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getRedisStats() {
         try {
-            Set<String> rateLimitKeys = redisTemplate.keys("rate_limit:*");
-            Set<String> idempotencyKeys = redisTemplate.keys("idempotency:*");
+            Set<String> rateLimitKeys = redisTemplate.keys("rate:*");
+            Set<String> idempotencyKeys = redisTemplate.keys("idem:*");
             Set<String> cacheKeys = redisTemplate.keys("cache:*");
 
             Map<String, Object> stats = new HashMap<>();
@@ -172,8 +172,8 @@ public class RedisMonitoringController {
     @GetMapping("/cache-stats")
     public ResponseEntity<Map<String, Object>> getCacheStats() {
         try {
-            Set<String> rateLimitKeys = redisTemplate.keys("rate_limit:*");
-            Set<String> idempotencyKeys = redisTemplate.keys("idempotency:*");
+            Set<String> rateLimitKeys = redisTemplate.keys("rate:*");
+            Set<String> idempotencyKeys = redisTemplate.keys("idem:*");
             Set<String> cacheKeys = redisTemplate.keys("cache:*");
 
             Map<String, Object> stats = new HashMap<>();
@@ -223,7 +223,7 @@ public class RedisMonitoringController {
             @RequestParam String merchantId) {
 
         try {
-            String key = "rate_limit:" + merchantId;
+            String key = "rate:authorize:" + merchantId;
             Boolean deleted = redisTemplate.delete(key);
 
             return ResponseEntity.ok(Map.of(
@@ -248,7 +248,7 @@ public class RedisMonitoringController {
     @GetMapping("/rate-limit/all")
     public ResponseEntity<Map<String, Object>> listAllRateLimits() {
         try {
-            Set<String> keys = redisTemplate.keys("rate_limit:*");
+            Set<String> keys = redisTemplate.keys("rate:*");
 
             if (keys == null || keys.isEmpty()) {
                 return ResponseEntity.ok(Map.of(
@@ -260,7 +260,7 @@ public class RedisMonitoringController {
 
             List<Map<String, Object>> rateLimits = keys.stream()
                     .map(key -> {
-                        String merchantId = key.replace("rate_limit:", "");
+                        String merchantId = key.substring(key.lastIndexOf(":") + 1);
                         String value = redisTemplate.opsForValue().get(key);
                         Long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
                         int count = value != null ? Integer.parseInt(value) : 0;
@@ -294,7 +294,7 @@ public class RedisMonitoringController {
     @GetMapping("/rate-limit/blocked")
     public ResponseEntity<Map<String, Object>> getBlockedMerchants() {
         try {
-            Set<String> keys = redisTemplate.keys("rate_limit:*");
+            Set<String> keys = redisTemplate.keys("rate:*");
 
             if (keys == null || keys.isEmpty()) {
                 return ResponseEntity.ok(Map.of(
@@ -306,7 +306,7 @@ public class RedisMonitoringController {
 
             List<Map<String, Object>> blocked = keys.stream()
                     .map(key -> {
-                        String merchantId = key.replace("rate_limit:", "");
+                        String merchantId = key.substring(key.lastIndexOf(":") + 1);
                         String value = redisTemplate.opsForValue().get(key);
                         int count = value != null ? Integer.parseInt(value) : 0;
                         Long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
