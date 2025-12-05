@@ -6,8 +6,8 @@
         "C:\\Users\\flwls\\Payment_SWElite\\Payment_SWElite\\mcp-servers\\circuit-breaker-mcp\\dist\\index.js"
       ],
       "env": {
-        "API_BASE_URL": "http://localhost:8080",
-        "PROMETHEUS_URL": "http://localhost:9090"
+        "API_BASE_URL": "http://172.25.0.37:8082",
+        "PROMETHEUS_URL": "http://172.25.0.37:9090"
       }
     },
     "payment-database": {
@@ -16,11 +16,7 @@
         "C:\\Users\\flwls\\Payment_SWElite\\Payment_SWElite\\mcp-servers\\database-query-mcp\\dist\\index.js"
       ],
       "env": {
-        "PAYMENT_DB_HOST": "localhost",
-        "PAYMENT_DB_PORT": "3306",
-        "PAYMENT_DB_USER": "payuser",
-        "PAYMENT_DB_PASSWORD": "paypass",
-        "PAYMENT_DB_NAME": "paydb"
+        "API_BASE_URL": "http://172.25.0.37:8082"
       }
     },
     "payment-redis": {
@@ -29,7 +25,7 @@
         "C:\\Users\\flwls\\Payment_SWElite\\Payment_SWElite\\mcp-servers\\redis-cache-mcp\\dist\\index.js"
       ],
       "env": {
-        "REDIS_URL": "redis://localhost:6379"
+        "REDIS_URL": "redis://172.25.0.37:6379"
       }
     }
   }
