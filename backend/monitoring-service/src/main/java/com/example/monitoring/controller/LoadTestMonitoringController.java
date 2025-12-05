@@ -81,22 +81,17 @@ public class LoadTestMonitoringController {
             @SuppressWarnings("unchecked")
             Map<String, Object> httpReqFailed = (Map<String, Object>) metrics.get("http_req_failed");
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> values = (Map<String, Object>) httpReqDuration.get("values");
-            Double p95 = (Double) values.get("p(95)");
-            Double p99 = (Double) values.get("p(99)");
-            Double avg = (Double) values.get("avg");
+            // K6 JSON 구조: metrics 안에 직접 값이 들어있음 (values 객체 없음)
+            Double p95 = ((Number) httpReqDuration.get("p(95)")).doubleValue();
+            Double p99 = ((Number) httpReqDuration.get("p(99)")).doubleValue();
+            Double avg = ((Number) httpReqDuration.get("avg")).doubleValue();
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> failedValues = (Map<String, Object>) httpReqFailed.get("values");
-            Double failRate = (Double) failedValues.get("rate");
+            Double failRate = ((Number) httpReqFailed.get("value")).doubleValue();
 
             // 처리량 (RPS)
             @SuppressWarnings("unchecked")
             Map<String, Object> iterations = (Map<String, Object>) metrics.get("iterations");
-            @SuppressWarnings("unchecked")
-            Map<String, Object> iterValues = (Map<String, Object>) iterations.get("values");
-            Double rps = (Double) iterValues.get("rate");
+            Double rps = ((Number) iterations.get("rate")).doubleValue();
 
             // 성능 평가
             String performanceGrade = evaluatePerformance(p95, failRate);
