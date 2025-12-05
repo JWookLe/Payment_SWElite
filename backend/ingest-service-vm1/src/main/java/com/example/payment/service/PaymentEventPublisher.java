@@ -143,9 +143,8 @@ public class PaymentEventPublisher {
                 outboxEventRepository.save(outboxEvent);
 
                 // Record success only in HALF_OPEN state to allow transition to CLOSED
-                // Use sampling (1 in 10) to minimize performance overhead even in HALF_OPEN
-                if (circuitBreaker.getState() == io.github.resilience4j.circuitbreaker.CircuitBreaker.State.HALF_OPEN
-                    && outboxEvent.getId() % 10 == 0) {
+                // Record all successes in HALF_OPEN to ensure quick recovery
+                if (circuitBreaker.getState() == io.github.resilience4j.circuitbreaker.CircuitBreaker.State.HALF_OPEN) {
                     circuitBreaker.executeRunnable(() -> {
                         // Success - no exception thrown
                     });

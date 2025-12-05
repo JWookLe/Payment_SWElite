@@ -107,7 +107,7 @@
     {
       "id": 3,
       "type": "timeseries",
-      "title": "Kafka Consumer Throughput",
+      "title": "Kafka Consumer Commit Rate",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -115,8 +115,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(kafka_consumer_fetch_manager_records_consumed_total{application=\"consumer-worker\"}[5m]))",
-          "legendFormat": "Records/sec"
+          "expr": "sum(rate(kafka_consumer_coordinator_commit_total{application=\"consumer-worker\"}[5m]))",
+          "legendFormat": "Commits/sec"
         }
       ],
       "fieldConfig": {
