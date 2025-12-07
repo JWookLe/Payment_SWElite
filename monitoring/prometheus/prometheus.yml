@@ -27,7 +27,7 @@ scrape_configs:
         target_label: instance
       - source_labels: [__meta_eureka_app_name]
         action: keep
-        regex: INGEST-SERVICE
+        regex: INGEST-SERVICE.*
 
   - job_name: 'consumer-worker'
     metrics_path: /actuator/prometheus

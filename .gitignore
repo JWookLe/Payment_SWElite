@@ -41,6 +41,8 @@ backend/monitoring-service/bin/
 backend/ingest-service-vm1/bin/
 backend/ingest-service-vm2/bin/
 ppt_html
+backend/gateway/bin/
+backend/eureka-server/bin/
 
 
 # Load testing artifacts
