@@ -93,7 +93,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_server_requests_seconds_count{application=~\"ingest-service.*\",uri!~\".*/actuator/.*\"}[1m]))",
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"ingest-service\",uri!~\".*/actuator/.*\"}[1m]))",
           "legendFormat": "ingest"
         }
       ],
@@ -167,7 +167,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(sum(rate(http_server_requests_seconds_count{application=~\"ingest-service.*\",status=~\"5..\"}[1m])) or on() vector(0)) / sum(rate(http_server_requests_seconds_count{application=~\"ingest-service.*\"}[1m]))",
+          "expr": "(sum(rate(http_server_requests_seconds_count{job=\"ingest-service\",status=~\"5..\"}[1m])) or on() vector(0)) / sum(rate(http_server_requests_seconds_count{job=\"ingest-service\"}[1m]))",
           "legendFormat": "ingest 5xx"
         }
       ],
@@ -314,7 +314,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application=~\"ingest-service.*\",uri!~\".*/actuator/.*\"}[1m])) by (le)) * 1000",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"ingest-service\",uri!~\".*/actuator/.*\"}[1m])) by (le)) * 1000",
           "legendFormat": "ingest p95"
         },
         {
@@ -323,7 +323,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application=~\"ingest-service.*\",uri!~\".*/actuator/.*\"}[1m])) by (le)) * 1000",
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=\"ingest-service\",uri!~\".*/actuator/.*\"}[1m])) by (le)) * 1000",
           "legendFormat": "ingest p99"
         },
         {
@@ -332,7 +332,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(sum(rate(http_server_requests_seconds_sum{application=~\"ingest-service.*\",uri!~\".*/actuator/.*\"}[1m])) / sum(rate(http_server_requests_seconds_count{application=~\"ingest-service.*\",uri!~\".*/actuator/.*\"}[1m]))) * 1000",
+          "expr": "(sum(rate(http_server_requests_seconds_sum{job=\"ingest-service\",uri!~\".*/actuator/.*\"}[1m])) / sum(rate(http_server_requests_seconds_count{job=\"ingest-service\",uri!~\".*/actuator/.*\"}[1m]))) * 1000",
           "legendFormat": "ingest avg"
         }
       ],
@@ -396,7 +396,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(hikaricp_connections_active{application=~\"ingest-service.*\"}) by (instance)",
+          "expr": "sum(hikaricp_connections_active{job=\"ingest-service\"}) by (instance)",
           "legendFormat": "{{instance}} active"
         },
         {
@@ -405,7 +405,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(hikaricp_connections_pending{application=~\"ingest-service.*\"}) by (instance)",
+          "expr": "sum(hikaricp_connections_pending{job=\"ingest-service\"}) by (instance)",
           "legendFormat": "{{instance}} pending"
         }
       ],
@@ -473,7 +473,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(http_server_requests_active{application=~\"ingest-service.*\"}) by (instance)",
+          "expr": "sum(http_server_requests_active{job=\"ingest-service\"}) by (instance)",
           "legendFormat": "{{instance}} http active"
         },
         {
@@ -482,7 +482,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(executor_active_threads{application=~\"ingest-service.*\"}) by (instance)",
+          "expr": "sum(executor_active_threads{job=\"ingest-service\"}) by (instance)",
           "legendFormat": "{{instance}} executor active threads"
         },
         {
@@ -491,7 +491,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(executor_queue_remaining_tasks{application=~\"ingest-service.*\"}) by (instance)",
+          "expr": "sum(executor_queue_remaining_tasks{job=\"ingest-service\"}) by (instance)",
           "legendFormat": "{{instance}} executor queue remaining"
         },
         {
@@ -500,7 +500,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(executor_queued_tasks{application=~\"ingest-service.*\"}) by (instance)",
+          "expr": "sum(executor_queued_tasks{job=\"ingest-service\"}) by (instance)",
           "legendFormat": "{{instance}} executor queued tasks"
         },
         {
@@ -509,7 +509,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(reactor_netty_http_server_active_connections{application=~\"ingest-service.*\"}) by (instance)",
+          "expr": "sum(reactor_netty_http_server_active_connections{job=\"ingest-service\"}) by (instance)",
           "legendFormat": "ingest(netty) {{instance}} active"
         },
         {
@@ -518,7 +518,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(reactor_netty_http_server_pending_connections{application=~\"ingest-service.*\"}) by (instance)",
+          "expr": "sum(reactor_netty_http_server_pending_connections{job=\"ingest-service\"}) by (instance)",
           "legendFormat": "ingest(netty) {{instance}} pending"
         },
         {
@@ -605,7 +605,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "((sum(rate(kafka_producer_record_error_total{application=~\"ingest-service.*\"}[1m])) or on() vector(0)) / (sum(rate(kafka_producer_record_send_total{application=~\"ingest-service.*\"}[1m])) + 1e-9)) * 100",
+          "expr": "((sum(rate(kafka_producer_record_error_total{job=\"ingest-service\"}[1m])) or on() vector(0)) / (sum(rate(kafka_producer_record_send_total{job=\"ingest-service\"}[1m])) + 1e-9)) * 100",
           "legendFormat": "producer error rate %"
         },
         {
@@ -683,7 +683,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "process_cpu_usage{application=~\"gateway|ingest-service.*\"} * 100",
+          "expr": "process_cpu_usage{job=~\"gateway|ingest-service\"} * 100",
           "legendFormat": "{{application}} {{instance}} CPU%"
         },
         {
@@ -692,7 +692,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (application, instance)(jvm_memory_used_bytes{application=~\"gateway|ingest-service.*\",area=\"heap\"}) / 1024 / 1024",
+          "expr": "sum by (application, instance)(jvm_memory_used_bytes{job=~\"gateway|ingest-service\",area=\"heap\"}) / 1024 / 1024",
           "legendFormat": "{{application}} {{instance}} heap MB"
         }
       ],
