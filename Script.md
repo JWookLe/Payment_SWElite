@@ -129,8 +129,26 @@ public interface IngestServiceClient {
 
 **주요 기능:**
 1. **라우팅**: `/api/payments/*` → INGEST-SERVICE로 전달
-2. **로드밸런싱**: 여러 ingest-service 인스턴스에 요청 분산
+2. **로드밸런싱**: 여러 ingest-service 인스턴스에 요청 분산 (Eureka 기반)
 3. **CORS 처리**: 프론트엔드에서의 Cross-Origin 요청 허용
+
+**로드밸런싱 동작 방식:**
+```
+[Gateway] "INGEST-SERVICE 어디 있어?"
+    ↓
+[Eureka 조회] → ["172.25.0.37:8081", "172.25.0.79:8083"]
+    ↓
+[Round-Robin 선택]
+    ├─ 요청 1 → VM1 (172.25.0.37:8081)
+    ├─ 요청 2 → VM2 (172.25.0.79:8083)
+    ├─ 요청 3 → VM1 (172.25.0.37:8081)
+    └─ 요청 4 → VM2 (반복)
+```
+
+**Eureka 기반 로드밸런싱의 장점:**
+- **동적 서버 등록**: 새 인스턴스 추가 시 자동 인식
+- **자동 Health Check**: 죽은 서버는 자동 제외
+- **설정 불필요**: Nginx처럼 수동 설정 파일 수정 불필요
 
 ```yaml
 # Gateway 라우팅 설정
@@ -211,12 +229,70 @@ Kafka에서 결제 완료 이벤트를 받아서 **복식부기 원장(Ledger)**
 **복식부기(Double-Entry Bookkeeping)란?**
 모든 거래를 **차변(Debit)**과 **대변(Credit)**으로 동시에 기록하는 회계 방식입니다.
 
+### 차변과 대변이란?
+
+**차변 (Debit)**: 자산이 **증가**하거나 부채가 **감소**하는 계정
+**대변 (Credit)**: 자산이 **감소**하거나 부채가 **증가**하는 계정
+
+**핵심 원칙:** **차변 합계 = 대변 합계** (항상!)
+
+### 실제 예시: 10,000원 결제
+
+**시나리오 1: 고객이 결제 (Capture)**
+```
+고객이 10,000원 지불 → 가맹점이 받음
+
+[복식부기 기록]
+차변 (받는 쪽)              대변 (주는 쪽)
+merchant_receivable         customer_funds
++10,000원                   -10,000원
+(가맹점이 받을 돈 증가)     (고객 자금 감소)
+
+검증: 10,000 = 10,000 ✓
+```
+
+**시나리오 2: 환불 (Refund)**
+```
+가맹점이 10,000원 환불 → 고객이 받음
+
+[복식부기 기록]
+차변 (받는 쪽)              대변 (주는 쪽)
+customer_funds              merchant_receivable
++10,000원                   -10,000원
+(고객 자금 증가)            (가맹점이 받을 돈 감소)
+
+검증: 10,000 = 10,000 ✓
+```
+
+### 왜 복식부기를 사용하나?
+
+**1. 데이터 무결성 검증**
+```sql
+-- 차변/대변 균형 검사
+SELECT
+    SUM(debit_amount) as total_debit,
+    SUM(credit_amount) as total_credit,
+    SUM(debit_amount) - SUM(credit_amount) as balance
+FROM ledger_entry;
+
+-- balance = 0 이면 정상
+-- balance ≠ 0 이면 데이터 오류!
+```
+
+**2. 감사 추적 (Audit Trail)**
+- 모든 거래 이력 영구 보존
+- "이 돈이 어디서 와서 어디로 갔나?" 추적 가능
+
+**3. 회계 표준 준수**
+- 금융 서비스의 필수 요구사항
+- 세무 감사 시 필수
+
 예시: 10,000원 결제 시
 ```
 | 계정             | 차변(Debit) | 대변(Credit) |
 |------------------|-------------|--------------|
 | merchant_receivable | 10,000원   |              |
-| cash              |             | 10,000원     |
+| customer_funds    |             | 10,000원     |
 ```
 
 **왜 복식부기인가?**
@@ -342,6 +418,58 @@ public TestResult runK6Test(@PathVariable String scenario) {
 }
 ```
 
+### 4.2.8 Frontend + Nginx (React 앱 서빙)
+```
+포트: 5173 (외부), 80 (컨테이너 내부)
+역할: 사용자 UI 제공, API 프록시
+```
+
+**Nginx의 역할:**
+우리 시스템에서 Nginx는 **두 가지 용도로 사용**됩니다:
+
+**1. 정적 파일 웹서버**
+```nginx
+server {
+    listen 80;
+    root /usr/share/nginx/html;  # React 빌드 파일 위치
+
+    location / {
+        try_files $uri $uri/ /index.html;  # SPA 라우팅
+    }
+}
+```
+
+**2. API 프록시**
+```nginx
+location /api/ {
+    proxy_pass http://pay-gateway:8080;  # Gateway로 전달
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
+**전체 흐름:**
+```
+[브라우저] http://172.25.0.79:5173/
+    ↓
+[Nginx] → React index.html, JS, CSS 제공
+
+[브라우저] http://172.25.0.79:5173/api/payments/authorize
+    ↓
+[Nginx] → proxy_pass → [Gateway:8080] → [Ingest-Service]
+```
+
+**왜 Backend 로드밸런서로 Nginx를 안 쓰나요?**
+- **Spring Cloud Gateway + Eureka**가 이미 로드밸런싱 제공
+- Nginx는 정적 설정 필요 (수동 관리), Eureka는 동적 서비스 등록
+- 마이크로서비스 환경에서는 Spring Cloud가 더 적합
+
+**Nginx 사용 구조 요약:**
+| 용도 | 사용 여부 | 역할 |
+|------|----------|------|
+| Frontend 웹서버 | ✅ 사용 | React 앱 서빙 + API 프록시 |
+| Backend 로드밸런서 | ❌ 미사용 | Spring Cloud Gateway가 담당 |
+
 ---
 
 # 5. 마이크로서비스 아키텍처 개요 (2분)
@@ -379,6 +507,77 @@ public TestResult runK6Test(@PathVariable String scenario) {
 1. **Decoupling**: 서비스 간 느슨한 결합
 2. **Resilience**: 소비자가 죽어도 메시지는 Kafka에 보관
 3. **Scalability**: 소비자를 여러 개 띄워서 병렬 처리 가능
+
+## 5.3 HTTP와 REST란?
+
+**HTTP (HyperText Transfer Protocol):**
+- **통신 프로토콜** - 데이터를 주고받는 **방법**
+- GET, POST, PUT, DELETE 등의 메서드 제공
+- 헤더, 바디, 상태 코드 등의 구조 정의
+
+**REST (Representational State Transfer):**
+- **API 설계 방식** - HTTP를 사용하는 **규칙**
+- 리소스 기반 URL 설계 (명사 사용)
+- HTTP 메서드로 CRUD 표현
+
+**비유:**
+```
+HTTP = 우체국 시스템 (편지를 어떻게 배달할까?)
+REST = 편지 쓰는 규칙 (주소는 이렇게, 내용은 저렇게)
+```
+
+**예시:**
+```
+HTTP 요청:
+POST /api/payments/authorize HTTP/1.1
+Content-Type: application/json
+{"amount": 50000, "merchantId": "M-123"}
+
+RESTful 설계:
+- 리소스: /payments (명사)
+- 행위: POST (생성), GET (조회), PUT (수정), DELETE (삭제)
+- 상태 코드: 200 (성공), 400 (잘못된 요청), 500 (서버 에러)
+```
+
+## 5.4 Kafka 비동기 통신의 의미
+
+**동기 통신 (HTTP):**
+```
+[Client] → 요청 → [Server]
+[Client] ← (대기 중...) ← [Server 처리 중...]
+[Client] ← 응답 ← [Server]
+총 소요: 200ms
+```
+
+**비동기 통신 (Kafka):**
+```
+[Producer] → 메시지 발행 → [Kafka]
+[Producer] ← "저장 완료" ← [Kafka] (5ms 소요)
+[Producer] 이미 다른 일 처리 중...
+
+[Kafka] "새 메시지 있어요~"
+    ↓
+[Consumer] 메시지 가져가서 처리 (200ms 소요)
+```
+
+**핵심 차이:**
+- **동기**: Producer가 Consumer 처리 완료까지 기다림 (blocking)
+- **비동기**: Producer는 Kafka에 발행만 하고 바로 다음 일 처리 (non-blocking)
+
+**Kafka는 백그라운드에서 자동 처리하나?**
+- **아니요!** Kafka는 단순한 **메시지 저장소**
+- Consumer가 **능동적으로 Polling** (계속 "새 메시지 있어?" 물어봄)
+- Consumer가 메시지 가져가서 처리
+
+```java
+// Consumer가 하는 일
+@KafkaListener(topics = "payment.captured")
+public void handle(String message) {
+    // 1. Kafka가 메시지를 Consumer에게 전달 (Push)
+    // 2. Consumer가 처리
+    // 3. 처리 완료 후 자동으로 "다음 메시지 줘" 요청 (Polling)
+}
+```
 
 ---
 
@@ -548,50 +747,88 @@ spring:
 - 처리량 6배 증가
 - 각 스레드가 독립적으로 메시지 처리
 
-## 7.5 전체 이벤트 흐름
+## 7.5 전체 이벤트 흐름 - 쉽게 풀어서
 
+**시나리오: 고객이 50,000원 결제**
+
+### Step 1: 결제 요청 (사용자 → Ingest-Service)
 ```
-[결제 요청]
-    │
-    ▼
+[사용자] "50,000원 결제해줘"
+    ↓
+[Gateway] Eureka 조회 → Ingest-VM1 선택
+    ↓
+[Ingest-Service-VM1]
+```
+
+### Step 2: DB 저장 + HTTP 응답 (Ingest-Service)
+```
 [Ingest-Service]
-    │ (1) DB 저장: Payment, OutboxEvent
-    │
-    ▼
-[Outbox Polling Scheduler] ─── 50ms마다 실행
-    │ (2) 미발행 이벤트 조회
-    │ (3) Kafka로 발행
-    │
-    ▼
-[payment.capture-requested] Topic
-    │
-    ▼
-[Settlement-Worker]
-    │ (4) PG API 호출
-    │ (5) 성공 시 payment.captured 발행
-    │
-    ▼
-[payment.captured] Topic
-    │
-    ▼
-[Consumer-Worker]
-    │ (6) 복식부기 원장 기록
-    │
-    ▼ (환불 요청 시)
-[payment.refund-requested] Topic
-    │
-    ▼
-[Refund-Worker]
-    │ (7) PG API 환불 호출
-    │ (8) 성공 시 payment.refunded 발행
-    │
-    ▼
-[payment.refunded] Topic
-    │
-    ▼
-[Consumer-Worker]
-    (9) 환불 원장 기록
+├─ Payment 테이블 저장 (status = AUTHORIZED)
+├─ Outbox 테이블 저장 (이벤트: "결제 인가 완료", published = false)
+└─ HTTP 200 응답 (고객에게 즉시 반환!)
 ```
+**여기까지 소요 시간: 약 15ms**
+
+### Step 3: Kafka 발행 (Outbox Scheduler - 별도 스레드)
+```
+50ms 후...
+[Outbox Polling Scheduler]
+├─ Outbox 조회 → "미발행 이벤트 있네?"
+├─ Kafka에 발행: "payment.capture-requested"
+└─ Outbox 업데이트: published = true
+```
+
+### Step 4: Kafka가 메시지 저장
+```
+[Kafka Broker]
+├─ 메시지를 Partition 3에 저장 (merchantId % 6 = 3)
+└─ "Consumer야, 메시지 있어!" (대기)
+```
+
+### Step 5: Settlement-Worker가 처리
+```
+[Settlement-Worker] (Partition 3 담당 Consumer)
+├─ Kafka Polling: "새 메시지 있어?" → 메시지 받음
+├─ PG API 호출: capture(paymentId=12345, amount=50000)
+├─ PG API 응답: "성공!"
+├─ SettlementRequest 상태 업데이트: SUCCESS
+└─ Kafka 발행: "payment.captured"
+```
+
+### Step 6: Consumer-Worker가 원장 기록
+```
+[Consumer-Worker] (Partition 3 담당 Consumer)
+├─ Kafka Polling: payment.captured 메시지 받음
+├─ 복식부기 원장 2건 기록:
+│   ├─ 차변: merchant_receivable +50,000 (가맹점이 받을 돈)
+│   └─ 대변: customer_funds -50,000 (고객이 낸 돈)
+└─ 완료!
+```
+
+**전체 요약:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ [사용자] 결제 요청                                           │
+│     ↓                                                       │
+│ [Ingest] Payment + Outbox 저장 → HTTP 200 응답 (15ms)       │
+│     ↓                                                       │
+│ [Scheduler] Outbox → Kafka 발행 (백그라운드)                │
+│     ↓                                                       │
+│ [Kafka] 메시지 저장소 역할 (디스크에 보관)                  │
+│     ↓                                                       │
+│ [Settlement] PG API 호출 → payment.captured 발행            │
+│     ↓                                                       │
+│ [Consumer] 원장 기록 (복식부기)                             │
+│     ↓                                                       │
+│ [완료] 고객은 이미 15ms 만에 응답 받음!                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**각 컴포넌트 역할:**
+- **Ingest**: 요청 받아서 DB 저장, 빠른 응답
+- **Kafka**: 메시지 우편함 (저장만, 처리는 안 함)
+- **Settlement**: PG 정산 담당 (돈 실제 이동)
+- **Consumer**: 회계 장부 기록 (복식부기)
 
 ---
 
@@ -812,6 +1049,98 @@ public void processPayment(Payment payment) {
 - DB에는 결제 있는데, 다른 서비스는 모름
 - 원장 기록 안 됨, 정산 안 됨
 
+### Outbox 없이 Payment 테이블에서 직접 발행하면 안 되나?
+
+**시도해보면:**
+```java
+@Transactional
+public void processPayment(Payment payment) {
+    payment.setKafkaPublished(false);  // 플래그 추가
+    paymentRepository.save(payment);
+
+    try {
+        kafkaTemplate.send(topic, event);
+        payment.setKafkaPublished(true);  // 성공 시 플래그 업데이트
+        paymentRepository.save(payment);
+    } catch (Exception e) {
+        // 실패 시... 어떻게?
+    }
+}
+```
+
+**문제점 1: 트랜잭션 범위 밖**
+```
+[DB 트랜잭션 시작]
+├─ Payment 저장
+└─ [트랜잭션 커밋]  ← 여기서 이미 커밋!
+
+[Kafka 발행 시도]  ← 트랜잭션 밖!
+└─ 실패 시 Payment는 이미 저장됨 (롤백 불가)
+```
+
+**문제점 2: 재시도 로직 복잡**
+```sql
+-- 미발행 Payment 찾기
+SELECT * FROM payment WHERE kafka_published = false;
+
+-- 근데 이게 정말 미발행인가? 아니면 발행 진행 중인가?
+-- 동시에 여러 스케줄러가 같은 Payment 재시도하면?
+```
+
+**문제점 3: Payment 테이블 오염**
+```sql
+ALTER TABLE payment ADD COLUMN kafka_published TINYINT(1);
+ALTER TABLE payment ADD COLUMN kafka_retry_count INT;
+ALTER TABLE payment ADD COLUMN kafka_last_error TEXT;
+ALTER TABLE payment ADD COLUMN kafka_last_retry_at TIMESTAMP;
+
+-- Payment = 비즈니스 데이터 + 인프라 데이터 섞임!
+```
+
+**문제점 4: 여러 이벤트 관리 어려움**
+```
+Payment 하나에:
+- payment.authorized 발행했나?
+- payment.capture-requested 발행했나?
+- payment.refund-requested 발행했나?
+
+→ 플래그가 3개? 재시도 카운터도 3개?
+```
+
+### Outbox의 장점
+
+**1. 트랜잭션 보장**
+```java
+@Transactional
+public void processPayment() {
+    paymentRepository.save(payment);         // 비즈니스 데이터
+    outboxRepository.save(new OutboxEvent()); // 이벤트 데이터
+    // 둘 다 성공 또는 둘 다 실패 (Atomic!)
+}
+```
+
+**2. 깔끔한 관심사 분리**
+```
+Payment 테이블: 순수 비즈니스 데이터만
+Outbox 테이블: 이벤트 발행 상태만
+```
+
+**3. 재시도 로직 명확**
+```sql
+-- 미발행 이벤트 찾기 (간단!)
+SELECT * FROM outbox_event
+WHERE published = false
+  AND retry_count < 5
+ORDER BY created_at;
+```
+
+**4. 여러 이벤트 독립 관리**
+```
+Outbox 레코드 1: PAYMENT_AUTHORIZED (published = true)
+Outbox 레코드 2: CAPTURE_REQUESTED (published = false, retry)
+Outbox 레코드 3: REFUND_REQUESTED (published = true)
+```
+
 ## 10.2 해결책: Transactional Outbox Pattern
 
 **핵심 아이디어:**
@@ -850,23 +1179,70 @@ CREATE TABLE outbox_event (
 );
 ```
 
-## 10.3 Outbox Polling Scheduler
+## 10.3 Outbox Polling Scheduler - 미발행 이벤트 재처리 메커니즘
 
-**별도의 스케줄러가 미발행 이벤트를 Kafka로 발행:**
+**핵심 질문: "Kafka 발행 실패를 어떻게 알고 재시도하는가?"**
+
+**답변: Outbox 테이블의 `published` 플래그를 보고 판단합니다.**
+
+### 전체 메커니즘
+
+```
+[클라이언트 요청]
+    ↓
+[Ingest-Service]
+    ↓
+┌─────────────────── 동일한 DB 트랜잭션 ───────────────────┐
+│ 1. Payment 테이블 저장                                    │
+│ 2. OutboxEvent 테이블 저장 (published = false)           │
+└──────────────────────────────────────────────────────────┘
+    ↓
+[HTTP 200 응답 즉시 반환] ← 여기서 끝! (15ms 소요)
+
+
+[별도 스케줄러 - 50ms마다 실행]
+    ↓
+"published = false인 이벤트 있나?" 조회
+    ↓
+있으면 → Kafka 발행 시도
+    ├─ 성공 → published = true로 업데이트
+    └─ 실패 → published = false 유지 (다음 폴링에서 재시도)
+```
+
+### 타임라인 예시
+
+```
+시간 0ms:   클라이언트 요청
+시간 10ms:  Payment + Outbox(published=false) 저장
+시간 15ms:  HTTP 200 응답 반환 ← 고객은 여기서 완료!
+
+시간 50ms:  [스케줄러] Outbox 조회 → "미발행 이벤트 1건"
+시간 55ms:  Kafka 발행 시작
+시간 60ms:  Kafka 발행 실패! (네트워크 장애)
+시간 61ms:  Outbox 유지: published = false
+
+시간 100ms: [스케줄러] 다시 실행
+시간 105ms: 같은 Outbox 발견 (published = false)
+시간 110ms: Kafka 재발행 시도
+시간 115ms: 성공!
+시간 116ms: Outbox 업데이트: published = true
+
+시간 150ms: [스케줄러] 실행 → 미발행 이벤트 없음 → 아무것도 안 함
+```
+
+### 스케줄러 코드
 
 ```java
 @Scheduled(fixedDelay = 50)  // 50ms마다 실행
-@SchedulerLock(name = "outboxPolling")  // 분산 락
 public void pollAndPublish() {
     // 1. 미발행 이벤트 조회
-    List<OutboxEvent> events = outboxRepository
-        .findByPublishedFalse(PageRequest.of(0, 300));
+    List<OutboxEvent> unpublished = outboxRepository.findByPublishedFalse();
 
-    for (OutboxEvent event : events) {
+    for (OutboxEvent event : unpublished) {
         // 2. Circuit Breaker 상태 확인
         if (circuitBreaker.getState() == OPEN) {
             log.warn("CB OPEN - 발행 건너뜀");
-            return;
+            return;  // 다음 폴링 때 재시도
         }
 
         // 3. Kafka 비동기 발행
@@ -874,12 +1250,14 @@ public void pollAndPublish() {
             .whenComplete((result, ex) -> {
                 if (ex == null) {
                     // 4. 발행 성공 → published = true
-                    event.markPublished();
+                    event.setPublished(true);
+                    event.setPublishedAt(now());
                     outboxRepository.save(event);
                 } else {
-                    // 5. 실패 → 다음 폴링에서 재시도
+                    // 5. 실패 → published = false 유지
                     event.incrementRetryCount();
                     outboxRepository.save(event);
+                    // 다음 폴링(50ms 후)에서 다시 시도
                 }
             });
     }
@@ -893,30 +1271,104 @@ public void pollAndPublish() {
 3. **빠른 응답**: HTTP 응답은 Kafka 발행 기다리지 않음
 4. **장애 복구**: Kafka 장애 시 Outbox에 이벤트 보관, 복구 후 재발행
 
-## 10.5 동기 vs 비동기 Kafka 발행
+## 10.5 동기 vs 비동기 Kafka 발행 - "HTTP 응답이 Kafka 발행을 기다리지 않는다"
 
-### 동기 발행 (기존 방식)
+### 동기 발행 (문제 있는 방식)
+
 ```java
-// 응답까지 평균 50-100ms 추가 소요
-kafkaTemplate.send(topic, payload).get();  // 블로킹!
+@Transactional
+public PaymentResponse authorize(PaymentRequest req) {
+    Payment payment = paymentRepository.save(newPayment);
+
+    // Kafka 동기 발행 (.get() = 블로킹!)
+    kafkaTemplate.send(topic, event).get();  // ← 여기서 대기!
+
+    return response;  // Kafka 성공 후에야 반환
+}
 ```
-- Kafka 응답 기다림 → **느림**
-- Kafka 장애 시 → **요청 실패**
+
+**타임라인:**
+```
+0ms:   클라이언트 요청
+10ms:  DB 저장 완료
+15ms:  Kafka 발행 시작
+65ms:  Kafka 응답 (50ms 소요) ← 여기서 블로킹!
+70ms:  HTTP 응답 반환
+
+총 소요 시간: 70ms
+```
+
+**문제:**
+- HTTP 스레드가 Kafka 응답까지 **대기** (blocking)
+- Kafka가 느려지면 → HTTP 응답도 느려짐
+- Kafka 장애 시 → HTTP 요청도 실패
 
 ### 비동기 발행 (Outbox Pattern)
+
 ```java
-// 응답은 즉시 반환, 발행은 백그라운드
-outboxRepository.save(event);
-return response;  // 즉시!
+@Transactional
+public PaymentResponse authorize(PaymentRequest req) {
+    Payment payment = paymentRepository.save(newPayment);
+
+    // Outbox에 저장만 (빠름!)
+    outboxRepository.save(new OutboxEvent(...));
+
+    return response;  // 즉시 반환!
+}
+
+// 별도 스케줄러 (다른 스레드)
+@Scheduled(fixedDelay = 50)
+public void pollAndPublish() {
+    List<OutboxEvent> events = findUnpublished();
+    events.forEach(this::publishToKafka);  // 비동기
+}
 ```
-- Kafka 응답 안 기다림 → **빠름**
-- Kafka 장애 시 → **Outbox에 보관, 나중에 발행**
+
+**타임라인:**
+```
+[HTTP 요청 스레드]
+0ms:   클라이언트 요청
+10ms:  DB 저장 (Payment + Outbox)
+15ms:  HTTP 200 응답 반환 ← Kafka 기다리지 않음!
+
+[별도 스케줄러 스레드]
+50ms:  Outbox 폴링
+55ms:  Kafka 발행 시작
+105ms: Kafka 발행 완료
+
+총 HTTP 응답 시간: 15ms (Kafka와 무관!)
+```
+
+**장점:**
+- HTTP 응답은 **Kafka 발행을 기다리지 않음**
+- Kafka가 느려져도 HTTP 응답은 빠름
+- Kafka 장애 시에도 HTTP는 성공 응답
+
+### "HTTP 응답이 Kafka 발행을 기다리지 않는다"의 의미
+
+```
+동기 발행:
+[Client] → [Server] → DB 저장 → Kafka 발행(50ms 대기) → HTTP 응답
+                                  ↑
+                        여기서 블로킹!
+
+비동기 발행:
+[Client] → [Server] → DB 저장 → Outbox 저장 → HTTP 응답 (즉시!)
+                                                    ↓
+                                              [클라이언트는 완료!]
+
+[별도 스레드] Outbox → Kafka 발행 (백그라운드에서 진행)
+```
 
 **성능 비교:**
-| 방식 | 평균 응답 시간 | Kafka 장애 시 |
-|------|---------------|--------------|
-| 동기 발행 | 50-100ms | 요청 실패 |
-| Outbox Pattern | 10-20ms | 정상 응답 |
+| 방식 | HTTP 응답 시간 | Kafka 장애 시 | HTTP 스레드 상태 |
+|------|---------------|--------------|-----------------|
+| 동기 발행 | 70ms | 요청 실패 | 블로킹 (대기) |
+| 비동기 발행 | 15ms | 정상 응답 | 즉시 해제 |
+
+**비유:**
+- **동기**: 편지 쓰고 → 우체국 가서 → 발송 확인 받고 → 집에 돌아옴
+- **비동기**: 편지 쓰고 → 우편함에 넣고 → 바로 집에 돌아옴 (우체부가 나중에 수거)
 
 ---
 
@@ -994,28 +1446,126 @@ app:
 
 **계산:**
 - 48,000 / 60초 = **초당 800건**
-- 목표 1000 RPS에 여유분 확보
 
-## 11.5 Fail-Open 정책
+### 800건 vs 1000 RPS - 충분한가?
 
-**Redis 장애 시 어떻게 할까?**
+**질문:** 우리 시스템이 초당 800건 Rate Limit인데 1000 RPS 처리가 가능한가?
 
+**답변:** **가능합니다!** Rate Limit은 **Merchant별**로 적용되기 때문입니다.
+
+```java
+String key = "rate:authorize:" + merchantId;  // Merchant별 카운터!
+```
+
+**실제 동작:**
+```
+Merchant-1: 800건/초 사용 가능
+Merchant-2: 800건/초 사용 가능 (별도 카운터)
+Merchant-3: 800건/초 사용 가능 (별도 카운터)
+...
+Merchant-N: 800건/초 사용 가능
+
+전체 시스템: N merchants × 800 = 매우 높은 처리량
+```
+
+**예시:**
+```
+동시에 100명의 Merchant가 요청:
+각 Merchant가 10 RPS씩 사용
+→ 전체: 100 × 10 = 1000 RPS
+
+각 Merchant는 800 RPS 한도 중 10만 사용 (1.25%) ✓
+```
+
+**만약 단일 Merchant가 1000 RPS를 보낸다면?**
+```
+0초: 요청 800건 → 모두 성공
+0초: 요청 801번째 → 429 Too Many Requests (Rate Limit 초과)
+1초: 카운터 리셋 → 다시 800건 가능
+```
+
+**결론:**
+- **Merchant별 Rate Limit**: 800 RPS
+- **전체 시스템 처리량**: 1000+ RPS (여러 Merchant 분산)
+
+## 11.5 Redis의 역할과 Fail-Open 정책
+
+### Redis의 3가지 역할
+
+**1. Rate Limiting (토큰 카운터)**
+```
+Key: rate:authorize:MERCHANT-123
+Value: 450 (현재 요청 수)
+TTL: 30초 (남은 시간)
+```
+
+**2. 멱등성 캐시 (Layer 1)**
+```
+Key: idem:authorize:MERCHANT-123:order-abc-1
+Value: {"paymentId": 12345, "status": "SUCCESS"}
+TTL: 600초
+```
+
+**3. 캐싱 (성능 향상)**
+```
+Key: payment:12345
+Value: {Payment 객체 JSON}
+TTL: 300초
+```
+
+### Redis Fail-Open이란?
+
+**문제 상황: Redis가 죽으면?**
+
+**Fail-Open (우리 선택):**
 ```java
 try {
     Long count = redisTemplate.opsForValue().increment(key);
-    // Rate Limit 검사
-} catch (DataAccessException e) {
-    log.warn("Redis 연결 실패 - Rate Limit 검사 건너뜀");
-    // Fail-Open: 요청 허용
-    return;
+    if (count > limit) {
+        throw new RateLimitException();
+    }
+} catch (RedisConnectionFailureException e) {
+    log.warn("Redis 장애 - Rate Limit 검사 건너뜀");
+    return;  // 요청 허용! (문 열림)
 }
 ```
 
-**Fail-Open vs Fail-Close:**
-- **Fail-Open**: 장애 시 모든 요청 허용 → 가용성 우선
-- **Fail-Close**: 장애 시 모든 요청 거부 → 보안 우선
+**Fail-Close (대안):**
+```java
+} catch (RedisConnectionFailureException e) {
+    log.error("Redis 장애 - 모든 요청 거부");
+    throw new ServiceUnavailableException();  // 요청 거부! (문 닫힘)
+}
+```
 
-우리는 **가용성을 우선**하여 Fail-Open 정책 채택.
+### Fail-Open vs Fail-Close 비교
+
+| 정책 | Redis 장애 시 | 장점 | 단점 |
+|------|--------------|------|------|
+| Fail-Open | 요청 허용 | 서비스 계속 동작 (가용성 ↑) | DDoS 취약 (보안 ↓) |
+| Fail-Close | 요청 거부 | DDoS 방어 (보안 ↑) | 전체 서비스 마비 (가용성 ↓) |
+
+**우리의 선택: Fail-Open**
+- Redis 장애로 전체 서비스가 멈추는 것보다는
+- Rate Limit 없이라도 서비스는 동작하는 것이 낫다고 판단
+- 대신 Redis 모니터링 강화 + 알림 설정
+
+### Redis 장애 시나리오
+
+```
+정상 상태:
+[요청] → Redis Rate Limit 체크 → 통과 → [Ingest-Service]
+
+Redis 장애:
+[요청] → Redis 연결 실패 → Fail-Open → [Ingest-Service]
+                           ↓
+                    로그 기록 + 알림 발송
+```
+
+**복구 전략:**
+1. 즉시 알림 (Slack, PagerDuty)
+2. Redis 재시작
+3. 데이터 복구 (DB Layer 2에서 Redis로 복원)
 
 ---
 
@@ -1401,6 +1951,355 @@ spring:
       linger-ms: 50         # 50ms 대기
       compression-type: lz4 # 압축
       acks: 1               # Leader만 확인
+```
+
+---
+
+## 17.5 튜닝 깊이 이해하기
+
+### 17.5.1 GC (Garbage Collector)란?
+
+**GC가 하는 일:**
+```
+Java는 자동으로 메모리 관리 (C/C++와 다름)
+사용하지 않는 객체를 찾아서 메모리 회수 = GC
+```
+
+**GC 없이 객체를 계속 만들면?**
+```java
+// 결제 요청이 1000 RPS로 들어옴
+for (int i = 0; i < 1000; i++) {
+    Payment payment = new Payment();  // 매 요청마다 객체 생성
+    // 처리 완료 후 이 객체는 더 이상 사용 안 함
+}
+
+// GC 없으면?
+→ 메모리가 계속 차서 OutOfMemoryError 발생!
+→ 서버 다운!
+
+// GC 있으면?
+→ 사용 안 하는 Payment 객체들을 자동으로 제거
+→ 메모리 재사용 가능
+```
+
+**GC의 문제점: STW (Stop-The-World)**
+```
+GC가 메모리를 정리하는 동안 → 모든 애플리케이션 스레드 일시 정지!
+정지 시간 = GC Pause Time
+```
+
+### 17.5.2 왜 G1GC를 선택했나?
+
+**GC 종류 비교:**
+
+| GC 종류 | STW 시간 | 처리량 | 용도 |
+|---------|---------|--------|------|
+| Serial GC | 길다 (수백ms~수초) | 낮음 | 소형 앱 |
+| Parallel GC | 길다 (수백ms) | 높음 | 배치 작업 |
+| **G1GC** | **짧다 (수십ms)** | **중상** | **대용량 힙 (4GB+)** |
+| ZGC | 매우 짧다 (<10ms) | 중상 | 초대용량 힙 (100GB+) |
+
+**우리 시스템:**
+```bash
+-Xms2g -Xmx4g  # 힙 크기 2~4GB
+```
+
+→ **4GB 힙 + 낮은 지연시간 필요 → G1GC 최적**
+
+**G1GC의 특징:**
+```
+전통적 GC:
+[Young Gen][Old Gen] 전체 영역을 한 번에 정리 → 긴 STW
+
+G1GC:
+[Region1][Region2][Region3]...[RegionN]
+힙을 작은 Region으로 나눔 (각 1~32MB)
+→ 쓰레기가 많은 Region만 골라서 정리 (Garbage-First)
+→ 짧은 STW (200ms 이하 목표)
+```
+
+**MaxGCPauseMillis=200 의미:**
+```
+"GC야, 가능하면 200ms 이내에 끝내줘"
+→ G1GC가 알아서 Region 개수 조절
+→ 200ms 이상 걸릴 것 같으면 나머지는 다음에
+```
+
+**실제 효과:**
+```
+Before G1GC:
+GC 발생 → 500ms 정지 → 결제 요청 타임아웃!
+
+After G1GC:
+GC 발생 → 50~100ms 정지 → 요청 정상 처리
+```
+
+### 17.5.3 Tomcat Thread Pool 튜닝
+
+**Tomcat은 스레드 풀로 요청 처리:**
+```
+[Client] ━━━━━━━▶ [Tomcat Thread Pool] ━━━━━▶ [Spring Controller]
+                    │
+                    ├─ Thread 1 → 요청 A 처리
+                    ├─ Thread 2 → 요청 B 처리
+                    ├─ Thread 3 → 요청 C 처리
+                    └─ ...
+```
+
+**설정 의미:**
+```yaml
+server:
+  tomcat:
+    threads:
+      max: 500           # 최대 500개 스레드 동시 처리
+      min-spare: 100     # 항상 100개는 대기 (재사용)
+    accept-count: 3000   # 대기열 크기 (스레드 부족 시)
+    max-connections: 5000 # 최대 동시 연결 수
+```
+
+**시나리오:**
+```
+1000 RPS 요청이 들어옴
+├─ 500개: 스레드가 즉시 처리 (max: 500)
+├─ 3000개: 대기열에서 대기 (accept-count: 3000)
+└─ 나머지: 연결 거부 (max-connections 초과)
+
+각 요청 처리 시간 = 20ms
+→ 1초당 500 * (1000ms / 20ms) = 25,000 요청 처리 가능
+→ 1000 RPS는 여유있게 처리
+```
+
+**왜 500개로 설정?**
+```
+CPU 코어 수 고려:
+- 우리 서버: 8 core
+- 이론적 최적: 8~16 threads
+- 하지만 I/O 대기 많음 (DB, Redis, Kafka)
+- I/O 대기 중에는 CPU 안 씀
+→ 더 많은 스레드로 CPU 활용도 극대화
+→ 500 threads = 높은 동시성
+```
+
+### 17.5.4 HikariCP: 빠른 DB 커넥션 풀
+
+**커넥션 풀이 뭔가요?**
+```java
+// 커넥션 풀 없으면:
+for (int i = 0; i < 1000; i++) {
+    Connection conn = DriverManager.getConnection("jdbc:mariadb://...");
+    // 매번 새 연결 생성: 100~200ms 소요!
+    // 사용
+    conn.close();
+}
+
+// 커넥션 풀 있으면:
+ConnectionPool pool = new HikariCP();  // 미리 100개 연결 생성
+for (int i = 0; i < 1000; i++) {
+    Connection conn = pool.getConnection();  // 재사용: 1ms 미만!
+    // 사용
+    conn.close();  // 실제로는 풀로 반환 (close 아님)
+}
+```
+
+**HikariCP가 최고인 이유:**
+```
+Apache DBCP2: 커넥션 획득 10~20ms
+C3P0: 커넥션 획득 15~30ms
+HikariCP: 커넥션 획득 0.1~1ms (100배 빠름!)
+
+비결:
+1. ConcurrentBag 자료구조 (락 경합 최소화)
+2. Bytecode 레벨 최적화
+3. Zero-overhead 프록시
+```
+
+**설정 의미:**
+```yaml
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 600   # 최대 600개 연결
+      minimum-idle: 100        # 최소 100개 유지
+      connection-timeout: 10000 # 연결 획득 최대 10초 대기
+```
+
+**왜 600개?**
+```
+Tomcat 스레드: 500개
+각 스레드가 DB 연결 필요
+→ 최소 500개 필요
+
+여유분 100개 추가 (백그라운드 작업, Outbox Scheduler 등)
+→ 600개
+
+실제 동시 사용:
+- 1000 RPS, 응답시간 20ms
+- 동시 처리: 1000 * 0.02 = 20개
+- DB 쿼리 시간: 5ms
+- 동시 DB 연결: 20 * 0.005 / 0.02 = 5개만 사용
+→ 600개는 충분히 여유
+```
+
+### 17.5.5 Kafka Producer 배치 처리
+
+**Kafka 발행 방식:**
+```java
+// 배치 없이:
+for (int i = 0; i < 1000; i++) {
+    producer.send(message);  // 즉시 네트워크 전송
+}
+// 1000번 네트워크 왕복 → 느림!
+
+// 배치 있으면:
+for (int i = 0; i < 1000; i++) {
+    producer.send(message);  // 버퍼에 모음
+}
+// 일정 시간/크기 도달 시 한 번에 전송
+// 1번 네트워크 왕복 → 빠름!
+```
+
+**설정 의미:**
+```yaml
+spring:
+  kafka:
+    producer:
+      batch-size: 32768      # 32KB 모이면 전송
+      linger-ms: 50          # 또는 50ms 지나면 전송
+      compression-type: lz4  # LZ4 압축 (빠름)
+      acks: 1                # Leader만 확인 (빠름)
+```
+
+**시나리오:**
+```
+메시지가 계속 들어옴:
+├─ 1KB 메시지 32개 도착 (32KB)
+│   → batch-size 도달 → 즉시 전송
+├─ 10KB 메시지 2개 도착 (20KB)
+│   → 50ms 대기 (linger-ms)
+│   → 50ms 후 전송 (batch-size 미도달)
+```
+
+**acks=1의 의미:**
+```
+Kafka Cluster:
+[Leader Broker] → [Follower 1] → [Follower 2]
+
+acks=0: 전송만 하고 확인 안 함 (빠르지만 유실 가능)
+acks=1: Leader만 확인 (빠르고 유실 적음) ✅ 우리 선택
+acks=all: 모든 Follower 확인 (느리지만 안전함)
+```
+
+**압축 효과:**
+```
+압축 없음:
+1000개 메시지 * 1KB = 1MB 네트워크 전송
+
+LZ4 압축:
+1000개 메시지 → 300KB 전송 (70% 압축)
+→ 네트워크 대역폭 절약
+→ 전송 속도 3배 향상
+```
+
+### 17.5.6 Resilience4j & Circuit Breaker
+
+**Resilience4j란?**
+```
+Netflix Hystrix의 후속 프로젝트
+경량화, 함수형 프로그래밍 스타일
+
+제공 기능:
+1. Circuit Breaker: 장애 격리
+2. Rate Limiter: 속도 제한
+3. Retry: 재시도
+4. Bulkhead: 격벽 (스레드 격리)
+5. Time Limiter: 타임아웃
+```
+
+**Circuit Breaker 스레드 보존:**
+```java
+// Circuit Breaker 없이:
+@Transactional
+public void processPayment(Payment payment) {
+    // 1. DB 저장 (빠름: 5ms)
+    paymentRepository.save(payment);
+
+    // 2. Kafka 발행 (느림: Kafka 장애 시 30초 타임아웃!)
+    kafkaProducer.send(event);  // ← 여기서 스레드 블로킹 30초!
+
+    // 1000 RPS 들어오면?
+    // 30초 * 1000 = 30,000 스레드 필요!
+    // Tomcat max-threads: 500 → 즉시 고갈
+}
+
+// Circuit Breaker 있으면:
+@Transactional
+public void processPayment(Payment payment) {
+    paymentRepository.save(payment);
+
+    // Circuit Breaker OPEN 상태면 즉시 fallback
+    try {
+        circuitBreaker.executeSupplier(() ->
+            kafkaProducer.send(event)  // 실패 시 예외
+        );
+    } catch (Exception e) {
+        // Kafka 장애 감지 → 즉시 fallback (0.1ms)
+        log.warn("Kafka unavailable, will retry via Outbox");
+    }
+
+    // 스레드 즉시 반환!
+    // 500 스레드로 1000 RPS 처리 가능
+}
+```
+
+**Circuit Breaker 실패 요청 처리:**
+```
+CLOSED (정상):
+[요청] → CB 통과 → Kafka 발행 성공 → 응답
+
+실패 50% 초과:
+[요청] → CB 통과 → Kafka 발행 실패 (10초 내 50%)
+                  → 실패율 50% 도달
+                  → CB 상태 OPEN으로 전환
+
+OPEN (차단):
+[요청] → CB가 즉시 차단 → Fallback 실행 → 응답
+      ↓
+      Kafka 호출 안 함 (스레드 보존!)
+
+30초 후:
+CB 상태 HALF_OPEN으로 전환
+→ 일부 요청만 테스트
+→ 성공하면 CLOSED로 복구
+→ 실패하면 다시 OPEN
+```
+
+**Time-Based Sliding Window 동작:**
+```
+Count-Based (문제):
+최근 100개 요청 추적
+├─ 성공: 카운터++
+├─ 실패: 카운터++
+└─ 매번 synchronized → 락 경합!
+
+Time-Based (해결):
+최근 10초간 요청 추적
+├─ 각 초마다 별도 버킷
+│   [0초][1초][2초]...[9초]
+├─ 락 없이 각 버킷 독립 업데이트
+└─ 10초 지나면 오래된 버킷 자동 제거
+```
+
+**실제 효과:**
+```
+Before (Count-Based):
+1000 RPS → 매 요청마다 락 경합
+→ CB 체크 시간: 5~10ms
+→ 전체 응답 시간 증가
+
+After (Time-Based):
+1000 RPS → 락 없이 독립 버킷 업데이트
+→ CB 체크 시간: 0.1ms 미만
+→ 응답 시간 개선
 ```
 
 ---
@@ -2034,7 +2933,272 @@ Claude: [MCP Tool 호출: analyze_k6_test]
         - GC 로그 분석 필요
 ```
 
-## 26.5 운영팀에서 MCP 활용 방안
+## 26.5 Claude가 Tool을 선택하는 방법
+
+**질문: Claude는 여러 Tool 중 어떻게 올바른 Tool을 선택할까?**
+
+### Tool 선택 메커니즘
+
+**1. Tool Description 기반 매칭**
+```javascript
+// MCP Server에 Tool 등록 시 Description 필수
+server.addTool({
+  name: "analyze_k6_test",
+  description: "K6 부하 테스트 결과를 분석하고 성능 병목을 찾습니다. " +
+               "입력: testId, scenario, rawData. " +
+               "출력: 성능 분석 보고서",
+  parameters: { ... },
+  handler: async ({ ... }) => { ... }
+});
+
+server.addTool({
+  name: "analyze_circuit_breaker_test",
+  description: "Circuit Breaker 테스트 결과를 분석합니다. " +
+               "9단계 테스트의 각 단계별 상태 전환을 검증합니다. " +
+               "입력: testResults. 출력: CB 동작 분석 보고서",
+  parameters: { ... },
+  handler: async ({ ... }) => { ... }
+});
+
+server.addTool({
+  name: "check_system_health",
+  description: "시스템 전반의 건강 상태를 확인합니다. " +
+               "Prometheus 메트릭, 에러율, 응답 시간 등을 조회합니다.",
+  parameters: { ... },
+  handler: async ({ ... }) => { ... }
+});
+```
+
+**2. Claude API의 Tool 전달**
+```javascript
+// Claude API 호출 시 모든 Tool 정보 전달
+const response = await anthropic.messages.create({
+  model: "claude-3-5-sonnet-20241022",
+  messages: [
+    { role: "user", content: "K6 테스트 결과 분석해줘" }
+  ],
+  tools: [
+    {
+      name: "analyze_k6_test",
+      description: "K6 부하 테스트 결과를 분석하고 성능 병목을 찾습니다...",
+      input_schema: {
+        type: "object",
+        properties: {
+          testId: { type: "string", description: "테스트 ID" },
+          scenario: { type: "string", description: "테스트 시나리오" },
+          rawData: { type: "string", description: "K6 JSON 출력" }
+        },
+        required: ["testId", "scenario", "rawData"]
+      }
+    },
+    {
+      name: "analyze_circuit_breaker_test",
+      description: "Circuit Breaker 테스트 결과를 분석합니다...",
+      input_schema: { ... }
+    },
+    {
+      name: "check_system_health",
+      description: "시스템 전반의 건강 상태를 확인합니다...",
+      input_schema: { ... }
+    }
+  ]
+});
+```
+
+**3. Claude의 의사결정 프로세스**
+```
+[사용자 입력] "K6 테스트 결과 분석해줘"
+        ↓
+[Claude LLM 추론]
+1. 사용자 의도 파악:
+   - "K6 테스트" → 부하 테스트 관련
+   - "결과 분석" → 데이터 분석 필요
+
+2. Tool Description 매칭:
+   Tool A: "K6 부하 테스트 결과를 분석하고..." ✅ 높은 매칭
+   Tool B: "Circuit Breaker 테스트 결과를..." ❌ 낮은 매칭
+   Tool C: "시스템 전반의 건강 상태를..." ❌ 낮은 매칭
+
+3. Tool 선택:
+   → analyze_k6_test 선택!
+
+4. 파라미터 추출:
+   - testId: (사용자에게 물어봄 or 최근 테스트 추론)
+   - scenario: (사용자 입력에서 추출 or 물어봄)
+   - rawData: (파일 경로 or 직접 입력 요청)
+        ↓
+[Tool Call]
+{
+  "name": "analyze_k6_test",
+  "input": {
+    "testId": "test-20250108-143022",
+    "scenario": "full-flow",
+    "rawData": "{ ... K6 JSON ... }"
+  }
+}
+```
+
+**4. 실제 사례: 명확한 경우**
+```
+사용자: "Circuit Breaker 테스트 분석해줘"
+        ↓
+Claude: "Circuit Breaker 테스트"라는 키워드 인식
+        → analyze_circuit_breaker_test 선택 (100% 확실)
+        ↓
+Tool Call: analyze_circuit_breaker_test
+```
+
+**5. 실제 사례: 모호한 경우**
+```
+사용자: "시스템 상태 확인해줘"
+        ↓
+Claude: 여러 Tool 후보:
+        - check_system_health (시스템 전반)
+        - analyze_k6_test (성능 테스트 결과)
+        - analyze_circuit_breaker_test (CB 상태)
+        ↓
+        가장 일반적인 check_system_health 선택
+        ↓
+Tool Call: check_system_health
+```
+
+**6. 실제 사례: Tool Chain (연속 호출)**
+```
+사용자: "시스템 상태 확인하고 성능 테스트도 분석해줘"
+        ↓
+Claude: 2개 Tool 필요 인식
+        ↓
+1차 Tool Call: check_system_health
+        ↓
+결과 수신: "현재 RPS 800, 정상 작동 중"
+        ↓
+2차 Tool Call: analyze_k6_test
+        ↓
+결과 수신: "1000 RPS 달성, P95 25ms"
+        ↓
+통합 응답: "시스템은 정상이며 현재 800 RPS 처리 중입니다.
+           최근 테스트에서 1000 RPS 처리 능력 검증되었습니다..."
+```
+
+### Tool Selection의 핵심 요소
+
+**1. Description이 가장 중요**
+```javascript
+// 나쁜 Description
+{
+  name: "analyze_test",
+  description: "테스트 분석"  // ❌ 너무 모호
+}
+
+// 좋은 Description
+{
+  name: "analyze_k6_test",
+  description: "K6 부하 테스트 결과를 분석합니다. " +  // ✅ 명확
+               "RPS, 지연시간, 에러율 등 주요 지표를 평가하고 " +
+               "성능 병목 지점을 식별합니다. " +
+               "입력으로 K6 JSON 출력이 필요합니다."
+}
+```
+
+**2. Parameter Schema도 힌트 제공**
+```javascript
+{
+  name: "analyze_k6_test",
+  description: "K6 부하 테스트 결과 분석",
+  input_schema: {
+    properties: {
+      testId: {
+        type: "string",
+        description: "테스트 ID (예: test-20250108-143022)"
+      },
+      scenario: {
+        type: "string",
+        description: "테스트 시나리오 (full-flow, authorize-only 등)",
+        enum: ["full-flow", "authorize-only", "capture-only"]  // Claude가 선택지 인식
+      },
+      rawData: {
+        type: "string",
+        description: "K6 --out json 출력 전체 내용 (JSON 문자열)"
+      }
+    }
+  }
+}
+```
+
+**3. Tool 이름도 고려**
+```
+analyze_k6_test          ✅ 명확 (K6 테스트 분석)
+analyze_circuit_breaker  ✅ 명확 (Circuit Breaker 분석)
+check_health             ⚠️  모호 (무엇의 health?)
+check_system_health      ✅ 명확 (시스템 건강 상태)
+do_analysis              ❌ 매우 모호 (무엇을 분석?)
+```
+
+### Claude의 Tool Call 응답 형식
+
+**Claude API 응답:**
+```json
+{
+  "id": "msg_xyz",
+  "model": "claude-3-5-sonnet-20241022",
+  "content": [
+    {
+      "type": "tool_use",
+      "id": "toolu_abc",
+      "name": "analyze_k6_test",
+      "input": {
+        "testId": "test-20250108-143022",
+        "scenario": "full-flow",
+        "rawData": "{\"metrics\": {...}}"
+      }
+    }
+  ],
+  "stop_reason": "tool_use"
+}
+```
+
+**MCP Server 처리:**
+```javascript
+// 1. Tool Call 수신
+const toolCall = response.content.find(c => c.type === "tool_use");
+
+// 2. Handler 실행
+const result = await tools[toolCall.name].handler(toolCall.input);
+
+// 3. 결과를 Claude에게 반환
+const finalResponse = await anthropic.messages.create({
+  model: "claude-3-5-sonnet-20241022",
+  messages: [
+    { role: "user", content: "K6 테스트 결과 분석해줘" },
+    { role: "assistant", content: response.content },
+    {
+      role: "user",
+      content: [{
+        type: "tool_result",
+        tool_use_id: toolCall.id,
+        content: result  // Tool 실행 결과
+      }]
+    }
+  ]
+});
+
+// 4. Claude가 Tool 결과를 바탕으로 최종 답변 생성
+```
+
+### 요약
+
+**Claude의 Tool 선택 방법:**
+1. **사용자 질문 이해** → 의도 파악
+2. **Tool Description 매칭** → 가장 관련 높은 Tool 찾기
+3. **Parameter Schema 확인** → 필요한 입력 파악
+4. **Tool Call 실행** → 선택한 Tool 호출
+5. **결과 통합** → Tool 결과를 자연어로 변환하여 응답
+
+**핵심:**
+> Claude는 Description을 읽고 "사람처럼" 가장 적절한 Tool을 선택합니다.
+> 좋은 Description = 정확한 Tool Selection!
+
+## 26.6 운영팀에서 MCP 활용 방안
 
 ### 활용 1: 자동 장애 분석
 ```
